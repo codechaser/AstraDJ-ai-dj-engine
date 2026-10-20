@@ -27,6 +27,16 @@ export const catalogValidation = [
   query('limit').optional().isInt({ min: 1, max: 100 }).toInt().withMessage('limit must be an integer from 1 to 100'),
   query('skip').optional().isInt({ min: 0, max: 10000 }).toInt().withMessage('skip must be a non-negative integer no greater than 10000'),
 ];
+export const interactionValidation = [
+  body('trackId').isString().matches(/^t_[A-Za-z0-9_-]{1,64}$/).withMessage('trackId is invalid'),
+  body('playedSeconds').isFloat({ min: 0 }).toFloat().withMessage('playedSeconds must be non-negative'),
+  body('completed').isBoolean().toBoolean().withMessage('completed must be a boolean'),
+  body('liked').isBoolean().toBoolean().withMessage('liked must be a boolean'),
+  body('loungeId').optional({ nullable: true }).isString().matches(/^lg_[A-Za-z0-9_-]{8,64}$/).withMessage('loungeId is invalid'),
+];
+export const recommendationValidation = [
+  query('limit').optional().isInt({ min: 1, max: 20 }).toInt().withMessage('limit must be an integer from 1 to 20'),
+];
 export const createLoungeValidation = [
   body('seedTrackId').isString().matches(/^t_[A-Za-z0-9_-]{1,64}$/).withMessage('seedTrackId is invalid'),
   body('vibeProfile').isString().trim().isLength({ min: 1, max: 100 }).matches(/^[^<>\u0000-\u001f]+$/).withMessage('vibeProfile must be 1 to 100 plain-text characters'),

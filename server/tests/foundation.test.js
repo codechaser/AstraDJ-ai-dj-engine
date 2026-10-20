@@ -6,6 +6,7 @@ const users = new Map();
 const refreshTokens = new Map();
 const tracks = new Map();
 const lounges = new Map();
+const interactions = [];
 
 class Query {
   constructor(run) { this.run = run; this.offset = 0; this.limitValue = Infinity; }
@@ -82,11 +83,27 @@ await jest.unstable_mockModule('../src/models/User.js', () => ({ User }));
 await jest.unstable_mockModule('../src/models/RefreshToken.js', () => ({ RefreshToken }));
 await jest.unstable_mockModule('../src/models/Track.js', () => ({ Track, CAMELOT_KEYS }));
 await jest.unstable_mockModule('../src/models/DJLounge.js', () => ({ DJLounge }));
+await jest.unstable_mockModule('../src/services/recommendationRepository.js', () => ({
+  recommendationRepository: {
+    async getTrack(trackId) { return tracks.get(trackId) ?? null; },
+    async listTracks() { return [...tracks.values()]; },
+    async createInteraction(data) { const interaction = { coListenedWith: [], ...structuredClone(data), _id: crypto.randomUUID(), createdAt: new Date() }; interactions.push(interaction); return interaction; },
+    async listInteractionsForUser(userId) { return interactions.filter((entry) => String(entry.userId) === String(userId)); },
+    async listInteractionsForUsers(userIds) { return interactions.filter((entry) => userIds.includes(String(entry.userId))); },
+    async getRecentCoListenerIds({ loungeId, trackId, userId, since }) { return [...new Set(interactions.filter((entry) => entry.loungeId === loungeId && entry.trackId === trackId && String(entry.userId) !== String(userId) && entry.createdAt >= since).map((entry) => String(entry.userId)))]; },
+    async linkCoListeners({ interactionId, loungeId, trackId, userId, coListenerIds, since }) {
+      const current = interactions.find((entry) => String(entry._id) === String(interactionId));
+      if (current) current.coListenedWith.push(...coListenerIds);
+      for (const entry of interactions) if (entry.loungeId === loungeId && entry.trackId === trackId && entry.createdAt >= since && coListenerIds.includes(String(entry.userId))) entry.coListenedWith.push(String(userId));
+    },
+    async findLounge(loungeId) { return lounges.get(loungeId) ?? null; },
+  },
+}));
 const { app } = await import('../src/app.js');
 const { seedTracks } = await import('../src/seed/tracks.js');
 
 beforeEach(() => {
-  users.clear(); refreshTokens.clear(); tracks.clear(); lounges.clear();
+  users.clear(); refreshTokens.clear(); tracks.clear(); lounges.clear(); interactions.splice(0);
   jest.clearAllMocks();
 });
 
@@ -170,6 +187,60 @@ describe('track catalog and acoustic-profile HTTP contract', () => {
     });
     expect(good.status).toBe(201);
     expect(good.body.acoustic.camelotKey).toBe('9A');
+  });
+});
+
+describe('authenticated interaction collection and private recommendations', () => {
+  let userA;
+  let userB;
+  let tokenA;
+  let tokenB;
+  beforeEach(async () => {
+    seedTracks.forEach((track) => tracks.set(track.trackId, structuredClone(track)));
+    const a = await request(app).post('/api/v1/auth/register').send({ email: 'listener-a@example.com', displayName: 'Listener A', password: 'correct-horse-42' });
+    const b = await request(app).post('/api/v1/auth/register').send({ email: 'listener-b@example.com', displayName: 'Listener B', password: 'correct-horse-42' });
+    userA = a.body.user.id; userB = b.body.user.id; tokenA = a.body.accessToken; tokenB = b.body.accessToken;
+    lounges.set('lg_123456789abc', { loungeId: 'lg_123456789abc', status: 'live', currentTrackId: 't_2001', participantIds: [userA, userB] });
+    lounges.set('lg_223456789abc', { loungeId: 'lg_223456789abc', status: 'live', currentTrackId: 't_2001', participantIds: [] });
+  });
+
+  test('requires authentication, rejects invalid playback reports, and only records the token owner', async () => {
+    expect((await request(app).get('/api/v1/recommendations')).status).toBe(401);
+    expect((await request(app).post('/api/v1/interactions').send({ trackId: 't_2001', playedSeconds: 10, completed: false, liked: false })).status).toBe(401);
+    const invalid = await request(app).post('/api/v1/interactions').set('Authorization', `Bearer ${tokenA}`).send({ userId: userB, trackId: 't_2001', playedSeconds: 999, completed: false, liked: false });
+    expect(invalid.status).toBe(400);
+    expect(interactions).toHaveLength(0);
+    const valid = await request(app).post('/api/v1/interactions').set('Authorization', `Bearer ${tokenA}`).send({ trackId: 't_2001', playedSeconds: 100, completed: false, liked: true });
+    expect(valid.status).toBe(201);
+    expect(valid.body).toMatchObject({ trackId: 't_2001', source: 'self_reported', coListenerCount: 0 });
+    expect(interactions[0].userId).toBe(userA);
+    expect(interactions[0].userId).not.toBe(userB);
+  });
+
+  test('records co-listener links only from member reports of the current track in the same live Lounge', async () => {
+    const a = await request(app).post('/api/v1/interactions').set('Authorization', `Bearer ${tokenA}`).send({ trackId: 't_2001', playedSeconds: 100, completed: false, liked: true, loungeId: 'lg_123456789abc' });
+    const b = await request(app).post('/api/v1/interactions').set('Authorization', `Bearer ${tokenB}`).send({ trackId: 't_2001', playedSeconds: 200, completed: false, liked: true, loungeId: 'lg_123456789abc' });
+    expect(a.status).toBe(201);
+    expect(b.status).toBe(201);
+    expect(b.body.coListenerCount).toBe(1);
+    expect(interactions[0].coListenedWith).toContain(userB);
+    expect(interactions[1].coListenedWith).toContain(userA);
+    const outsider = await request(app).post('/api/v1/interactions').set('Authorization', `Bearer ${tokenA}`).send({ trackId: 't_2001', playedSeconds: 10, completed: false, liked: false, loungeId: 'lg_223456789abc' });
+    expect(outsider.status).toBe(403);
+    const otherTrack = await request(app).post('/api/v1/interactions').set('Authorization', `Bearer ${tokenA}`).send({ trackId: 't_2002', playedSeconds: 10, completed: false, liked: false, loungeId: 'lg_123456789abc' });
+    expect(otherTrack.status).toBe(409);
+  });
+
+  test('recommendation reads are scoped to the authenticated user and validate limits', async () => {
+    await request(app).post('/api/v1/interactions').set('Authorization', `Bearer ${tokenA}`).send({ trackId: 't_2001', playedSeconds: 224, completed: true, liked: true });
+    const response = await request(app).get('/api/v1/recommendations?limit=2').set('Authorization', `Bearer ${tokenA}`);
+    expect(response.status).toBe(200);
+    expect(response.body.strategy).toBe('content_based');
+    expect(response.body.items).toHaveLength(2);
+    expect(JSON.stringify(response.body)).not.toContain(userA);
+    expect(JSON.stringify(response.body)).not.toContain(userB);
+    expect((await request(app).get(`/api/v1/recommendations?userId=${userB}`).set('Authorization', `Bearer ${tokenA}`)).status).toBe(400);
+    expect((await request(app).get('/api/v1/recommendations?limit=21').set('Authorization', `Bearer ${tokenA}`)).status).toBe(400);
   });
 });
 

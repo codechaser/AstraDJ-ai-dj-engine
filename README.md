@@ -35,13 +35,15 @@ npm run seed
 npm run dev
 ```
 
-The frontend is not yet connected to the new API. Most backend HTTP and Socket.io tests use repository fakes. An opt-in segue integration test uses a unique temporary MongoDB database; the normal `server/.env` runtime configuration and deployment are still to be verified.
+The frontend is not yet connected to the new API. Most backend HTTP and Socket.io tests use repository fakes. Opt-in segue, chat, and recommendation integration tests use unique temporary MongoDB databases when `MONGODB_TEST_URI` is configured; the normal `server/.env` runtime configuration and deployment are still to be verified.
 
 The backend also exposes an authenticated, Lounge-member-only acoustic segue endpoint at `POST /api/v1/lounges/:id/ai/segue`. It applies BPM/Camelot rules, ranks eligible tracks, and uses a metadata-grounded deterministic fallback until an AI provider is configured. See [the API reference](server/API.md).
 
 Authenticated Lounge members can also use Socket.io `lounge.chat.message` and `lounge.chat.history`. Messages are sanitized, rate-limited, persisted in MongoDB batches, and broadcast with a deterministic rolling room-sentiment score. The keyword scorer is not ML and its accuracy has not been evaluated. See [the API reference](server/API.md) for event payloads and fallbacks.
 
 The real-time gateway also supports Listener track submissions and votes for a Host-opened Soundclash, server-timed resolution, tie resolution by Host or Co-DJ, and queue insertion at Next Up. Its PRD-defined `.open` and `.resolved` events retain their exact payloads. A deterministic metadata-grounded announcement is used; no AI provider is connected. See [the Soundclash contract](server/API.md#soundclash) for implementation choices where the PRD is silent.
+
+The backend records authenticated, explicitly self-reported listening interactions and serves a private hybrid recommendation rail from acoustic profiles and co-listener reports. Playback is not verified by a player; recommendations return an empty cold-start result when no supported history exists. A small synthetic held-out fixture measures Precision@5 at 0.6; this is not an effectiveness claim for real users. See [the interaction and recommendation contract](server/API.md#recommendations-and-listening-interactions).
 
 ## Current UI routes
 

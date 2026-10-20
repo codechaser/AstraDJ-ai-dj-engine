@@ -18,6 +18,33 @@ The base URL defaults to `http://localhost:4000`. REST endpoints are rooted at `
 | `POST /api/v1/tracks` | Admin | Add a validated acoustic profile |
 | `POST /api/v1/lounges` | Host | Create a Lounge and return its invite code |
 | `POST /api/v1/lounges/:id/ai/segue` | Authenticated Lounge member | Select an acoustically compatible segue and return a grounded transition |
+| `POST /api/v1/interactions` | Bearer JWT | Record the authenticated user's self-reported listen/like interaction; optional live Lounge co-listening context is checked server-side |
+| `GET /api/v1/recommendations?limit=10` | Bearer JWT | Return a private ranked recommendation rail for the authenticated user |
+
+### Recommendations and listening interactions
+
+The PRD requires a hybrid acoustic-similarity and collaborative-filtering recommendation rail but leaves route names, score formulas, and thresholds open. The selected minimal REST contract is `POST /api/v1/interactions` plus `GET /api/v1/recommendations`. Both require a valid JWT. The interaction writer derives `userId` from that token, rejects caller-supplied identity and unknown fields, and validates that `playedSeconds` does not exceed the catalog duration; `completed: true` requires the full reported duration.
+
+```json
+POST /api/v1/interactions
+{
+  "trackId": "t_2001",
+  "playedSeconds": 224,
+  "completed": true,
+  "liked": true,
+  "loungeId": "lg_123456789abc"
+}
+```
+
+`loungeId` is optional. When present, the server verifies that the requester is a persisted Lounge participant, the Lounge is live, and the requested track is its current track. It derives `coListenedWith` links from other user-reported records for that same track and Lounge in a 10-minute server-time window. The client cannot submit co-listener IDs. This is a co-listening proxy, not playback telemetry: the current app has no playback engine that verifies the self-reported duration, completion, or like.
+
+The recommendation endpoint accepts only `limit` (1–20; default 10) and always scopes data to the authenticated user's ID. It does not accept a target `userId` and never returns co-listener identities or their histories. Candidates already present in the requester's interaction history and tracks with invalid/missing acoustic profiles are excluded. Its response is `{ "items": [{ "trackId", "title", "artist", "score", "reason" }], "strategy", "explanation" }`; cold-start users get an empty `items` array until usable data exists.
+
+The implementation-defined content model weights BPM similarity 35%, Camelot relationship 30% (same/adjacent/relative/clash = 1.0/0.8/0.6/0), energy similarity 20%, and valence similarity 15%. BPM similarity decreases linearly with absolute BPM difference over a 60 BPM scale. A listen contributes a profile weight of `playedSeconds / durationSeconds`, capped at 1; explicit likes or full completions contribute 1. This recommender uses the shared Camelot relation helper but does not impose the segue's BPM/Camelot hard eligibility rules or alter its 50/30/20 ranker.
+
+Collaborative scores use only server-linked co-listeners with at least two distinct engaged tracks, and collaborative blending is enabled after at least two such co-listeners are available. A supported recommendation combines 65% acoustic score and 35% co-listener engagement score; when that history is sparse, the rail falls back to content-based ranking. Scores tie-break by `trackId`, so output is deterministic. These thresholds and weights fill details the PRD leaves unspecified and are not trained model parameters.
+
+Offline evaluation is a Jest fixture, not production user history: two training interactions seed an acoustic profile; three separately held-out relevant track IDs are not passed into recommendation generation; five candidates are ranked and scored with Precision@5. The current fixture result is 3/5 = 0.6. It meets the numeric target on that small synthetic fixture only; it does not establish real-user relevance or model effectiveness.
 
 ### AI DJ segue
 

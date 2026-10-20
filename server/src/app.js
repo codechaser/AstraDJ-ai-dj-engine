@@ -6,6 +6,7 @@ import authRoutes from './routes/authRoutes.js';
 import trackRoutes from './routes/trackRoutes.js';
 import healthRoutes from './routes/healthRoutes.js';
 import loungeRoutes from './routes/loungeRoutes.js';
+import recommendationRoutes, { interactionRouter } from './routes/recommendationRoutes.js';
 import { ApiError } from './utils/ApiError.js';
 import { config } from './config/env.js';
 
@@ -20,6 +21,8 @@ app.use('/api/v1/health', healthRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/tracks', trackRoutes);
 app.use('/api/v1/lounges', loungeRoutes);
+app.use('/api/v1/interactions', interactionRouter);
+app.use('/api/v1/recommendations', recommendationRoutes);
 app.use((_req, _res, next) => next(new ApiError(404, 'ROUTE_NOT_FOUND', 'Route not found')));
 app.use((err, req, res, _next) => {
   let status = err.status ?? 500;

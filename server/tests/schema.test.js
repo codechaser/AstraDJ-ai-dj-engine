@@ -3,6 +3,7 @@ import { Track, CAMELOT_KEYS } from '../src/models/Track.js';
 import { DJLounge } from '../src/models/DJLounge.js';
 import { QueueEvent } from '../src/models/QueueEvent.js';
 import { ChatMessage } from '../src/models/ChatMessage.js';
+import { Interaction } from '../src/models/Interaction.js';
 
 test('User schema restricts accounts to the four defined roles', () => {
   const user = new User({ email: 'a@example.com', displayName: 'A', passwordHash: 'hash', role: 'Superuser' });
@@ -63,4 +64,17 @@ test('ChatMessage validates sanitized bounded text, sentiment bucket, and messag
   expect(valid.validateSync()).toBeUndefined();
   valid.sentimentBucket = 'very positive';
   expect(valid.validateSync().errors.sentimentBucket).toBeDefined();
+});
+
+test('Interaction schema stores only bounded, typed listening records and private co-listener references', () => {
+  const valid = new Interaction({
+    userId: '507f1f77bcf86cd799439011', trackId: 't_2001', playedSeconds: 120,
+    completed: false, liked: true, loungeId: 'lg_123456789abc', coListenedWith: ['507f1f77bcf86cd799439012'],
+  });
+  expect(valid.validateSync()).toBeUndefined();
+  const invalid = new Interaction({
+    userId: '507f1f77bcf86cd799439011', trackId: 'bad', playedSeconds: -1,
+    completed: 'yes', liked: false, source: 'queue-vote',
+  });
+  expect(invalid.validateSync()).toBeDefined();
 });
