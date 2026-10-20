@@ -9,10 +9,13 @@ import { createSoundclashService } from '../services/soundclashService.js';
 const ROOM_PREFIX = 'lounge:';
 const room = (loungeId) => `${ROOM_PREFIX}${loungeId}`;
 const envelope = (event, loungeId, payload) => ({ event, loungeId, payload, ts: Date.now() });
+export function publishLoungeEvent(io, event, loungeId, payload) {
+  io.to(room(loungeId)).emit(event, envelope(event, loungeId, payload));
+}
 const ackError = (error) => ({ ok: false, error: { code: error.code ?? 'INTERNAL_ERROR', message: error.status && error.status < 500 ? error.message : 'The request could not be completed' } });
 
 export function attachLoungeGateway(io, { repository = queueRepository, queueService = createQueueService(repository), secret = config.jwtAccessSecret, sentimentService = roomSentimentService, chatService = createChatService({ repository, sentimentService }), soundclashService = null, soundclashOptions = {} } = {}) {
-  soundclashService ??= createSoundclashService({ repository, queueService, ...soundclashOptions, onEvent: (event, loungeId, payload) => io.to(room(loungeId)).emit(event, envelope(event, loungeId, payload)) });
+  soundclashService ??= createSoundclashService({ repository, queueService, ...soundclashOptions, onEvent: (event, loungeId, payload) => publishLoungeEvent(io, event, loungeId, payload) });
   const loungeBySocket = new Map();
   const socketsByLounge = new Map();
   const joiningUsers = new Map();
@@ -201,7 +204,10 @@ export function attachLoungeGateway(io, { repository = queueRepository, queueSer
       }
     });
   });
-  return { io, queueService, chatService, sentimentService, soundclashService };
+  return {
+    io, queueService, chatService, sentimentService, soundclashService,
+    publishAnnouncement: (loungeId, payload) => publishLoungeEvent(io, 'lounge.ai.dj_announcement', loungeId, payload),
+  };
 }
 
 function queueRows(state) {

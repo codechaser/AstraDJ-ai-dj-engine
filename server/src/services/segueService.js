@@ -7,8 +7,13 @@ import { roomSentimentService } from './roomSentimentService.js';
 
 const trackFields = 'trackId title artist durationSeconds acoustic timeline';
 
-export function createSegueService({ loungeModel = DJLounge, trackModel = Track, transitionProvider = deterministicTransitionProvider, sentimentService = roomSentimentService } = {}) {
+export function createSegueService({ loungeModel = DJLounge, trackModel = Track, transitionProvider = deterministicTransitionProvider, fallbackProvider = deterministicTransitionProvider, sentimentService = roomSentimentService, onAnnouncement = () => {} } = {}) {
+  let announcementPublisher = onAnnouncement;
   return {
+    setAnnouncementPublisher(publisher) {
+      if (typeof publisher !== 'function') throw new TypeError('announcement publisher must be a function');
+      announcementPublisher = publisher;
+    },
     async requestSegue({ loungeId, userId, input }) {
       const lounge = await loungeModel.findOne({ loungeId, status: { $ne: 'ended' } }).lean();
       if (!lounge) throw new ApiError(404, 'LOUNGE_NOT_FOUND', 'Lounge not found or ended');
@@ -54,14 +59,24 @@ export function createSegueService({ loungeModel = DJLounge, trackModel = Track,
         };
       }
 
-      const generated = await transitionProvider.generate({
+      const providerInput = {
         currentTrack,
         selectedTrack: selected.track,
         matchReason: selected.match,
         currentTs: input.currentTs,
         currentSentimentScore: effectiveSentimentScore,
-      });
-      return {
+      };
+      let generated;
+      let usedFallback = transitionProvider === fallbackProvider;
+      try {
+        generated = await transitionProvider.generate(providerInput);
+        if (!generated || typeof generated.transitionScript !== 'string' || !Array.isArray(generated.sourceEvents)) throw new Error('Transition provider returned an invalid response');
+      } catch {
+        if (transitionProvider === fallbackProvider) throw new ApiError(503, 'TRANSITION_UNAVAILABLE', 'The transition could not be generated');
+        generated = await fallbackProvider.generate(providerInput);
+        usedFallback = true;
+      }
+      const response = {
         selectedTrackId: selected.track.trackId,
         matchReason: {
           bpmDeltaPct: selected.match.bpmDeltaPct,
@@ -77,7 +92,12 @@ export function createSegueService({ loungeModel = DJLounge, trackModel = Track,
         transitionScript: generated.transitionScript,
         sourceEvents: generated.sourceEvents,
         generatedAt,
-        provider: generated.provider ?? transitionProvider.name,
+        provider: usedFallback ? fallbackProvider.name : (generated.provider ?? transitionProvider.name),
+      };
+      try { announcementPublisher(loungeId, { text: response.transitionScript, relatedTrackId: response.selectedTrackId, sourceEvents: response.sourceEvents }); }
+      catch { /* Realtime fan-out must not invalidate an otherwise successful REST decision. */ }
+      return {
+        ...response,
       };
     },
   };

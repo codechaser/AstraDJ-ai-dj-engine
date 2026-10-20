@@ -18,6 +18,7 @@ The base URL defaults to `http://localhost:4000`. REST endpoints are rooted at `
 | `POST /api/v1/tracks` | Admin | Add a validated acoustic profile |
 | `POST /api/v1/lounges` | Host | Create a Lounge and return its invite code |
 | `POST /api/v1/lounges/:id/ai/segue` | Authenticated Lounge member | Select an acoustically compatible segue and return a grounded transition |
+| `POST /api/v1/lounges/:id/ai/ask` | Authenticated active Lounge member | Answer a question from the current track's stored metadata with source references |
 | `POST /api/v1/interactions` | Bearer JWT | Record the authenticated user's self-reported listen/like interaction; optional live Lounge co-listening context is checked server-side |
 | `GET /api/v1/recommendations?limit=10` | Bearer JWT | Return a private ranked recommendation rail for the authenticated user |
 
@@ -87,7 +88,17 @@ The service rejects invalid acoustic profiles, excludes unknown/incompatible can
 
 Eligibility requires BPM within the Lounge's configured tolerance (maximum 8%) against direct, half-time, or double-time BPM, and Camelot same-key, same-letter adjacent number with 12↔1 wrap, or same-number opposite-letter relation. Harmonic closeness weights are same `1.0`, adjacent `0.8`, relative `0.6`. Energy target is `clamp(currentEnergy + (sentiment - 0.5) × 0.4)`; `energyFit = 1 - abs(candidateEnergy - targetEnergy)`. Recency is `0` when a candidate occurs in the first five supplied `recentTrackIds`, otherwise `1`. Total is `0.50 × harmonic + 0.30 × energy fit + 0.20 × recency`; input candidate order breaks exact score ties. These deterministic scoring details fill gaps the PRD leaves unspecified.
 
-`sourceEvents` uses stable pointers in the form `trackId#timeline[index]` into the Track metadata timeline. The current built-in provider is `deterministic_fallback`: it uses only the selected/current title, artist, and the selected track's first non-empty metadata timeline entry. No external LLM provider is configured or called. The segue service accepts a provider object through dependency injection for future provider integration.
+For segue banter, `sourceEvents` contains stable field pointers such as `trackId#title`, `trackId#acoustic.bpm`, and timeline pointers `trackId#timeline[index]`. The deterministic script uses the current and selected track's stored title/artist, their stored BPM/key/energy plus the matcher's computed compatibility result, and the first non-empty timeline entry from each track when present. The default `deterministic_fallback` is used when no optional transition provider is configured; if an injected provider fails or returns an invalid shape, the same fallback is used. No external LLM provider is configured or called. Provider injection is an internal JavaScript service seam, not a configured external integration.
+
+When a segue is selected, the REST service publishes `lounge.ai.dj_announcement` to the matching Socket.io Lounge room. Its payload follows the PRD shape exactly: `{ "text", "relatedTrackId", "sourceEvents" }`. It does not broadcast to other Lounge rooms. A no-match response does not emit an announcement.
+
+### Grounded current-track Q&A
+
+`POST /api/v1/lounges/:id/ai/ask` accepts `{ "question": "Where does the sample come from?" }`. It requires a JWT and membership in the active Lounge; the track is derived from the Lounge's `currentTrackId`, so callers cannot ask about arbitrary tracks or another Lounge's catalog context. Any member role may ask. Questions must be 3–500 plain-text characters, and each member is limited to 10 requests per Lounge per rolling minute (process-local).
+
+The service retrieves only the current Track document's validated identity fields (`title`, `artist`), acoustic profile (`bpm`, `camelotKey`, `energy`, `valence`), and embedded `timeline` entries (`sample_credit`, `trivia`, `glossary`). It uses deterministic lexical term matching and safe field templates; timeline responses quote the retrieved entry verbatim. It returns `{ "trackId", "answer", "sourceEvents", "grounded", "provider" }`. Source pointers are `trackId#title`, `trackId#artist`, `trackId#acoustic.<field>`, or `trackId#timeline[index]`. When no relevant supported field or timeline entry exists, the service says the information is unavailable, sets `grounded: false`, and returns `sourceEvents: []`.
+
+This is a small retrieval-and-extractive-answer implementation, not generative RAG: no LLM, embedding model, vector database, web search, or external knowledge source is configured. The PRD allows a hosted or local model but does not require a particular provider; avoiding an unconfigured model prevents unsupported claims. Recently played tracks are not supported because this backend has no Lounge playback-history event. The request limiter is process-local and Q&A request counts are not yet persisted for session analytics.
 
 ## Socket.io connection and event contract
 

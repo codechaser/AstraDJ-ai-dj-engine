@@ -32,7 +32,7 @@ await jest.unstable_mockModule('../src/models/Track.js', () => ({ Track, CAMELOT
 await jest.unstable_mockModule('../src/models/DJLounge.js', () => ({ DJLounge }));
 
 const { app } = await import('../src/app.js');
-const { createSegueService } = await import('../src/services/segueService.js');
+const { createSegueService, segueService } = await import('../src/services/segueService.js');
 const { createRoomSentimentService } = await import('../src/services/roomSentimentService.js');
 
 const loungeId = 'lg_123456789abc';
@@ -88,7 +88,13 @@ test('selects an eligible segue and returns a grounded deterministic fallback pl
   expect(result.transitionScript).toContain('AstraDJ deterministic fallback');
   expect(result.transitionScript).toContain('The chorus uses a hand-played kalimba phrase.');
   expect(result.transitionScript).not.toContain('invented');
-  expect(result.sourceEvents).toEqual(['t_2002#timeline[0]']);
+  expect(result.transitionScript).toContain('Tempo 124 to 128 BPM');
+  expect(result.transitionScript).toContain('Camelot 8A to 9A (adjacent)');
+  expect(result.sourceEvents).toEqual([
+    't_2001#title', 't_2001#artist', 't_2002#title', 't_2002#artist',
+    't_2001#acoustic.bpm', 't_2002#acoustic.bpm', 't_2001#acoustic.camelotKey', 't_2002#acoustic.camelotKey',
+    't_2001#acoustic.energy', 't_2002#acoustic.energy', 't_2001#timeline[0]', 't_2002#timeline[0]',
+  ]);
   expect(result.provider).toBe('deterministic_fallback');
 });
 
@@ -120,6 +126,27 @@ test('uses an injected transition provider without changing the matching decisio
   expect(result.provider).toBe('test-provider');
 });
 
+test('uses deterministic grounded banter when an injected transition provider fails and publishes the PRD announcement payload', async () => {
+  const onAnnouncement = jest.fn();
+  const service = createSegueService({
+    loungeModel: { findOne: jest.fn(({ loungeId: id }) => new Query(lounges.get(id) ?? null)) },
+    trackModel: {
+      findOne: jest.fn(({ trackId }) => new Query(tracks.get(trackId) ?? null)),
+      find: jest.fn(({ trackId }) => new Query((trackId?.$in ?? []).map((id) => tracks.get(id)).filter(Boolean))),
+    },
+    transitionProvider: { name: 'unavailable-provider', generate: jest.fn(async () => { throw new Error('provider unavailable'); }) },
+    onAnnouncement,
+  });
+  const result = await service.requestSegue({ loungeId, userId: memberId, input: input() });
+  expect(result.provider).toBe('deterministic_fallback');
+  expect(result.transitionScript).toContain('The chorus uses a hand-played kalimba phrase.');
+  expect(onAnnouncement).toHaveBeenCalledWith(loungeId, {
+    text: result.transitionScript,
+    relatedTrackId: 't_2002',
+    sourceEvents: result.sourceEvents,
+  });
+});
+
 test('uses reliable rolling Lounge sentiment for matcher energy fit and neutral fallback for sparse data', async () => {
   const sentimentService = createRoomSentimentService();
   const service = makeService({ sentimentService });
@@ -144,5 +171,35 @@ test('HTTP endpoint requires authentication, Lounge membership, and a valid payl
   expect(duplicateIds.status).toBe(400);
   const response = await request(app).post(url).set('Authorization', `Bearer ${accessToken(memberId)}`).send(payload);
   expect(response.status).toBe(200);
-  expect(response.body).toMatchObject({ selectedTrackId: 't_2002', provider: 'deterministic_fallback', sourceEvents: ['t_2002#timeline[0]'] });
+  expect(response.body).toMatchObject({ selectedTrackId: 't_2002', provider: 'deterministic_fallback', sourceEvents: expect.arrayContaining(['t_2001#acoustic.bpm', 't_2002#timeline[0]']) });
+});
+
+test('successful segue REST request publishes the exact Lounge-scoped PRD announcement payload', async () => {
+  const publisher = jest.fn();
+  segueService.setAnnouncementPublisher(publisher);
+  const response = await request(app).post(`/api/v1/lounges/${loungeId}/ai/segue`)
+    .set('Authorization', `Bearer ${accessToken(memberId)}`).send(input());
+  expect(response.status).toBe(200);
+  expect(publisher).toHaveBeenCalledWith(loungeId, {
+    text: response.body.transitionScript,
+    relatedTrackId: response.body.selectedTrackId,
+    sourceEvents: response.body.sourceEvents,
+  });
+  segueService.setAnnouncementPublisher(() => {});
+});
+
+test('track Q&A REST contract authenticates, enforces Lounge membership, validates input, and grounds answers', async () => {
+  const url = `/api/v1/lounges/${loungeId}/ai/ask`;
+  expect((await request(app).post(url).send({ question: 'What is the BPM?' })).status).toBe(401);
+  const outsider = await request(app).post(url).set('Authorization', `Bearer ${accessToken(outsiderId)}`).send({ question: 'What is the BPM?' });
+  expect(outsider.status).toBe(403);
+  const oversized = await request(app).post(url).set('Authorization', `Bearer ${accessToken(memberId)}`).send({ question: 'x'.repeat(501) });
+  expect(oversized.status).toBe(400);
+  const unexpectedField = await request(app).post(url).set('Authorization', `Bearer ${accessToken(memberId)}`).send({ question: 'What is the BPM?', loungeId: 'lg_otherroom' });
+  expect(unexpectedField.status).toBe(400);
+  const bpm = await request(app).post(url).set('Authorization', `Bearer ${accessToken(memberId)}`).send({ question: 'What is the BPM?' });
+  expect(bpm.status).toBe(200);
+  expect(bpm.body).toMatchObject({ trackId: 't_2001', answer: 'The catalog lists the BPM as 124 BPM.', sourceEvents: ['t_2001#acoustic.bpm'], grounded: true, provider: 'deterministic_metadata_retrieval' });
+  const unsupported = await request(app).post(url).set('Authorization', `Bearer ${accessToken(memberId)}`).send({ question: 'What are the lyrics about?' });
+  expect(unsupported.body).toMatchObject({ grounded: false, sourceEvents: [] });
 });

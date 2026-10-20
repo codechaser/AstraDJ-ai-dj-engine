@@ -22,6 +22,10 @@ export const segueValidation = [
   body('recentTrackIds').optional().isArray({ max: 50 }).withMessage('recentTrackIds must be an array of at most 50 IDs'),
   body('recentTrackIds.*').optional().isString().matches(/^t_[A-Za-z0-9_-]{1,64}$/).withMessage('recentTrackIds contains an invalid track ID'),
 ];
+export const aiQuestionValidation = [
+  param('id').matches(/^lg_[A-Za-z0-9_-]{8,64}$/).withMessage('Invalid Lounge ID'),
+  body('question').isString().trim().isLength({ min: 3, max: 500 }).matches(/^[^<>\u0000-\u001f]+$/).withMessage('question must be 3 to 500 plain-text characters'),
+];
 export const catalogValidation = [
   query('q').optional().isString().trim().isLength({ min: 1, max: 80 }).withMessage('q must be 1 to 80 characters'),
   query('limit').optional().isInt({ min: 1, max: 100 }).toInt().withMessage('limit must be an integer from 1 to 100'),

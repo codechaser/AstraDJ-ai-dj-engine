@@ -4,12 +4,14 @@ import { app } from './app.js';
 import { assertRuntimeConfig, config } from './config/env.js';
 import { connectMongo } from './config/database.js';
 import { attachLoungeGateway } from './socket/loungeGateway.js';
+import { segueService } from './services/segueService.js';
 
 assertRuntimeConfig();
 await connectMongo(config.mongoUri);
 const server = createServer(app);
 const io = new SocketServer(server, { cors: { origin: false }, maxHttpBufferSize: 64 * 1024, transports: ['websocket', 'polling'] });
-const { queueService, chatService, soundclashService } = attachLoungeGateway(io);
+const { queueService, chatService, soundclashService, publishAnnouncement } = attachLoungeGateway(io);
+segueService.setAnnouncementPublisher(publishAnnouncement);
 server.listen(config.port, () => {
   app.logger?.info?.(`AstraDJ API listening on port ${config.port}`);
   console.info(`AstraDJ API listening on port ${config.port}`);

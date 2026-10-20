@@ -111,6 +111,7 @@ let queueService;
 let chatService;
 let sentimentService;
 let soundclashService;
+let publishAnnouncement;
 let sockets;
 
 beforeEach(async () => {
@@ -119,7 +120,7 @@ beforeEach(async () => {
   sentimentService = createRoomSentimentService();
   server = createServer();
   ioServer = new Server(server, { transports: ['websocket'] });
-  ({ chatService, soundclashService } = attachLoungeGateway(ioServer, { repository, queueService, secret, sentimentService, soundclashOptions: { voteDurationMs: 160 } }));
+  ({ chatService, soundclashService, publishAnnouncement } = attachLoungeGateway(ioServer, { repository, queueService, secret, sentimentService, soundclashOptions: { voteDurationMs: 160 } }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   port = server.address().port;
   sockets = [];
@@ -139,6 +140,25 @@ test('authenticated Host and Listener join the invite-authorized Lounge', async 
   expect(h.ok).toBe(true); expect(l.ok).toBe(true);
   expect(l.state.nowPlaying.trackId).toBe('t_2001');
   expect(l.state.hostDisconnected).toBe(false);
+});
+
+test('segue announcements use the PRD event envelope and are isolated to the authorized Lounge room', async () => {
+  repository.lounges.set('lg_223456789abc', {
+    loungeId: 'lg_223456789abc', inviteCode: 'SP-8X2L', hostUserId: uidHost,
+    participantIds: [uidHost], queue: ['t_2001'], currentTrackId: 't_2001', status: 'live', settings: { maxParticipants: 3 },
+  });
+  const host = client(uidHost); const listener = client(uidListener); const otherRoom = client(uidHost);
+  const deliveredHost = waitFor(host, 'lounge.ai.dj_announcement');
+  const deliveredListener = waitFor(listener, 'lounge.ai.dj_announcement');
+  await join(host); await join(listener);
+  await command(otherRoom, 'lounge.join', { inviteCode: 'SP-8X2L' });
+  const foreign = new Promise((resolve) => otherRoom.once('lounge.ai.dj_announcement', resolve));
+  const payload = { text: 'AstraDJ deterministic fallback.', relatedTrackId: 't_2002', sourceEvents: ['t_2001#acoustic.bpm', 't_2002#timeline[0]'] };
+  publishAnnouncement('lg_123456789abc', payload);
+  const events = await Promise.all([deliveredHost, deliveredListener]);
+  expect(events[0]).toMatchObject({ event: 'lounge.ai.dj_announcement', loungeId: 'lg_123456789abc', payload, ts: expect.any(Number) });
+  expect(events[1]).toEqual(events[0]);
+  await expect(Promise.race([foreign, new Promise((resolve) => setTimeout(() => resolve('timeout'), 50))])).resolves.toBe('timeout');
 });
 
 test('rejects malformed and unknown invite codes', async () => {

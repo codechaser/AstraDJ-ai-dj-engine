@@ -45,6 +45,8 @@ The real-time gateway also supports Listener track submissions and votes for a H
 
 The backend records authenticated, explicitly self-reported listening interactions and serves a private hybrid recommendation rail from acoustic profiles and co-listener reports. Playback is not verified by a player; recommendations return an empty cold-start result when no supported history exists. A small synthetic held-out fixture measures Precision@5 at 0.6; this is not an effectiveness claim for real users. See [the interaction and recommendation contract](server/API.md#recommendations-and-listening-interactions).
 
+Lounge members can ask grounded questions about the current track through `POST /api/v1/lounges/:id/ai/ask`. Answers use only the track title/artist, validated acoustic profile, and embedded metadata timeline, with stable source references; unsupported questions return an explicit unavailable answer. Transition banter uses the same stored track facts and acoustic match result, and publishes the PRD-shaped `lounge.ai.dj_announcement` event to that Lounge. These paths use deterministic retrieval/templates and fallback text; no LLM, embeddings, or vector store is configured. See [the AI DJ API contract](server/API.md#grounded-current-track-qa).
+
 ## Current UI routes
 
 `/`, `/ai-dj`, `/now-playing`, `/search`, `/playlist`, `/queue`, `/artist`, `/profile`, `/album`, and `/settings`. Mobile layouts are responsive states of these routes.
