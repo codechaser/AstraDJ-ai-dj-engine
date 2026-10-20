@@ -2,6 +2,7 @@ import express from 'express';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import pinoHttp from 'pino-http';
+import cors from 'cors';
 import authRoutes from './routes/authRoutes.js';
 import trackRoutes from './routes/trackRoutes.js';
 import healthRoutes from './routes/healthRoutes.js';
@@ -13,6 +14,7 @@ import { config } from './config/env.js';
 
 export const app = express();
 app.disable('x-powered-by');
+app.use(cors({ origin: config.clientOrigin ?? false, credentials: true }));
 app.use(helmet());
 app.use(pinoHttp({ enabled: config.nodeEnv !== 'test', redact: ['req.headers.authorization', 'req.headers.cookie', 'req.body.password'] }));
 app.use(express.json({ limit: '64kb', strict: true }));

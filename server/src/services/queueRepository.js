@@ -28,7 +28,7 @@ export const queueRepository = {
     })), { ordered: true });
   },
   async getTrack(trackId) {
-    return Track.findOne({ trackId }).select('trackId title artist durationSeconds acoustic').lean();
+    return Track.findOne({ trackId }).select('trackId title artist durationSeconds audioAssetUrl acoustic').lean();
   },
   async getTrackMetadata(trackId) {
     return Track.findOne({ trackId }).select('trackId title artist timeline').lean();

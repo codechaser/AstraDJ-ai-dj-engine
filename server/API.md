@@ -2,6 +2,8 @@
 
 The base URL defaults to `http://localhost:4000`. REST endpoints are rooted at `/api/v1`; the Socket.io gateway shares this server. JSON validation errors use `{ "error": { "code", "message", "details" } }`.
 
+The Vite client defaults to same-origin `/api/v1` and Socket.io. Set `VITE_DEV_API_TARGET` to change the Vite development proxy target, or set `VITE_API_BASE_URL` at build time for a deployed API origin/base path. Set server `CLIENT_ORIGIN` to the exact frontend origin to enable credentialed CORS. Refresh cookies use `SameSite=Strict`; deploy the client and API same-site over HTTPS or behind a same-origin reverse proxy.
+
 ## REST endpoints
 
 | Method and path | Access | Purpose |
@@ -26,7 +28,7 @@ The base URL defaults to `http://localhost:4000`. REST endpoints are rooted at `
 
 ### Dashboard history and Lounge analytics
 
-Playback history currently reads the existing `Interaction` documents and is scoped to the authenticated user. These rows have `source: "self_reported"`; they are not evidence that audio played. The existing AstraDJ player has no HTML audio engine, the current mock tracks have no catalog IDs, and seeded catalog tracks have no `audioAssetUrl`. Therefore this increment does not create playback start/progress/completion events, and it does not count selections, queue actions, or recommendations as plays. `limit` is optional (default 20, maximum 100); an empty history returns `{ "items": [] }`.
+Playback history reads existing `Interaction` documents and is scoped to the authenticated user. Existing rows have `source: "self_reported"`; they are not evidence that audio played. The connected AstraDJ player can submit one completion interaction only from the browser audio element's actual `ended` event, for a catalog track with an `audioAssetUrl` and a measured duration within one second of catalog metadata. This is app-observed, client-reported playback, not externally verified listening. The current seed tracks have no playable `audioAssetUrl`, so the player currently cannot create a completion record. Track selection, queue actions, likes by themselves, and recommendations do not create playback interactions; no start/progress events are submitted. `limit` is optional (default 20, maximum 100); an empty history returns `{ "items": [] }`.
 
 Lounge analytics are restricted to the Lounge host or a persisted participant (including ended rooms). `durationSeconds` is currently `null`: the Lounge model does not persist when a session actually started, and `createdAt` may include scheduled/setup time. `queueEventCount` counts stored QueueEvent rows, `soundclashBattles` counts persisted `soundclash.opened` rows, and `chatMessageCount` plus `sentimentTimeline` come from persisted ChatMessage records. Sentiment entries reproduce stored message-level heuristic scores and timestamps; they are not an independently verified mood measure. `peakConcurrentParticipants` and `aiDjQuestionCount` are returned as `null` with explanations because presence peaks and question events are not persisted today. No metric is inferred from current socket counts or UI mock data.
 
@@ -45,7 +47,7 @@ POST /api/v1/interactions
 }
 ```
 
-`loungeId` is optional. When present, the server verifies that the requester is a persisted Lounge participant, the Lounge is live, and the requested track is its current track. It derives `coListenedWith` links from other user-reported records for that same track and Lounge in a 10-minute server-time window. The client cannot submit co-listener IDs. This is a co-listening proxy, not playback telemetry: the current app has no playback engine that verifies the self-reported duration, completion, or like.
+`loungeId` is optional. When present, the server verifies that the requester is a persisted Lounge participant, the Lounge is live, and the requested track is its current track. It derives `coListenedWith` links from other user-reported records for that same track and Lounge in a 10-minute server-time window. The client cannot submit co-listener IDs. This is a co-listening proxy, not playback telemetry: the server does not independently verify reported duration, completion, or likes. The browser player reports a completion only after an audio asset ends and its duration matches metadata; current seeded tracks have no audio URLs.
 
 The recommendation endpoint accepts only `limit` (1–20; default 10) and always scopes data to the authenticated user's ID. It does not accept a target `userId` and never returns co-listener identities or their histories. Candidates already present in the requester's interaction history and tracks with invalid/missing acoustic profiles are excluded. Its response is `{ "items": [{ "trackId", "title", "artist", "score", "reason" }], "strategy", "explanation" }`; cold-start users get an empty `items` array until usable data exists.
 

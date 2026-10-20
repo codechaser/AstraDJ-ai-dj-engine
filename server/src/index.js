@@ -9,7 +9,7 @@ import { segueService } from './services/segueService.js';
 assertRuntimeConfig();
 await connectMongo(config.mongoUri);
 const server = createServer(app);
-const io = new SocketServer(server, { cors: { origin: false }, maxHttpBufferSize: 64 * 1024, transports: ['websocket', 'polling'] });
+const io = new SocketServer(server, { cors: { origin: config.clientOrigin ?? false, credentials: true }, maxHttpBufferSize: 64 * 1024, transports: ['websocket', 'polling'] });
 const { queueService, chatService, soundclashService, publishAnnouncement } = attachLoungeGateway(io);
 segueService.setAnnouncementPublisher(publishAnnouncement);
 server.listen(config.port, () => {

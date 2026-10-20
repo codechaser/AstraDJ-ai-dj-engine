@@ -13,7 +13,7 @@ AstraDJ is a reference-led music experience. Its existing React + Vite frontend 
 - Authentication: JWT access token plus rotating refresh cookie
 - Tests: Jest + Supertest
 
-The client still uses its existing mock music data. No Spotify infrastructure, accounts, catalog, or user data are used.
+Home, playlist, artist, album, and AI DJ sections still contain preview/mock content; Search and the Lounge queue use the backend track catalog. No Spotify infrastructure, accounts, catalog, or user data are used.
 
 ## Run the frontend
 
@@ -35,7 +35,7 @@ npm run seed
 npm run dev
 ```
 
-The frontend is not yet connected to the new API. Most backend HTTP and Socket.io tests use repository fakes. Opt-in segue, chat, and recommendation integration tests use unique temporary MongoDB databases when `MONGODB_TEST_URI` is configured; the normal `server/.env` runtime configuration and deployment are still to be verified.
+The frontend uses backend authentication, track catalog/search, authenticated playback-history reads, and Socket.io Lounge join/shared queue commands. Most backend HTTP and Socket.io tests use repository fakes. Opt-in segue, chat, and recommendation integration tests use unique temporary MongoDB databases when `MONGODB_TEST_URI` is configured; the normal `server/.env` runtime configuration and deployment are still to be verified.
 
 The backend also exposes an authenticated, Lounge-member-only acoustic segue endpoint at `POST /api/v1/lounges/:id/ai/segue`. It applies BPM/Camelot rules, ranks eligible tracks, and uses a metadata-grounded deterministic fallback until an AI provider is configured. See [the API reference](server/API.md).
 
@@ -57,4 +57,6 @@ See [the PRD compliance matrix](docs/prd-compliance.md) for implementation evide
 
 ## Dashboard history and analytics increment
 
-The authenticated dashboard API exposes the caller's self-reported interaction history and Lounge analytics for persisted queue events, Soundclash openings, chat counts, and the chat sentiment timeline. Session duration, peak concurrent participants and AI DJ question counts are unavailable because the session start, durable presence peaks and question events are not recorded. The frontend still has no real audio source or authentication flow, so mock player selections are not reported as listens. See [dashboard API details](server/API.md#dashboard-history-and-lounge-analytics).
+The authenticated dashboard API exposes the caller's self-reported interaction history and Lounge analytics for persisted queue events, Soundclash openings, chat counts, and the chat sentiment timeline. Session duration, peak concurrent participants and AI DJ question counts are unavailable because the session start, durable presence peaks and question events are not recorded. The Account/Profile route now authenticates against the backend. The player uses browser audio only when a track has an `audioAssetUrl`; current seeded tracks have none, so playback remains unavailable and mock selections are never written as listens. See [dashboard API details](server/API.md#dashboard-history-and-lounge-analytics).
+
+For local Vite development, set `VITE_DEV_API_TARGET` if the API is not at the dev default. Production can set `VITE_API_BASE_URL` at build time and the backend `CLIENT_ORIGIN` to the exact frontend origin. Refresh cookies are SameSite=Strict, so the app and API must be same-origin or same-site; no local-only API URL is embedded in the production client bundle.
