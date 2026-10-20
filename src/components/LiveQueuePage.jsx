@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Grip, ThumbsDown, ThumbsUp, X } from 'lucide-react';
-import { getAccessToken, getSocketOrigin, getTrack, searchTracks } from '../api/client.js';
+import { getAccessToken, getActiveLounge, getSocketOrigin, getTrack, saveActiveLounge, searchTracks } from '../api/client.js';
 import { connectToLounge } from '../api/loungeConnection.js';
+import LoungeCollaborationPanel from './LoungeCollaborationPanel.jsx';
 
 function formatTrack(track) {
   return { ...track, img: 'photo-1514525253161-7a46d19cd819', time: `${Math.floor((track.durationSeconds ?? 0) / 60)}:${String(Math.floor((track.durationSeconds ?? 0) % 60)).padStart(2, '0')}` };
@@ -12,6 +13,7 @@ export default function LiveQueuePage({ track, onCurrentTrack, user }) {
   const loungeIdRef = useRef(null);
   const [inviteCode, setInviteCode] = useState('');
   const [queueState, setQueueState] = useState(null);
+  const [activeLoungeId, setActiveLoungeId] = useState(null);
   const [catalog, setCatalog] = useState([]);
   const [catalogStatus, setCatalogStatus] = useState('loading');
   const [catalogError, setCatalogError] = useState('');
@@ -28,7 +30,7 @@ export default function LiveQueuePage({ track, onCurrentTrack, user }) {
   useEffect(() => {
     if (!user) {
       socketRef.current?.disconnect(); socketRef.current = null;
-      loungeIdRef.current = null; setQueueState(null); setStatus('disconnected');
+      loungeIdRef.current = null; setActiveLoungeId(null); saveActiveLounge(null); setQueueState(null); setStatus('disconnected');
     }
     return () => { socketRef.current?.disconnect(); socketRef.current = null; };
   }, [user?.id]);
@@ -42,7 +44,12 @@ export default function LiveQueuePage({ track, onCurrentTrack, user }) {
       try { return await getTrack(trackId); } catch { return { trackId }; }
     }));
     if (event.loungeId !== loungeIdRef.current) return;
-    setQueueState((current) => ({ ...(current ?? {}), nowPlaying: hydrated[0] ?? null, nextUp: hydrated.slice(1) }));
+    setQueueState((current) => {
+      const next = { ...(current ?? {}), nowPlaying: hydrated[0] ?? null, nextUp: hydrated.slice(1) };
+      const saved = getActiveLounge();
+      if (saved?.loungeId === event.loungeId) saveActiveLounge({ ...saved, snapshot: next });
+      return next;
+    });
   }
 
   function connect(event) {
@@ -50,12 +57,14 @@ export default function LiveQueuePage({ track, onCurrentTrack, user }) {
     setMessage('');
     if (!user || !getAccessToken()) { setMessage('Sign in before joining a Lounge.'); return; }
     socketRef.current?.disconnect();
-    loungeIdRef.current = null; setQueueState(null); setStatus('connecting');
+    loungeIdRef.current = null; setActiveLoungeId(null); saveActiveLounge(null); setQueueState(null); setStatus('connecting');
     socketRef.current = connectToLounge({
       inviteCode, token: getAccessToken(), origin: getSocketOrigin(),
       onState: (state) => {
         loungeIdRef.current = state?.loungeId ?? null;
+        setActiveLoungeId(loungeIdRef.current);
         setQueueState(state);
+        if (state?.loungeId) saveActiveLounge({ userId: user.id, loungeId: state.loungeId, inviteCode: inviteCode.trim().toUpperCase(), snapshot: state });
         if (state?.nowPlaying?.trackId) onCurrentTrack(formatTrack(state.nowPlaying));
       },
       onQueueUpdate: (eventEnvelope) => { void hydrateUpdate(eventEnvelope); },
@@ -69,7 +78,12 @@ export default function LiveQueuePage({ track, onCurrentTrack, user }) {
     if (!socket?.connected) { setMessage('Connect to a Lounge before changing its queue.'); return; }
     socket.emit(event, payload, (ack) => {
       if (!ack?.ok) { setMessage(ack?.error?.message ?? 'The Lounge rejected that action.'); return; }
-      if (ack.state) setQueueState(ack.state);
+      if (ack.state) setQueueState((current) => {
+        const next = { ...(current ?? {}), ...ack.state, soundclash: ack.state.soundclash ?? current?.soundclash };
+        const saved = getActiveLounge();
+        if (saved?.loungeId === loungeIdRef.current) saveActiveLounge({ ...saved, snapshot: next });
+        return next;
+      });
       setMessage('');
     });
   }
@@ -86,6 +100,7 @@ export default function LiveQueuePage({ track, onCurrentTrack, user }) {
     <SectionTitle>Up Next <span className="muted">{queueState?.nextUp?.length ?? 0} tracks</span></SectionTitle>
     {status === 'connected' && queueState?.nextUp?.length ? <div className="queue-list">{queueState.nextUp.map((item, index) => <div className="queue-item" key={item.trackId}><span className="rank">{index + 1}</span><div className="catalog-cover"/><div><b>{item.title ?? item.trackId}</b><small>{item.artist ?? 'Catalog details unavailable'} · {item.votes ?? 0} votes</small></div><button aria-label={`Vote for ${item.title ?? item.trackId}`} onClick={() => command('lounge.queue.vote', { trackId: item.trackId, value: 1 })}><ThumbsUp size={14}/></button><button aria-label={`Downvote ${item.title ?? item.trackId}`} onClick={() => command('lounge.queue.vote', { trackId: item.trackId, value: -1 })}><ThumbsDown size={14}/></button><Grip size={17} className="grip"/></div>)}</div> : <div className="panel integration-status">{status === 'connected' ? 'Nothing is up next yet.' : 'Join a Lounge to see its shared queue.'}</div>}
     {status === 'connected' && <button className="btn-outline sync-button" onClick={() => command('lounge.sync.request', {})}>Refresh shared state</button>}
+    {activeLoungeId && <LoungeCollaborationPanel socket={socketRef.current?.socket} loungeId={activeLoungeId} status={status} user={user} catalog={catalog} initialBattle={queueState?.soundclash}/>}
   </div>;
 }
 

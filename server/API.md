@@ -4,6 +4,12 @@ The base URL defaults to `http://localhost:4000`. REST endpoints are rooted at `
 
 The Vite client defaults to same-origin `/api/v1` and Socket.io. Set `VITE_DEV_API_TARGET` to change the Vite development proxy target, or set `VITE_API_BASE_URL` at build time for a deployed API origin/base path. Set server `CLIENT_ORIGIN` to the exact frontend origin to enable credentialed CORS. Refresh cookies use `SameSite=Strict`; deploy the client and API same-site over HTTPS or behind a same-origin reverse proxy.
 
+## Frontend integration map
+
+The Account/Profile view uses the auth endpoints and private playback-history endpoint; Search uses `GET /api/v1/tracks`; the Queue view joins with `lounge.join` and consumes queue state, chat/history, sentiment, Soundclash, and announcement events from that same authenticated socket. It also reads member-authorized Lounge analytics and sends only the documented Soundclash commands. Queue event handlers verify the event envelope's `loungeId`, and chat rows are de-duplicated by server `messageId`.
+
+Home and AI DJ recommendation shelves render only `GET /api/v1/recommendations` results. The AI DJ form sends `POST /api/v1/lounges/:id/ai/ask` and `POST /api/v1/lounges/:id/ai/segue` for the active Lounge context. The browser's session-scoped Lounge snapshot is a request convenience only: the server revalidates JWT, membership, current track, catalog IDs, and acoustic rules. The API uses deterministic metadata retrieval/templates; it does not connect an LLM. If the user's audio track is unrelated to the Lounge's authoritative current track, the segue request uses `currentTs: 0`; the server still validates that the requested track is current.
+
 ## REST endpoints
 
 | Method and path | Access | Purpose |

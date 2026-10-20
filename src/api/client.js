@@ -99,6 +99,41 @@ export async function getPlaybackHistory(limit = 20) {
   return apiRequest(`/dashboard/playback-history?limit=${limit}`);
 }
 
+export async function getRecommendations(limit = 10) {
+  return apiRequest(`/recommendations?limit=${limit}`);
+}
+
+export async function getLoungeAnalytics(loungeId) {
+  return apiRequest(`/dashboard/lounges/${encodeURIComponent(loungeId)}/analytics`);
+}
+
+export async function requestSegue(loungeId, input) {
+  return apiRequest(`/lounges/${encodeURIComponent(loungeId)}/ai/segue`, {
+    method: 'POST', body: JSON.stringify(input),
+  });
+}
+
+export async function askTrackQuestion(loungeId, question) {
+  return apiRequest(`/lounges/${encodeURIComponent(loungeId)}/ai/ask`, {
+    method: 'POST', body: JSON.stringify({ question }),
+  });
+}
+
+const ACTIVE_LOUNGE_KEY = 'astradj.activeLounge';
+export function saveActiveLounge(context) {
+  try {
+    if (!context) sessionStorage.removeItem(ACTIVE_LOUNGE_KEY);
+    else sessionStorage.setItem(ACTIVE_LOUNGE_KEY, JSON.stringify(context));
+  } catch { /* Session storage can be unavailable in restricted browser contexts. */ }
+}
+
+export function getActiveLounge() {
+  try {
+    const context = JSON.parse(sessionStorage.getItem(ACTIVE_LOUNGE_KEY) || 'null');
+    return context && typeof context.loungeId === 'string' ? context : null;
+  } catch { return null; }
+}
+
 export function getSocketOrigin() {
   const configured = import.meta.env?.VITE_API_BASE_URL;
   if (!configured) return window.location.origin;

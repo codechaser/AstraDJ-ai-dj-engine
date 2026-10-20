@@ -1,8 +1,10 @@
 import test, { afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { apiRequest, clearAccessToken, login, logout, registerAccount, restoreSession, searchTracks } from '../src/api/client.js';
+import { apiRequest, askTrackQuestion, clearAccessToken, getLoungeAnalytics, getRecommendations, login, logout, registerAccount, requestSegue, restoreSession, searchTracks } from '../src/api/client.js';
 import { buildCompletionInteraction } from '../src/api/playbackEvents.js';
 import { connectToLounge } from '../src/api/loungeConnection.js';
+import { subscribeToLoungeEvents } from '../src/api/loungeEvents.js';
+import { applySoundclashEvent, displayAnalyticsMetric, normalizeRecommendations, tiedCandidateIds, uniqueChatMessages } from '../src/api/uiData.js';
 
 const originalFetch = globalThis.fetch;
 afterEach(() => { globalThis.fetch = originalFetch; clearAccessToken(); });
@@ -130,4 +132,68 @@ test('Lounge client rejoins on reconnect, filters cross-room updates, and remove
   assert.equal(socket.handlers.get('lounge.queue.update').size, 0);
   socket.trigger('lounge.queue.update', { loungeId: 'lg_current', payload: {} });
   assert.equal(received.length, 1);
+});
+
+test('recommendation, Lounge analytics, segue, and Q&A calls use existing authenticated API contracts', async () => {
+  const calls = [];
+  globalThis.fetch = async (url, options) => {
+    calls.push({ url, options });
+    if (url.endsWith('/auth/login')) return response({ accessToken: 'integration-token', user: { id: 'u1' } });
+    if (url.includes('/ai/segue')) return response({ selectedTrackId: 't_2002', provider: 'deterministic_fallback' });
+    if (url.includes('/ai/ask')) return response({ answer: 'Grounded.', sourceEvents: ['t_2001#title'], grounded: true });
+    return response({ items: [] });
+  };
+  await login({ email: 'mira@example.test', password: 'password' });
+  await getRecommendations();
+  await getLoungeAnalytics('lg_123456789abc');
+  await requestSegue('lg_123456789abc', { currentTrackId: 't_2001', currentTs: 0, candidateTrackIds: ['t_2002'], currentSentimentScore: 0.5 });
+  await askTrackQuestion('lg_123456789abc', 'What is the track title?');
+  assert.ok(calls[1].url.endsWith('/api/v1/recommendations?limit=10'));
+  assert.ok(calls[2].url.endsWith('/api/v1/dashboard/lounges/lg_123456789abc/analytics'));
+  assert.equal(calls[3].url, '/api/v1/lounges/lg_123456789abc/ai/segue');
+  assert.equal(JSON.parse(calls[3].options.body).currentSentimentScore, 0.5);
+  assert.equal(calls[3].options.headers.Authorization, 'Bearer integration-token');
+  assert.equal(calls[4].url, '/api/v1/lounges/lg_123456789abc/ai/ask');
+  assert.deepEqual(JSON.parse(calls[4].options.body), { question: 'What is the track title?' });
+});
+
+test('room event subscriptions ignore other Lounges and remove each listener on cleanup', () => {
+  class FakeSocket {
+    handlers = new Map();
+    on(event, handler) { const set = this.handlers.get(event) ?? new Set(); set.add(handler); this.handlers.set(event, set); }
+    off(event, handler) { this.handlers.get(event)?.delete(handler); }
+    trigger(event, envelope) { for (const fn of this.handlers.get(event) ?? []) fn(envelope); }
+  }
+  const socket = new FakeSocket(), received = [];
+  const cleanup = subscribeToLoungeEvents(socket, 'lg_current', (name, envelope) => received.push([name, envelope]));
+  socket.trigger('lounge.chat.message', { loungeId: 'lg_other', payload: { body: 'private to another room' } });
+  socket.trigger('lounge.chat.message', { loungeId: 'lg_current', payload: { body: 'this room only' } });
+  assert.equal(received.length, 1);
+  assert.equal(received[0][1].payload.body, 'this room only');
+  cleanup();
+  assert.equal([...socket.handlers.values()].reduce((sum, set) => sum + set.size, 0), 0);
+});
+
+test('chat history and broadcasts deduplicate accepted messages by server messageId', () => {
+  const row = { messageId: 'm1', userId: 'u1', body: 'Hello', tsSeconds: 10 };
+  assert.deepEqual(uniqueChatMessages([row, row, { ...row, messageId: 'm2', tsSeconds: 11 }]).map((item) => item.messageId), ['m1', 'm2']);
+});
+
+test('Soundclash view state follows server events and ignores stale battle events', () => {
+  let state = applySoundclashEvent(null, 'lounge.soundclash.submission', { battleId: 'b1', trackId: 't_2001' });
+  state = applySoundclashEvent(state, 'lounge.soundclash.submission', { battleId: 'b1', trackId: 't_2002' });
+  state = applySoundclashEvent(state, 'lounge.soundclash.open', { battleId: 'b1', candidateTrackIds: ['t_2001', 't_2002'], closesAt: 1000 });
+  state = applySoundclashEvent(state, 'lounge.soundclash.vote', { battleId: 'b1', voteCounts: { t_2001: 1, t_2002: 1 }, closesAt: 1000, status: 'tied' });
+  assert.deepEqual(tiedCandidateIds(state), ['t_2001', 't_2002']);
+  state = applySoundclashEvent(state, 'lounge.soundclash.resolved', { battleId: 'b1', winningTrackId: 't_2002' });
+  assert.equal(state.status, 'resolved');
+  assert.equal(state.winningTrackId, 't_2002');
+  assert.equal(applySoundclashEvent(state, 'lounge.soundclash.resolved', { battleId: 'b_other', winningTrackId: 't_2001' }), state);
+});
+
+test('recommendation and analytics render helpers preserve empty and unavailable API values', () => {
+  assert.deepEqual(normalizeRecommendations({ items: [] }), []);
+  assert.deepEqual(normalizeRecommendations({ items: [{ trackId: 't_1', title: 'A', artist: 'B' }, { title: 'missing id' }] }), [{ trackId: 't_1', title: 'A', artist: 'B' }]);
+  assert.equal(displayAnalyticsMetric(null), 'Unavailable');
+  assert.equal(displayAnalyticsMetric(0), 0);
 });
