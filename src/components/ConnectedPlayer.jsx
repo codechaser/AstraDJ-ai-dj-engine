@@ -7,7 +7,7 @@ import { buildCompletionInteraction } from '../api/playbackEvents.js';
 const imageUrl = (id) => `https://images.unsplash.com/${id || 'photo-1514525253161-7a46d19cd819'}?auto=format&fit=crop&w=180&q=80`;
 const timeLabel = (seconds = 0) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 
-export default function ConnectedPlayer({ track, playing, onToggle, registerPlaybackToggle, liked, setLiked, currentTime, setCurrentTime, setDuration, setAudioStatus, onPlaybackChange }) {
+export default function ConnectedPlayer({ track, playing, onToggle, registerPlaybackToggle, liked, setLiked, currentTime, setCurrentTime, setDuration, audioStatus, setAudioStatus, onPlaybackChange }) {
   const audioRef = useRef(null);
   const completedRef = useRef(null);
   const trackIdRef = useRef(track?.trackId);
