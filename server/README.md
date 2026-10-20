@@ -45,6 +45,8 @@ Run the backend suite with `npm test`. Jest + Supertest verify most HTTP contrac
 - `POST /api/v1/lounges/:id/ai/ask` — authenticated Lounge-member current-track Q&A with metadata source references.
 - `POST /api/v1/interactions` — authenticated self-reported listening event with optional verified live Lounge context.
 - `GET /api/v1/recommendations?limit=10` — private, authenticated hybrid recommendation rail for the current user.
+- `GET /api/v1/dashboard/playback-history?limit=20` — authenticated current-user view of existing self-reported interactions (not player-verified history).
+- `GET /api/v1/dashboard/lounges/:id/analytics` — Lounge-member analytics from persisted queue events and chat messages; unavailable metrics remain `null`.
 - `GET /health` and `GET /api/v1/health` — API and database state.
 
 ## Socket.io DJ Lounge queue
@@ -78,3 +80,7 @@ Validation errors use `{ "error": { "code", "message", "details" } }`; profile r
 ## Current limits
 
 Live join, shared queue add/vote ordering, presence, sync ping/pong, reconnect snapshots, Host-disconnect freeze for manual queue mutations, append-only queue event recovery, deterministic acoustic matching, authenticated segue and current-track Q&A, metadata-grounded announcement events, authenticated room chat/history, deterministic room sentiment, Soundclash submission/voting/timer/tie resolution, interaction recording, and hybrid recommendation ranking are implemented and covered by automated tests. Interaction/recommendation/AI tests use repository or model fakes; Mongo integration remains opt-in and must be verified per run. Recently played Q&A, generative LLM RAG, embeddings/vector search, lyrics/artist-bio sources, playback-verified data, a generated production interaction corpus, full dashboard/history/session analytics, typing indicators, emoji reactions, and other moderation features remain incomplete or unverified. The recommendation fixture's Precision@5 is 0.6 but does not establish real-user effectiveness. The frontend continues to use mock data and was not changed. 50-user load evidence is pending. See `../docs/prd-compliance.md` for the audit.
+
+## Dashboard history and Lounge analytics
+
+`GET /api/v1/dashboard/playback-history` returns only the caller's own Interaction rows and preserves `source: self_reported`; this is not player-verified history. `GET /api/v1/dashboard/lounges/:id/analytics` is available to the host and persisted participants, including for ended rooms. Session duration remains `null` until a start timestamp exists; queue counts, Soundclash openings, chat counts, and sentiment points come from stored documents. Peak concurrent participants and AI DJ question counts also remain `null`, since those events are not durable. The current frontend has neither an authentication flow nor actual audio assets/player, so no mock player selection is written as a playback interaction.

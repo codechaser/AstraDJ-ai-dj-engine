@@ -54,3 +54,7 @@ Lounge members can ask grounded questions about the current track through `POST 
 ## Requirements tracking
 
 See [the PRD compliance matrix](docs/prd-compliance.md) for implementation evidence, verification limits, and remaining requirements. The source PRD is stored at `docs/reference/Internship-PRD.docx`.
+
+## Dashboard history and analytics increment
+
+The authenticated dashboard API exposes the caller's self-reported interaction history and Lounge analytics for persisted queue events, Soundclash openings, chat counts, and the chat sentiment timeline. Session duration, peak concurrent participants and AI DJ question counts are unavailable because the session start, durable presence peaks and question events are not recorded. The frontend still has no real audio source or authentication flow, so mock player selections are not reported as listens. See [dashboard API details](server/API.md#dashboard-history-and-lounge-analytics).

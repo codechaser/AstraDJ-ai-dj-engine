@@ -21,6 +21,14 @@ The base URL defaults to `http://localhost:4000`. REST endpoints are rooted at `
 | `POST /api/v1/lounges/:id/ai/ask` | Authenticated active Lounge member | Answer a question from the current track's stored metadata with source references |
 | `POST /api/v1/interactions` | Bearer JWT | Record the authenticated user's self-reported listen/like interaction; optional live Lounge co-listening context is checked server-side |
 | `GET /api/v1/recommendations?limit=10` | Bearer JWT | Return a private ranked recommendation rail for the authenticated user |
+| `GET /api/v1/dashboard/playback-history?limit=20` | Bearer JWT | Return the caller's own explicitly self-reported Interaction history |
+| `GET /api/v1/dashboard/lounges/:id/analytics` | Bearer JWT + Lounge membership | Aggregate available persisted Lounge metrics; unavailable metrics are returned as `null` |
+
+### Dashboard history and Lounge analytics
+
+Playback history currently reads the existing `Interaction` documents and is scoped to the authenticated user. These rows have `source: "self_reported"`; they are not evidence that audio played. The existing AstraDJ player has no HTML audio engine, the current mock tracks have no catalog IDs, and seeded catalog tracks have no `audioAssetUrl`. Therefore this increment does not create playback start/progress/completion events, and it does not count selections, queue actions, or recommendations as plays. `limit` is optional (default 20, maximum 100); an empty history returns `{ "items": [] }`.
+
+Lounge analytics are restricted to the Lounge host or a persisted participant (including ended rooms). `durationSeconds` is currently `null`: the Lounge model does not persist when a session actually started, and `createdAt` may include scheduled/setup time. `queueEventCount` counts stored QueueEvent rows, `soundclashBattles` counts persisted `soundclash.opened` rows, and `chatMessageCount` plus `sentimentTimeline` come from persisted ChatMessage records. Sentiment entries reproduce stored message-level heuristic scores and timestamps; they are not an independently verified mood measure. `peakConcurrentParticipants` and `aiDjQuestionCount` are returned as `null` with explanations because presence peaks and question events are not persisted today. No metric is inferred from current socket counts or UI mock data.
 
 ### Recommendations and listening interactions
 
