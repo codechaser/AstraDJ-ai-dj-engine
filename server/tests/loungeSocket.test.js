@@ -6,6 +6,7 @@ import { io as createClient } from 'socket.io-client';
 import { attachLoungeGateway } from '../src/socket/loungeGateway.js';
 import { createQueueService } from '../src/services/queueService.js';
 import { createRoomSentimentService } from '../src/services/roomSentimentService.js';
+import { createSoundclashService } from '../src/services/soundclashService.js';
 
 const secret = 'test-secret-astradj-only-32-characters';
 const uidHost = '507f1f77bcf86cd799439011';
@@ -26,6 +27,8 @@ const trackData = new Map([
   ['t_2001', { trackId: 't_2001', title: 'Night Drive', artist: 'Nova Circuit', durationSeconds: 220 }],
   ['t_2002', { trackId: 't_2002', title: 'Neon Tide', artist: 'Nova Circuit', durationSeconds: 210 }],
   ['t_2003', { trackId: 't_2003', title: 'Afterglow', artist: 'Mira Vale', durationSeconds: 205 }],
+  ['t_2004', { trackId: 't_2004', title: 'Blue Hour', artist: 'Mira Vale', durationSeconds: 208 }],
+  ['t_2005', { trackId: 't_2005', title: 'Slow Lights', artist: 'June North', durationSeconds: 215 }],
 ]);
 const hostId = uidHost;
 
@@ -48,8 +51,9 @@ function makeRepository() {
       return lounge;
     },
     async listQueueEvents(loungeId) { return events.filter((event) => event.loungeId === loungeId).sort((a, b) => a.seq - b.seq); },
-    async appendQueueEvents(batch) { events.push(...structuredClone(batch)); },
+    async appendQueueEvents(batch) { if (this.failQueueAppend) throw new Error('simulated persistence failure'); events.push(...structuredClone(batch)); },
     async getTrack(trackId) { return trackData.get(trackId) ?? null; },
+    async getTrackMetadata(trackId) { const track = trackData.get(trackId); return track ? { ...track, timeline: [{ ts: 12, type: 'trivia', text: `${track.title} is from the sample catalog.` }] } : null; },
     async getUser(id) { return users.get(String(id)) ?? null; },
     async appendChatMessages(batch) { this.chatMessages ??= []; this.chatMessages.push(...structuredClone(batch)); },
     async listRecentChatMessages(loungeId, limit) { return (this.chatMessages ?? []).filter((message) => message.loungeId === loungeId).slice(-limit); },
@@ -68,6 +72,16 @@ function waitFor(socket, event) {
     const timer = setTimeout(() => { socket.off(event, onEvent); reject(new Error(`Timed out waiting for ${event}`)); }, 2000);
     function onEvent(data) { clearTimeout(timer); resolve(data); }
     socket.once(event, onEvent);
+  });
+}
+function waitForMatch(socket, event, predicate) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => { socket.off(event, onEvent); reject(new Error(`Timed out waiting for matching ${event}`)); }, 2000);
+    function onEvent(data) {
+      if (!predicate(data)) return;
+      clearTimeout(timer); socket.off(event, onEvent); resolve(data);
+    }
+    socket.on(event, onEvent);
   });
 }
 async function connected(socket) {
@@ -96,6 +110,7 @@ let repository;
 let queueService;
 let chatService;
 let sentimentService;
+let soundclashService;
 let sockets;
 
 beforeEach(async () => {
@@ -104,13 +119,15 @@ beforeEach(async () => {
   sentimentService = createRoomSentimentService();
   server = createServer();
   ioServer = new Server(server, { transports: ['websocket'] });
-  ({ chatService } = attachLoungeGateway(ioServer, { repository, queueService, secret, sentimentService }));
+  ({ chatService, soundclashService } = attachLoungeGateway(ioServer, { repository, queueService, secret, sentimentService, soundclashOptions: { voteDurationMs: 160 } }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   port = server.address().port;
   sockets = [];
 });
 afterEach(async () => {
   await chatService.flushAll();
+  soundclashService.close();
+  await queueService.flushAll();
   for (const socket of sockets) socket.disconnect();
   await new Promise((resolve) => ioServer.close(resolve));
 });
@@ -196,6 +213,7 @@ test('commands cannot access a protected room without authorized Lounge membersh
   const socket = client(uidListener); await connected(socket);
   const result = await command(socket, 'lounge.queue.vote', { trackId: 't_2002', value: 1 });
   expect(result.error.code).toBe('LOUNGE_MEMBERSHIP_REQUIRED');
+  expect((await command(socket, 'lounge.soundclash.submit', { trackId: 't_2003' })).error.code).toBe('LOUNGE_MEMBERSHIP_REQUIRED');
 });
 
 test('reconnection returns current state without duplicate participants or queue entries', async () => {
@@ -315,4 +333,124 @@ test('all four authorized roles may chat as joined users and concurrent posts re
   const results = await Promise.all(socketsToChat.map(([socket, body]) => command(socket, 'lounge.chat.message', { body })));
   expect(results.every((result) => result.ok)).toBe(true);
   expect(sentimentService.snapshot('lg_123456789abc')).toMatchObject({ sampleSize: 4, rollingScore: 0.625 });
+});
+
+async function setupSoundclash({ includeCoDj = false } = {}) {
+  if (includeCoDj) repository.lounges.get('lg_123456789abc').settings.maxParticipants = 4;
+  const host = client(uidHost); const a = client(uidListener); const b = client(uidListener2);
+  await Promise.all([join(host), join(a), join(b)]);
+  let coDj;
+  if (includeCoDj) { coDj = client(uidCoDj); await join(coDj); }
+  await command(host, 'lounge.queue.add', { trackId: 't_2002' });
+  await command(a, 'lounge.queue.vote', { trackId: 't_2002', value: 1 });
+  await command(b, 'lounge.queue.vote', { trackId: 't_2002', value: 1 });
+  return { host, a, b, coDj };
+}
+
+test('Soundclash collects Listener submissions, opens with the exact PRD envelope, and inserts the timed winner at Next Up', async () => {
+  const { host, a, b } = await setupSoundclash();
+  expect((await command(host, 'lounge.soundclash.submit', { trackId: 't_2004' })).error.code).toBe('FORBIDDEN');
+  const subA = await command(a, 'lounge.soundclash.submit', { trackId: 't_2003' });
+  const subB = await command(b, 'lounge.soundclash.submit', { trackId: 't_2004' });
+  expect(subA.ok && subB.ok).toBe(true);
+  expect((await command(a, 'lounge.soundclash.submit', { trackId: 't_2005' })).error.code).toBe('SOUNDCLASH_ALREADY_SUBMITTED');
+  const open = waitFor(host, 'lounge.soundclash.open');
+  const opened = await command(host, 'lounge.soundclash.open', {});
+  const openEvent = await open;
+  expect(opened.ok).toBe(true);
+  expect(openEvent).toMatchObject({ event: 'lounge.soundclash.open', loungeId: 'lg_123456789abc', payload: { battleId: subA.state.battleId, candidateTrackIds: ['t_2003', 't_2004'], closesAt: expect.any(Number) }, ts: expect.any(Number) });
+  expect(Object.keys(openEvent.payload).sort()).toEqual(['battleId', 'candidateTrackIds', 'closesAt']);
+  const queueUpdate = waitFor(host, 'lounge.queue.update');
+  const announcement = waitFor(host, 'lounge.ai.dj_announcement');
+  const resolution = waitFor(host, 'lounge.soundclash.resolved');
+  const resolutionA = waitFor(a, 'lounge.soundclash.resolved');
+  const resolutionB = waitFor(b, 'lounge.soundclash.resolved');
+  expect((await command(a, 'lounge.soundclash.vote', { battleId: subA.state.battleId, trackId: 't_2003' })).ok).toBe(true);
+  expect((await command(b, 'lounge.soundclash.vote', { battleId: subA.state.battleId, trackId: 't_2003' })).ok).toBe(true);
+  const resolutionEvents = await Promise.all([resolution, resolutionA, resolutionB]);
+  const resolvedEvent = resolutionEvents[0];
+  expect(resolvedEvent).toMatchObject({ event: 'lounge.soundclash.resolved', loungeId: 'lg_123456789abc', payload: { battleId: subA.state.battleId, winningTrackId: 't_2003' }, ts: expect.any(Number) });
+  expect(Object.keys(resolvedEvent.payload).sort()).toEqual(['battleId', 'winningTrackId']);
+  expect(resolutionEvents[1]).toEqual(resolvedEvent);
+  expect(resolutionEvents[2]).toEqual(resolvedEvent);
+  expect(await queueUpdate).toMatchObject({ payload: { reason: 'battle', queue: [{ trackId: 't_2001', position: 0 }, { trackId: 't_2003', position: 1 }, { trackId: 't_2002', position: 2 }] } });
+  expect(await announcement).toMatchObject({ payload: { relatedTrackId: 't_2003', sourceEvents: ['t_2003#timeline[0]'] } });
+  expect((await announcement).payload.text).toContain('Afterglow is from the sample catalog.');
+  const state = await command(a, 'lounge.sync.request', {});
+  expect(state.state.nextUp.map((track) => track.trackId)).toEqual(['t_2003', 't_2002']);
+  expect(state.state.soundclash).toMatchObject({ status: 'resolved', winningTrackId: 't_2003' });
+});
+
+test('tied Soundclash votes can be resolved only by Host or Co-DJ and only to a tied candidate', async () => {
+  const { host, a, b, coDj } = await setupSoundclash({ includeCoDj: true });
+  const first = await command(a, 'lounge.soundclash.submit', { trackId: 't_2003' });
+  await command(b, 'lounge.soundclash.submit', { trackId: 't_2004' });
+  await command(host, 'lounge.soundclash.open', {});
+  const votes = await Promise.all([
+    command(a, 'lounge.soundclash.vote', { battleId: first.state.battleId, trackId: 't_2003' }),
+    command(b, 'lounge.soundclash.vote', { battleId: first.state.battleId, trackId: 't_2004' }),
+  ]);
+  expect(votes.every((vote) => vote.ok)).toBe(true);
+  const tied = waitForMatch(host, 'lounge.soundclash.vote', (event) => event.payload?.status === 'tied');
+  expect((await tied).payload.voteCounts).toEqual({ t_2003: 1, t_2004: 1 });
+  users.get(uidListener).role = 'Admin';
+  expect((await command(a, 'lounge.soundclash.resolve', { battleId: first.state.battleId, winningTrackId: 't_2003' })).error.code).toBe('FORBIDDEN');
+  users.get(uidListener).role = 'Listener';
+  expect((await command(a, 'lounge.soundclash.resolve', { battleId: first.state.battleId, winningTrackId: 't_2003' })).error.code).toBe('FORBIDDEN');
+  expect((await command(coDj, 'lounge.soundclash.resolve', { battleId: first.state.battleId, winningTrackId: 't_2005' })).error.code).toBe('INVALID_TIE_WINNER');
+  const resolved = waitFor(host, 'lounge.soundclash.resolved');
+  const outcomes = await Promise.all([
+    command(coDj, 'lounge.soundclash.resolve', { battleId: first.state.battleId, winningTrackId: 't_2004' }),
+    command(coDj, 'lounge.soundclash.resolve', { battleId: first.state.battleId, winningTrackId: 't_2004' }),
+  ]);
+  expect(outcomes.filter((outcome) => outcome.ok)).toHaveLength(1);
+  expect(outcomes.filter((outcome) => !outcome.ok)[0].error.code).toBe('SOUNDCLASH_NOT_TIED');
+  expect((await resolved).payload.winningTrackId).toBe('t_2004');
+});
+
+test('Soundclash validates membership, command payloads, candidate count, duplicate votes, and Lounge isolation', async () => {
+  repository.lounges.set('lg_223456789abc', { loungeId: 'lg_223456789abc', inviteCode: 'SP-8X2L', hostUserId: uidHost, participantIds: [uidHost], queue: ['t_2001'], currentTrackId: 't_2001', status: 'live', settings: { maxParticipants: 3 } });
+  const host = client(uidHost); const a = client(uidListener); const b = client(uidListener2); const otherRoom = client(uidHost);
+  await Promise.all([join(host), join(a), join(b)]);
+  await command(otherRoom, 'lounge.join', { inviteCode: 'SP-8X2L' });
+  expect((await command(host, 'lounge.soundclash.submit', { trackId: 'bad', role: 'Host' })).error.code).toBe('VALIDATION_ERROR');
+  expect((await command(a, 'lounge.soundclash.vote', { battleId: 'missing', trackId: 't_2003' })).error.code).toBe('SOUNDCLASH_NOT_FOUND');
+  await command(host, 'lounge.queue.add', { trackId: 't_2002' });
+  expect((await command(host, 'lounge.soundclash.open', {})).error.code).toBe('SOUNDCLASH_NOT_COLLECTING');
+  const first = await command(a, 'lounge.soundclash.submit', { trackId: 't_2003' });
+  await command(b, 'lounge.soundclash.submit', { trackId: 't_2004' });
+  const foreignEvent = new Promise((resolve) => otherRoom.once('lounge.soundclash.open', resolve));
+  await command(host, 'lounge.soundclash.open', {});
+  // The event is only delivered to the authorized Lounge room.
+  await expect(Promise.race([foreignEvent, new Promise((resolve) => setTimeout(() => resolve('timeout'), 50))])).resolves.toBe('timeout');
+  await command(a, 'lounge.soundclash.vote', { battleId: first.state.battleId, trackId: 't_2003' });
+  expect((await command(a, 'lounge.soundclash.vote', { battleId: first.state.battleId, trackId: 't_2004' })).error.code).toBe('SOUNDCLASH_DUPLICATE_VOTE');
+});
+
+test('Soundclash restores an open battle and its server timer resolves after voters disconnect', async () => {
+  const { host, a, b } = await setupSoundclash();
+  const first = await command(a, 'lounge.soundclash.submit', { trackId: 't_2003' });
+  await command(b, 'lounge.soundclash.submit', { trackId: 't_2004' });
+  await command(host, 'lounge.soundclash.open', {});
+  await command(a, 'lounge.soundclash.vote', { battleId: first.state.battleId, trackId: 't_2003' });
+  await queueService.flush('lg_123456789abc');
+  soundclashService.close();
+  soundclashService = createSoundclashService({ repository, queueService, voteDurationMs: 40, onEvent: (event, loungeId, payload) => ioServer.to(`lounge:${loungeId}`).emit(event, { event, loungeId, payload, ts: Date.now() }) });
+  const lounge = await repository.findLoungeById('lg_123456789abc');
+  expect(await soundclashService.snapshot(lounge)).toMatchObject({ status: 'open', candidateTrackIds: ['t_2003', 't_2004'], voteCounts: { t_2003: 1, t_2004: 0 } });
+  a.disconnect(); b.disconnect();
+  await new Promise((resolve) => setTimeout(resolve, 240));
+  expect(await soundclashService.snapshot(lounge)).toMatchObject({ status: 'resolved', winningTrackId: 't_2003' });
+});
+
+test('Soundclash persistence failure does not publish or expose an uncommitted battle', async () => {
+  const { a } = await setupSoundclash();
+  await queueService.flush('lg_123456789abc');
+  repository.failQueueAppend = true;
+  const event = new Promise((resolve) => a.once('lounge.soundclash.submission', resolve));
+  const failed = await command(a, 'lounge.soundclash.submit', { trackId: 't_2003' });
+  expect(failed).toMatchObject({ ok: false, error: { code: 'INTERNAL_ERROR', message: 'The request could not be completed' } });
+  expect((await command(a, 'lounge.sync.request', {})).state.soundclash).toMatchObject({ status: 'idle', battleId: null, candidateTrackIds: [] });
+  await expect(Promise.race([event, new Promise((resolve) => setTimeout(() => resolve('timeout'), 50))])).resolves.toBe('timeout');
+  repository.failQueueAppend = false;
 });

@@ -4,13 +4,15 @@ import { queueRepository } from '../services/queueRepository.js';
 import { createQueueService } from '../services/queueService.js';
 import { createChatService } from '../services/chatService.js';
 import { roomSentimentService } from '../services/roomSentimentService.js';
+import { createSoundclashService } from '../services/soundclashService.js';
 
 const ROOM_PREFIX = 'lounge:';
 const room = (loungeId) => `${ROOM_PREFIX}${loungeId}`;
 const envelope = (event, loungeId, payload) => ({ event, loungeId, payload, ts: Date.now() });
 const ackError = (error) => ({ ok: false, error: { code: error.code ?? 'INTERNAL_ERROR', message: error.status && error.status < 500 ? error.message : 'The request could not be completed' } });
 
-export function attachLoungeGateway(io, { repository = queueRepository, queueService = createQueueService(repository), secret = config.jwtAccessSecret, sentimentService = roomSentimentService, chatService = createChatService({ repository, sentimentService }) } = {}) {
+export function attachLoungeGateway(io, { repository = queueRepository, queueService = createQueueService(repository), secret = config.jwtAccessSecret, sentimentService = roomSentimentService, chatService = createChatService({ repository, sentimentService }), soundclashService = null, soundclashOptions = {} } = {}) {
+  soundclashService ??= createSoundclashService({ repository, queueService, ...soundclashOptions, onEvent: (event, loungeId, payload) => io.to(room(loungeId)).emit(event, envelope(event, loungeId, payload)) });
   const loungeBySocket = new Map();
   const socketsByLounge = new Map();
   const joiningUsers = new Map();
@@ -49,7 +51,7 @@ export function attachLoungeGateway(io, { repository = queueRepository, queueSer
         const lounge = await repository.findLoungeById(loungeId);
         if (!lounge || lounge.status === 'ended') throw Object.assign(new Error('Lounge no longer exists'), { status: 404, code: 'LOUNGE_NOT_FOUND' });
         if (!lounge.participantIds?.some((participantId) => String(participantId) === String(user.id))) {
-          throw Object.assign(new Error('Join this Lounge before using chat'), { status: 403, code: 'LOUNGE_MEMBERSHIP_REQUIRED' });
+          throw Object.assign(new Error('Join this Lounge before using this operation'), { status: 403, code: 'LOUNGE_MEMBERSHIP_REQUIRED' });
         }
         return callback({ loungeId, user, lounge });
       });
@@ -96,6 +98,7 @@ export function attachLoungeGateway(io, { repository = queueRepository, queueSer
       loungeBySocket.set(socket.id, loungeId);
       await socket.join(room(loungeId));
       const state = await queueService.snapshot(lounge);
+      state.soundclash = await soundclashService.snapshot(lounge);
       state.presence = participants(loungeId);
       state.hostDisconnected = !hasHost(loungeId, lounge.hostUserId);
       if (isFirstSocket) emitPresence(loungeId, socket.data.userId, 'joined', state.hostDisconnected);
@@ -126,9 +129,34 @@ export function attachLoungeGateway(io, { repository = queueRepository, queueSer
       const joined = await repository.findLoungeById(loungeId);
       if (!joined) throw Object.assign(new Error('Lounge no longer exists'), { status: 404, code: 'LOUNGE_NOT_FOUND' });
       const state = await queueService.snapshot(joined);
+      state.soundclash = await soundclashService.snapshot(joined);
       state.presence = participants(loungeId);
       state.hostDisconnected = !hasHost(loungeId, joined.hostUserId);
       return { state };
+    }));
+
+    command('lounge.soundclash.submit', (payload) => authorizedLoungeAction(async ({ loungeId, user, lounge }) => {
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload) || Object.keys(payload).some((key) => key !== 'trackId')) throw Object.assign(new Error('Payload must contain only trackId'), { status: 400, code: 'VALIDATION_ERROR' });
+      if (!hasHost(loungeId, lounge.hostUserId)) throw Object.assign(new Error('Queue mutations are frozen while the Host is disconnected'), { status: 409, code: 'HOST_DISCONNECTED' });
+      return soundclashService.submit({ lounge, actor: user, trackId: payload.trackId });
+    }));
+
+    command('lounge.soundclash.open', (payload) => authorizedLoungeAction(async ({ loungeId, user, lounge }) => {
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload) || Object.keys(payload).length !== 0) throw Object.assign(new Error('Payload must be empty'), { status: 400, code: 'VALIDATION_ERROR' });
+      if (!hasHost(loungeId, lounge.hostUserId)) throw Object.assign(new Error('Queue mutations are frozen while the Host is disconnected'), { status: 409, code: 'HOST_DISCONNECTED' });
+      return soundclashService.open({ lounge, actor: user });
+    }));
+
+    command('lounge.soundclash.vote', (payload) => authorizedLoungeAction(async ({ user, lounge }) => {
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload) || Object.keys(payload).length !== 2 || !Object.hasOwn(payload, 'battleId') || !Object.hasOwn(payload, 'trackId')) throw Object.assign(new Error('Payload must contain battleId and trackId only'), { status: 400, code: 'VALIDATION_ERROR' });
+      return soundclashService.vote({ lounge, actor: user, battleId: payload.battleId, trackId: payload.trackId });
+    }));
+
+    command('lounge.soundclash.resolve', (payload) => authorizedLoungeAction(async ({ user, lounge }) => {
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload) || Object.keys(payload).length !== 2 || !Object.hasOwn(payload, 'battleId') || !Object.hasOwn(payload, 'winningTrackId')) throw Object.assign(new Error('Payload must contain battleId and winningTrackId only'), { status: 400, code: 'VALIDATION_ERROR' });
+      const hostPresent = hasHost(lounge.loungeId, lounge.hostUserId);
+      if (!hostPresent) throw Object.assign(new Error('Queue mutations are frozen while the Host is disconnected'), { status: 409, code: 'HOST_DISCONNECTED' });
+      return soundclashService.forceResolve({ lounge, actor: user, battleId: payload.battleId, winningTrackId: payload.winningTrackId });
     }));
 
     command('lounge.sync.ping', ({ clientSentAt }) => authorizedAction(async ({ loungeId }) => {
@@ -173,7 +201,7 @@ export function attachLoungeGateway(io, { repository = queueRepository, queueSer
       }
     });
   });
-  return { io, queueService, chatService, sentimentService };
+  return { io, queueService, chatService, sentimentService, soundclashService };
 }
 
 function queueRows(state) {

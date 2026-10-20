@@ -30,6 +30,9 @@ export const queueRepository = {
   async getTrack(trackId) {
     return Track.findOne({ trackId }).select('trackId title artist durationSeconds acoustic').lean();
   },
+  async getTrackMetadata(trackId) {
+    return Track.findOne({ trackId }).select('trackId title artist timeline').lean();
+  },
   getUser(userId) {
     return User.findById(userId).select('email displayName role').lean();
   },

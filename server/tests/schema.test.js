@@ -47,6 +47,12 @@ test('QueueEvent stores compact typed append-only commands with a per-Lounge seq
     actorUserId: 'not-an-id', payload: {},
   });
   expect(invalid.validateSync()).toBeDefined();
+  const tie = new QueueEvent({ loungeId: 'lg_123456789abc', seq: 2, type: 'soundclash.tied', actorUserId: null, payload: { battleId: 'battle', voteCounts: {} } });
+  const automaticWinner = new QueueEvent({ loungeId: 'lg_123456789abc', seq: 3, type: 'soundclash.resolved', actorUserId: null, payload: { battleId: 'battle', winningTrackId: 't_2001', autoResolved: true } });
+  const invalidManualWinner = new QueueEvent({ loungeId: 'lg_123456789abc', seq: 4, type: 'soundclash.resolved', actorUserId: null, payload: { battleId: 'battle', winningTrackId: 't_2001', autoResolved: false } });
+  expect(tie.validateSync()).toBeUndefined();
+  expect(automaticWinner.validateSync()).toBeUndefined();
+  expect(invalidManualWinner.validateSync().errors.actorUserId).toBeDefined();
 });
 
 test('ChatMessage validates sanitized bounded text, sentiment bucket, and message identity', () => {

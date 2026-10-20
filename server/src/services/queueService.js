@@ -33,6 +33,14 @@ export function createQueueService(repository, { voteBatchSize = 20, voteFlushMs
         else item.votes.set(String(event.actorUserId), event.payload.value);
       }
     }
+    if (event.type === 'soundclash.resolved') {
+      const winningTrackId = event.payload.winningTrackId;
+      const existingIndex = state.items.findIndex((item) => item.trackId === winningTrackId);
+      const winner = existingIndex >= 0 ? state.items.splice(existingIndex, 1)[0] : { trackId: winningTrackId, votes: new Map() };
+      const currentIndex = state.items.findIndex((item) => item.trackId === state.currentTrackId);
+      state.items.splice(Math.max(currentIndex, -1) + 1, 0, winner);
+      state.battlePriorityTrackId = winningTrackId;
+    }
     state.seq = Math.max(state.seq, event.seq);
   }
 
@@ -40,7 +48,7 @@ export function createQueueService(repository, { voteBatchSize = 20, voteFlushMs
     let state = states.get(lounge.loungeId);
     if (state) return state;
     const baseQueue = lounge.queue?.length ? lounge.queue : (lounge.currentTrackId ? [lounge.currentTrackId] : []);
-    state = { loungeId: lounge.loungeId, currentTrackId: lounge.currentTrackId ?? baseQueue[0] ?? null, items: baseQueue.map((trackId) => ({ trackId, votes: new Map() })), seq: 0, pendingEvents: [], flushTimer: null };
+    state = { loungeId: lounge.loungeId, currentTrackId: lounge.currentTrackId ?? baseQueue[0] ?? null, items: baseQueue.map((trackId) => ({ trackId, votes: new Map() })), battlePriorityTrackId: null, seq: 0, pendingEvents: [], flushTimer: null };
     const events = await repository.listQueueEvents(lounge.loungeId);
     for (const event of events) applyEvent(state, event);
     states.set(lounge.loungeId, state);
@@ -50,7 +58,7 @@ export function createQueueService(repository, { voteBatchSize = 20, voteFlushMs
   const publicState = async (lounge, state, presence = []) => {
     const ordered = state.items.map((item, index) => ({ trackId: item.trackId, votes: [...item.votes.values()].reduce((sum, value) => sum + value, 0), _index: index }))
       .filter((item) => item.trackId !== state.currentTrackId)
-      .sort((a, b) => b.votes - a.votes || a._index - b._index);
+      .sort((a, b) => (a.trackId === state.battlePriorityTrackId ? -1 : b.trackId === state.battlePriorityTrackId ? 1 : b.votes - a.votes || a._index - b._index));
     const ids = [state.currentTrackId, ...ordered.map((item) => item.trackId)].filter(Boolean);
     const tracks = await Promise.all(ids.map((id) => repository.getTrack(id)));
     const byId = new Map(tracks.filter(Boolean).map((track) => [track.trackId, track]));
@@ -112,6 +120,50 @@ export function createQueueService(repository, { voteBatchSize = 20, voteFlushMs
       return { lounge: joined, state: await publicState(joined, state) };
     },
     async snapshot(lounge) { return publicState(lounge, await getState(lounge)); },
+    async listEvents(loungeId) { return repository.listQueueEvents(loungeId); },
+    async recordLoungeEvent({ lounge, actor, type, payload, buffered = false }) {
+      return serialized(lounge.loungeId, async () => {
+        const state = await getState(lounge);
+        if (!buffered) await flushPending(state);
+        const event = {
+          loungeId: lounge.loungeId,
+          seq: state.seq + 1,
+          type,
+          actorUserId: actor?.id ?? null,
+          payload,
+          createdAt: new Date(),
+        };
+        if (buffered) {
+          state.pendingEvents.push(event);
+          applyEvent(state, event);
+          if (state.pendingEvents.length >= voteBatchSize) {
+            try { await flushPending(state); } catch { scheduleFlush(state); }
+          } else scheduleFlush(state);
+        } else {
+          await repository.appendQueueEvents([event]);
+          applyEvent(state, event);
+        }
+        return event;
+      });
+    },
+    async spliceNextUp({ lounge, actor, battleId, winningTrackId, autoResolved = false }) {
+      if (!await repository.getTrack(winningTrackId)) throw new ApiError(404, 'TRACK_NOT_FOUND', 'The Soundclash winner no longer exists');
+      return serialized(lounge.loungeId, async () => {
+        const state = await getState(lounge);
+        await flushPending(state);
+        const event = {
+          loungeId: lounge.loungeId,
+          seq: state.seq + 1,
+          type: 'soundclash.resolved',
+          actorUserId: actor?.id ?? null,
+          payload: { battleId, winningTrackId, autoResolved },
+          createdAt: new Date(),
+        };
+        await repository.appendQueueEvents([event]);
+        applyEvent(state, event);
+        return publicState(lounge, state);
+      });
+    },
     async addTrack({ lounge, actor, trackId }) {
       if (!['Host', 'Co-DJ'].includes(actor.role)) throw new ApiError(403, 'FORBIDDEN', 'Only a Host or Co-DJ can add tracks to the shared queue');
       if (!await repository.getTrack(trackId)) throw new ApiError(404, 'TRACK_NOT_FOUND', 'The track does not exist');

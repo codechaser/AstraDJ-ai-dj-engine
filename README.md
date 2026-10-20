@@ -41,6 +41,8 @@ The backend also exposes an authenticated, Lounge-member-only acoustic segue end
 
 Authenticated Lounge members can also use Socket.io `lounge.chat.message` and `lounge.chat.history`. Messages are sanitized, rate-limited, persisted in MongoDB batches, and broadcast with a deterministic rolling room-sentiment score. The keyword scorer is not ML and its accuracy has not been evaluated. See [the API reference](server/API.md) for event payloads and fallbacks.
 
+The real-time gateway also supports Listener track submissions and votes for a Host-opened Soundclash, server-timed resolution, tie resolution by Host or Co-DJ, and queue insertion at Next Up. Its PRD-defined `.open` and `.resolved` events retain their exact payloads. A deterministic metadata-grounded announcement is used; no AI provider is connected. See [the Soundclash contract](server/API.md#soundclash) for implementation choices where the PRD is silent.
+
 ## Current UI routes
 
 `/`, `/ai-dj`, `/now-playing`, `/search`, `/playlist`, `/queue`, `/artist`, `/profile`, `/album`, and `/settings`. Mobile layouts are responsive states of these routes.
