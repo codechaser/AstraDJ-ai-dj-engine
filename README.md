@@ -1,41 +1,46 @@
 # AstraDJ
 
-AstraDJ is a reference-led music experience prototype. Its current implementation is a React + Vite frontend with mock content.
+AstraDJ is a reference-led music experience. Its existing React + Vite frontend remains in the repository root. The new API is a separate JavaScript package under `server/`.
 
-## Project track and stack
+## Track and technology stack
 
-**Track A — Full-Stack (Option B / MERN)** is the selected project direction, per the internship alignment instructions.
+**Track A — Full-Stack (Option B / MERN)**, as specified by the internship PRD.
 
-Planned stack:
+- Client: React + Vite, JavaScript, Tailwind CSS, React Router
+- API: Node.js + Express.js
+- Database: MongoDB + Mongoose
+- Real-time gateway: Socket.io (planned next increment)
+- Authentication: JWT access token plus rotating refresh cookie
+- Tests: Jest + Supertest
 
-- React + Vite, JavaScript, Tailwind CSS, React Router
-- Node.js + Express.js
-- MongoDB + Mongoose
-- Socket.io + socket.io-client
-- JWT authentication
-- Jest + Supertest for backend tests
+The client still uses its existing mock music data. No Spotify infrastructure, accounts, catalog, or user data are used.
 
-Current state: only the frontend toolchain is implemented. The Express/MongoDB/Socket.io/authentication layers and backend tests are not present yet. Do not interpret this README stack declaration as evidence those features already work.
-
-## Current frontend setup
-
-Requirements: Node.js and npm.
+## Run the frontend
 
 ```sh
 npm install
 npm run dev
 ```
 
-Create a production bundle with `npm run build`.
+Build with `npm run build`.
 
-The UI uses mock music/artist/playlist data and remote Unsplash artwork / Google Fonts. It does not connect to Spotify or another music catalog.
+## Run the backend
 
-## Routes currently present
+See [backend setup and endpoint guide](server/README.md). In short, create `server/.env` from `server/.env.example`, set `MONGODB_URI` and a unique `JWT_ACCESS_SECRET` of at least 32 characters, then run:
 
-`/`, `/ai-dj`, `/now-playing`, `/search`, `/playlist`, `/queue`, `/artist`, `/profile`, `/album`, and `/settings`.
+```sh
+cd server
+npm install
+npm run seed
+npm run dev
+```
 
-Mobile layouts are responsive states of these routes, not separate routes.
+The frontend is not yet connected to the new API. Backend HTTP tests currently mock repository calls; direct live-MongoDB integration and deployment configuration are still to be verified.
 
-## Audit
+## Current UI routes
 
-See [PRD compliance matrix](docs/prd-compliance.md) for implementation evidence, gaps, and verification status. The 21-page PRD file was not present in the project or the supplied attachment; the audit uses the pasted alignment instructions as the available requirements summary. Confirm detailed page-specific API parameters against the source PRD before claiming exact contract compliance.
+`/`, `/ai-dj`, `/now-playing`, `/search`, `/playlist`, `/queue`, `/artist`, `/profile`, `/album`, and `/settings`. Mobile layouts are responsive states of these routes.
+
+## Requirements tracking
+
+See [the PRD compliance matrix](docs/prd-compliance.md) for implementation evidence, verification limits, and remaining requirements. The source PRD is stored at `docs/reference/Internship-PRD.docx`.
