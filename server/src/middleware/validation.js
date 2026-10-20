@@ -11,6 +11,17 @@ export const loginValidation = [
   body('password').isString().isLength({ min: 1, max: 128 }).withMessage('Password is required'),
 ];
 export const trackIdValidation = [param('trackId').matches(/^t_[A-Za-z0-9_-]{1,64}$/).withMessage('Invalid trackId')];
+export const segueValidation = [
+  param('id').matches(/^lg_[A-Za-z0-9_-]{8,64}$/).withMessage('Invalid Lounge ID'),
+  body('currentTrackId').isString().matches(/^t_[A-Za-z0-9_-]{1,64}$/).withMessage('currentTrackId is invalid'),
+  body('currentTs').isFloat({ min: 0 }).toFloat().withMessage('currentTs must be a non-negative number'),
+  body('candidateTrackIds').isArray({ max: 50 }).withMessage('candidateTrackIds must be an array of at most 50 IDs'),
+  body('candidateTrackIds.*').isString().matches(/^t_[A-Za-z0-9_-]{1,64}$/).withMessage('candidateTrackIds contains an invalid track ID'),
+  body('candidateTrackIds').custom((ids) => Array.isArray(ids) && new Set(ids).size === ids.length).withMessage('candidateTrackIds must not contain duplicates'),
+  body('currentSentimentScore').isFloat({ min: 0, max: 1 }).toFloat().withMessage('currentSentimentScore must be between 0 and 1'),
+  body('recentTrackIds').optional().isArray({ max: 50 }).withMessage('recentTrackIds must be an array of at most 50 IDs'),
+  body('recentTrackIds.*').optional().isString().matches(/^t_[A-Za-z0-9_-]{1,64}$/).withMessage('recentTrackIds contains an invalid track ID'),
+];
 export const catalogValidation = [
   query('q').optional().isString().trim().isLength({ min: 1, max: 80 }).withMessage('q must be 1 to 80 characters'),
   query('limit').optional().isInt({ min: 1, max: 100 }).toInt().withMessage('limit must be an integer from 1 to 100'),

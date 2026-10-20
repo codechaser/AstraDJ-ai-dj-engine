@@ -28,7 +28,7 @@ To create a Host for local development, first register an account, then use a pr
 
 Seed the fictional three-track catalog with `npm run seed`. The authored acoustic profiles form a valid segue chain. The values and lore are synthetic; no licensed or Spotify catalog data is included.
 
-Run the backend suite with `npm test`. Jest + Supertest verify HTTP contracts using repository fakes, Socket.io client/server tests exercise real local WebSocket sessions against an isolated fake repository, and direct Mongoose schema tests validate document constraints. These tests do not connect to MongoDB. Live MongoDB integration remains unverified in the current environment because `server/.env` is absent.
+Run the backend suite with `npm test`. Jest + Supertest verify most HTTP contracts using repository fakes, Socket.io client/server tests exercise real local WebSocket sessions against an isolated fake repository, and direct Mongoose schema tests validate document constraints. The opt-in `tests/segue.mongo.integration.test.js` uses `MONGODB_TEST_URI` to run the segue HTTP endpoint against a unique temporary MongoDB database, then drops that test database. Do not point it at production data. A local MongoDB is reachable in the current environment and this isolated integration test passed; the app's normal `server/.env` remains absent and the production seed has not been run.
 
 ## Endpoints in this increment
 
@@ -41,6 +41,7 @@ Run the backend suite with `npm test`. Jest + Supertest verify HTTP contracts us
 - `GET /api/v1/tracks/:trackId/acoustic-profile` — PRD-shaped track vector and metadata timeline.
 - `POST /api/v1/tracks` — Admin-only validated acoustic-profile management endpoint.
 - `POST /api/v1/lounges` — Host-only lounge creation using the PRD request and response contract.
+- `POST /api/v1/lounges/:id/ai/segue` — authenticated Lounge-member acoustic selection and grounded deterministic transition fallback.
 - `GET /health` and `GET /api/v1/health` — API and database state.
 
 ## Socket.io DJ Lounge queue
@@ -53,4 +54,4 @@ Validation errors use `{ "error": { "code", "message", "details" } }`; profile r
 
 ## Current limits
 
-Live join, shared queue add/vote ordering, presence, sync ping/pong, reconnect snapshots, Host-disconnect freeze, and append-only queue event recovery are implemented and tested with local socket clients. The frontend continues to show its existing mock data because no login/join flow is ready to authenticate against this API; UI files were not changed. Chat, Soundclash, sentiment aggregation, deterministic segue selection, grounded AI/RAG, recommendations, analytics, and the remaining moderation features are not implemented yet. Live MongoDB verification and 50-user load evidence are also pending. See `../docs/prd-compliance.md` for the audit.
+Live join, shared queue add/vote ordering, presence, sync ping/pong, reconnect snapshots, Host-disconnect freeze, append-only queue event recovery, deterministic acoustic matching, and the authenticated segue endpoint are implemented and tested. A live Mongo integration test uses and drops a unique temporary database; the app's normal `.env` configuration and production seed are still pending. The segue endpoint uses metadata-grounded fallback banter; no LLM provider is configured. The frontend continues to show its existing mock data because no login/join flow is ready to authenticate against this API; UI files were not changed. Chat, Soundclash, sentiment aggregation, conversational RAG, recommendations, analytics, and remaining moderation features are not implemented yet. 50-user load evidence is pending. See `../docs/prd-compliance.md` for the audit.

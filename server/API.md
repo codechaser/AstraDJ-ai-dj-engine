@@ -17,6 +17,50 @@ The base URL defaults to `http://localhost:4000`. REST endpoints are rooted at `
 | `GET /api/v1/tracks/:trackId/acoustic-profile` | Public | Acoustic vector and metadata timeline |
 | `POST /api/v1/tracks` | Admin | Add a validated acoustic profile |
 | `POST /api/v1/lounges` | Host | Create a Lounge and return its invite code |
+| `POST /api/v1/lounges/:id/ai/segue` | Authenticated Lounge member | Select an acoustically compatible segue and return a grounded transition |
+
+### AI DJ segue
+
+`POST /api/v1/lounges/:id/ai/segue` requires a Bearer access token and membership in the active Lounge. It verifies that the body `currentTrackId` is the Lounge's current track and that `currentTs` does not exceed its duration.
+
+Required request fields follow PRD §7.3.3; `recentTrackIds` is an optional addition because the current Lounge model has no playback-history field. The caller supplies most-recent-first track IDs when available:
+
+```json
+{
+  "currentTrackId": "t_2001",
+  "currentTs": 198,
+  "candidateTrackIds": ["t_2002", "t_2003", "t_2004"],
+  "currentSentimentScore": 0.72,
+  "recentTrackIds": ["t_2004", "t_2003"]
+}
+```
+
+The service rejects invalid acoustic profiles, excludes unknown/incompatible candidates, and returns the best eligible track. If none qualifies it returns HTTP 200 with `selectedTrackId: null`, empty `sourceEvents`, and `reason: "NO_COMPATIBLE_CANDIDATE"`; it never forces a clash into the queue. It does not mutate the shared queue.
+
+```json
+{
+  "selectedTrackId": "t_2002",
+  "matchReason": {
+    "bpmDeltaPct": 3.23,
+    "bpmRelation": "direct",
+    "camelotRelation": "adjacent",
+    "energyFit": 0.932,
+    "harmonicCloseness": 0.8,
+    "targetEnergy": 0.868,
+    "recencyScore": 1,
+    "score": 0.8796,
+    "selectionReason": "adjacent Camelot match; direct tempo at 3.23% delta; ..."
+  },
+  "transitionScript": "AstraDJ deterministic fallback: from … Track metadata: …",
+  "sourceEvents": ["t_2002#timeline[0]"],
+  "generatedAt": "2026-10-20T00:00:00.000Z",
+  "provider": "deterministic_fallback"
+}
+```
+
+Eligibility requires BPM within the Lounge's configured tolerance (maximum 8%) against direct, half-time, or double-time BPM, and Camelot same-key, same-letter adjacent number with 12↔1 wrap, or same-number opposite-letter relation. Harmonic closeness weights are same `1.0`, adjacent `0.8`, relative `0.6`. Energy target is `clamp(currentEnergy + (sentiment - 0.5) × 0.4)`; `energyFit = 1 - abs(candidateEnergy - targetEnergy)`. Recency is `0` when a candidate occurs in the first five supplied `recentTrackIds`, otherwise `1`. Total is `0.50 × harmonic + 0.30 × energy fit + 0.20 × recency`; input candidate order breaks exact score ties. These deterministic scoring details fill gaps the PRD leaves unspecified.
+
+`sourceEvents` uses stable pointers in the form `trackId#timeline[index]` into the Track metadata timeline. The current built-in provider is `deterministic_fallback`: it uses only the selected/current title, artist, and the selected track's first non-empty metadata timeline entry. No external LLM provider is configured or called. The segue service accepts a provider object through dependency injection for future provider integration.
 
 ## Socket.io connection and event contract
 
@@ -80,4 +124,4 @@ cd server
 npm test
 ```
 
-The Socket.io integration suite creates an actual local Socket.io server and clients, but injects an in-memory repository. It is not a live MongoDB integration test. Configure `server/.env`, run `npm run seed`, start the API, and exercise the REST and socket contracts above to verify a configured MongoDB deployment. The current environment has no `server/.env`, so no live database check or seed was run.
+The Socket.io suite creates an actual local Socket.io server and clients but injects an in-memory repository. The optional `tests/segue.mongo.integration.test.js` suite uses `MONGODB_TEST_URI`, creates a unique `astradj_segues_test_*` database, runs the authenticated API against real Mongoose models, and drops only that test database in cleanup. Do not point it at production data. For a local MongoDB without credentials, set `MONGODB_TEST_URI=mongodb://127.0.0.1:27017` in the shell before running the full suite. The current `server/.env` is absent, so the API's normal runtime connection and production seed have not been configured or run.

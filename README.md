@@ -35,7 +35,9 @@ npm run seed
 npm run dev
 ```
 
-The frontend is not yet connected to the new API. Backend HTTP and Socket.io tests use repository fakes; direct live-MongoDB integration and deployment configuration are still to be verified.
+The frontend is not yet connected to the new API. Most backend HTTP and Socket.io tests use repository fakes. An opt-in segue integration test uses a unique temporary MongoDB database; the normal `server/.env` runtime configuration and deployment are still to be verified.
+
+The backend also exposes an authenticated, Lounge-member-only acoustic segue endpoint at `POST /api/v1/lounges/:id/ai/segue`. It applies BPM/Camelot rules, ranks eligible tracks, and uses a metadata-grounded deterministic fallback until an AI provider is configured. See [the API reference](server/API.md).
 
 ## Current UI routes
 
