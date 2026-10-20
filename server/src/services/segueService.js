@@ -3,10 +3,11 @@ import { Track } from '../models/Track.js';
 import { ApiError } from '../utils/ApiError.js';
 import { acousticProfileErrors, rankSegueCandidates } from './acousticMatcher.js';
 import { deterministicTransitionProvider } from './transitionProvider.js';
+import { roomSentimentService } from './roomSentimentService.js';
 
 const trackFields = 'trackId title artist durationSeconds acoustic timeline';
 
-export function createSegueService({ loungeModel = DJLounge, trackModel = Track, transitionProvider = deterministicTransitionProvider } = {}) {
+export function createSegueService({ loungeModel = DJLounge, trackModel = Track, transitionProvider = deterministicTransitionProvider, sentimentService = roomSentimentService } = {}) {
   return {
     async requestSegue({ loungeId, userId, input }) {
       const lounge = await loungeModel.findOne({ loungeId, status: { $ne: 'ended' } }).lean();
@@ -29,8 +30,12 @@ export function createSegueService({ loungeModel = DJLounge, trackModel = Track,
         : [];
       const byId = new Map(candidateDocuments.map((track) => [track.trackId, track]));
       const orderedCandidates = uniqueCandidateIds.map((trackId) => byId.get(trackId)).filter(Boolean);
+      const roomSentiment = sentimentService.snapshot(loungeId);
+      // A minimum of three recent messages avoids overreacting to one short message.
+      // Until then use a neutral baseline (0.5), which preserves current track energy.
+      const effectiveSentimentScore = roomSentiment.sampleSize >= 3 ? roomSentiment.rollingScore : 0.5;
       const ranked = rankSegueCandidates(currentTrack, orderedCandidates, {
-        currentSentimentScore: input.currentSentimentScore,
+        currentSentimentScore: effectiveSentimentScore,
         recentTrackIds: input.recentTrackIds ?? [],
         recentWindow: 5,
         bpmTolerancePct: lounge.settings?.bpmTolerancePct ?? 8,
@@ -54,7 +59,7 @@ export function createSegueService({ loungeModel = DJLounge, trackModel = Track,
         selectedTrack: selected.track,
         matchReason: selected.match,
         currentTs: input.currentTs,
-        currentSentimentScore: input.currentSentimentScore,
+        currentSentimentScore: effectiveSentimentScore,
       });
       return {
         selectedTrackId: selected.track.trackId,

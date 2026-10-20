@@ -5,17 +5,22 @@ import { Server } from 'socket.io';
 import { io as createClient } from 'socket.io-client';
 import { attachLoungeGateway } from '../src/socket/loungeGateway.js';
 import { createQueueService } from '../src/services/queueService.js';
+import { createRoomSentimentService } from '../src/services/roomSentimentService.js';
 
 const secret = 'test-secret-astradj-only-32-characters';
 const uidHost = '507f1f77bcf86cd799439011';
 const uidListener = '507f1f77bcf86cd799439012';
 const uidListener2 = '507f1f77bcf86cd799439013';
 const uidListener3 = '507f1f77bcf86cd799439014';
+const uidCoDj = '507f1f77bcf86cd799439015';
+const uidAdmin = '507f1f77bcf86cd799439016';
 const users = new Map([
   [uidHost, { _id: uidHost, displayName: 'Host', role: 'Host' }],
   [uidListener, { _id: uidListener, displayName: 'Listener', role: 'Listener' }],
   [uidListener2, { _id: uidListener2, displayName: 'Guest Two', role: 'Listener' }],
   [uidListener3, { _id: uidListener3, displayName: 'Guest Three', role: 'Listener' }],
+  [uidCoDj, { _id: uidCoDj, displayName: 'Co DJ', role: 'Co-DJ' }],
+  [uidAdmin, { _id: uidAdmin, displayName: 'Admin', role: 'Admin' }],
 ]);
 const trackData = new Map([
   ['t_2001', { trackId: 't_2001', title: 'Night Drive', artist: 'Nova Circuit', durationSeconds: 220 }],
@@ -46,6 +51,8 @@ function makeRepository() {
     async appendQueueEvents(batch) { events.push(...structuredClone(batch)); },
     async getTrack(trackId) { return trackData.get(trackId) ?? null; },
     async getUser(id) { return users.get(String(id)) ?? null; },
+    async appendChatMessages(batch) { this.chatMessages ??= []; this.chatMessages.push(...structuredClone(batch)); },
+    async listRecentChatMessages(loungeId, limit) { return (this.chatMessages ?? []).filter((message) => message.loungeId === loungeId).slice(-limit); },
   };
 }
 
@@ -87,19 +94,23 @@ let ioServer;
 let port;
 let repository;
 let queueService;
+let chatService;
+let sentimentService;
 let sockets;
 
 beforeEach(async () => {
   repository = makeRepository();
   queueService = createQueueService(repository, { voteFlushMs: 30_000 });
+  sentimentService = createRoomSentimentService();
   server = createServer();
   ioServer = new Server(server, { transports: ['websocket'] });
-  attachLoungeGateway(ioServer, { repository, queueService, secret });
+  ({ chatService } = attachLoungeGateway(ioServer, { repository, queueService, secret, sentimentService }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   port = server.address().port;
   sockets = [];
 });
 afterEach(async () => {
+  await chatService.flushAll();
   for (const socket of sockets) socket.disconnect();
   await new Promise((resolve) => ioServer.close(resolve));
 });
@@ -244,4 +255,64 @@ test('sync ping returns the PRD pong envelope and capacity is enforced', async (
   const ping = await command(host, 'lounge.sync.ping', { clientSentAt: Date.now() });
   expect(ping.ok).toBe(true);
   expect(await received).toMatchObject({ event: 'lounge.sync.pong', payload: { clientSentAt: expect.any(Number), serverReceivedAt: expect.any(Number) } });
+});
+
+test('authenticated Lounge members send chat and receive exact PRD event envelopes', async () => {
+  const host = client(uidHost); const listener = client(uidListener);
+  await join(host); await join(listener);
+  const msgEvent = waitFor(host, 'lounge.chat.message');
+  const sentimentEvent = waitFor(host, 'lounge.sentiment.score');
+  const ack = await command(listener, 'lounge.chat.message', { body: 'This set is amazing!' });
+  const message = await msgEvent;
+  const sentiment = await sentimentEvent;
+  expect(ack).toMatchObject({ ok: true, message: { userId: uidListener, body: 'This set is amazing!', sentimentBucket: 'positive' } });
+  expect(message).toMatchObject({ event: 'lounge.chat.message', loungeId: 'lg_123456789abc', payload: { messageId: expect.any(String), userId: uidListener, body: 'This set is amazing!', sentimentBucket: 'positive', tsSeconds: expect.any(Number) }, ts: expect.any(Number) });
+  expect(Object.keys(message.payload).sort()).toEqual(['body', 'messageId', 'sentimentBucket', 'tsSeconds', 'userId']);
+  expect(sentiment).toMatchObject({ event: 'lounge.sentiment.score', loungeId: 'lg_123456789abc', payload: { rollingScore: 1, windowSeconds: 300, sampleSize: 1 }, ts: expect.any(Number) });
+});
+
+test('chat requires membership and rejects malformed, empty, overlong, and rate-limited messages', async () => {
+  const outsider = client(uidListener); await connected(outsider);
+  expect((await command(outsider, 'lounge.chat.message', { body: 'hello' })).error.code).toBe('LOUNGE_MEMBERSHIP_REQUIRED');
+  const host = client(uidHost); const member = client(uidListener);
+  await join(host); await join(member);
+  for (const payload of [{ body: '' }, { body: 4 }, { body: 'x'.repeat(501) }, { body: '<b></b>' }, { body: 'hello', userId: uidHost }]) {
+    expect((await command(member, 'lounge.chat.message', payload)).error.code).toBe('VALIDATION_ERROR');
+  }
+  for (let i = 0; i < 5; i++) expect((await command(member, 'lounge.chat.message', { body: `hello ${i}` })).ok).toBe(true);
+  expect((await command(member, 'lounge.chat.message', { body: 'sixth' })).error.code).toBe('CHAT_RATE_LIMITED');
+});
+
+test('sanitizes HTML-like markup before storing and broadcasting user text', async () => {
+  const host = client(uidHost); const member = client(uidListener);
+  await join(host); await join(member);
+  const result = await command(member, 'lounge.chat.message', { body: '<script>alert</script> good music' });
+  expect(result.message.body).toBe('alert good music');
+  expect(result.message.body).not.toContain('<');
+});
+
+test('chat broadcasts stay isolated to the joined Lounge and history is membership protected', async () => {
+  repository.lounges.set('lg_223456789abc', { loungeId: 'lg_223456789abc', inviteCode: 'SP-8X2L', hostUserId: uidHost, participantIds: [uidHost], queue: ['t_2001'], currentTrackId: 't_2001', status: 'live', settings: { maxParticipants: 3 } });
+  const host = client(uidHost); const member = client(uidListener); const secondHost = client(uidHost);
+  await join(host); await join(member);
+  await command(secondHost, 'lounge.join', { inviteCode: 'SP-8X2L' });
+  const otherRoomMessage = new Promise((resolve) => secondHost.once('lounge.chat.message', resolve));
+  const result = await command(member, 'lounge.chat.message', { body: 'good vibes' });
+  expect(result.ok).toBe(true);
+  await expect(Promise.race([otherRoomMessage, new Promise((resolve) => setTimeout(() => resolve('timeout'), 60))])).resolves.toBe('timeout');
+  const history = await command(member, 'lounge.chat.history', { limit: 10 });
+  expect(history.messages).toHaveLength(1);
+  expect(history.messages[0]).toMatchObject({ body: 'good vibes', userId: uidListener, sentimentBucket: 'positive' });
+  const noMembership = client(uidListener2); await connected(noMembership);
+  expect((await command(noMembership, 'lounge.chat.history', {})).error.code).toBe('LOUNGE_MEMBERSHIP_REQUIRED');
+});
+
+test('all four authorized roles may chat as joined users and concurrent posts retain every score', async () => {
+  repository.lounges.get('lg_123456789abc').settings.maxParticipants = 5;
+  const host = client(uidHost); const listener = client(uidListener); const coDj = client(uidCoDj); const admin = client(uidAdmin);
+  await Promise.all([join(host), join(listener), join(coDj), join(admin)]);
+  const socketsToChat = [[host, 'mid tempo session'], [listener, 'love it'], [coDj, 'good groove'], [admin, 'this is awful']];
+  const results = await Promise.all(socketsToChat.map(([socket, body]) => command(socket, 'lounge.chat.message', { body })));
+  expect(results.every((result) => result.ok)).toBe(true);
+  expect(sentimentService.snapshot('lg_123456789abc')).toMatchObject({ sampleSize: 4, rollingScore: 0.625 });
 });

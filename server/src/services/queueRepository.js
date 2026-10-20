@@ -1,5 +1,6 @@
 import { DJLounge } from '../models/DJLounge.js';
 import { QueueEvent } from '../models/QueueEvent.js';
+import { ChatMessage } from '../models/ChatMessage.js';
 import { Track } from '../models/Track.js';
 import { User } from '../models/User.js';
 
@@ -31,5 +32,13 @@ export const queueRepository = {
   },
   getUser(userId) {
     return User.findById(userId).select('email displayName role').lean();
+  },
+  appendChatMessages(messages) {
+    return ChatMessage.bulkWrite(messages.map((message) => ({
+      updateOne: { filter: { messageId: message.messageId }, update: { $setOnInsert: message }, upsert: true },
+    })), { ordered: true });
+  },
+  listRecentChatMessages(loungeId, limit = 50) {
+    return ChatMessage.find({ loungeId }).sort({ createdAt: -1, messageId: -1 }).limit(limit).lean().then((messages) => messages.reverse());
   },
 };

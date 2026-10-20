@@ -2,13 +2,15 @@ import jwt from 'jsonwebtoken';
 import { config } from '../config/env.js';
 import { queueRepository } from '../services/queueRepository.js';
 import { createQueueService } from '../services/queueService.js';
+import { createChatService } from '../services/chatService.js';
+import { roomSentimentService } from '../services/roomSentimentService.js';
 
 const ROOM_PREFIX = 'lounge:';
 const room = (loungeId) => `${ROOM_PREFIX}${loungeId}`;
 const envelope = (event, loungeId, payload) => ({ event, loungeId, payload, ts: Date.now() });
 const ackError = (error) => ({ ok: false, error: { code: error.code ?? 'INTERNAL_ERROR', message: error.status && error.status < 500 ? error.message : 'The request could not be completed' } });
 
-export function attachLoungeGateway(io, { repository = queueRepository, queueService = createQueueService(repository), secret = config.jwtAccessSecret } = {}) {
+export function attachLoungeGateway(io, { repository = queueRepository, queueService = createQueueService(repository), secret = config.jwtAccessSecret, sentimentService = roomSentimentService, chatService = createChatService({ repository, sentimentService }) } = {}) {
   const loungeBySocket = new Map();
   const socketsByLounge = new Map();
   const joiningUsers = new Map();
@@ -41,6 +43,16 @@ export function attachLoungeGateway(io, { repository = queueRepository, queueSer
       const user = await repository.getUser(socket.data.userId);
       if (!user) throw Object.assign(new Error('The account is no longer available'), { status: 401, code: 'AUTH_REQUIRED' });
       return callback({ loungeId, user: { id: socket.data.userId, role: user.role, displayName: user.displayName } });
+    }
+    async function authorizedLoungeAction(callback) {
+      return authorizedAction(async ({ loungeId, user }) => {
+        const lounge = await repository.findLoungeById(loungeId);
+        if (!lounge || lounge.status === 'ended') throw Object.assign(new Error('Lounge no longer exists'), { status: 404, code: 'LOUNGE_NOT_FOUND' });
+        if (!lounge.participantIds?.some((participantId) => String(participantId) === String(user.id))) {
+          throw Object.assign(new Error('Join this Lounge before using chat'), { status: 403, code: 'LOUNGE_MEMBERSHIP_REQUIRED' });
+        }
+        return callback({ loungeId, user, lounge });
+      });
     }
     function command(event, handler) {
       socket.on(event, async (payload = {}, ack = () => {}) => {
@@ -126,6 +138,26 @@ export function attachLoungeGateway(io, { repository = queueRepository, queueSer
       return { pong: payload };
     }));
 
+    command('lounge.chat.message', (payload) => authorizedLoungeAction(async ({ loungeId, user }) => {
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload) || Object.keys(payload).some((key) => key !== 'body')) {
+        throw Object.assign(new Error('Payload must contain only body'), { status: 400, code: 'VALIDATION_ERROR' });
+      }
+      const { message, sentiment } = await chatService.send({ loungeId, user, body: payload.body });
+      const messagePayload = { messageId: message.messageId, userId: message.userId, body: message.body, sentimentBucket: message.sentimentBucket, tsSeconds: message.tsSeconds };
+      io.to(room(loungeId)).emit('lounge.chat.message', envelope('lounge.chat.message', loungeId, messagePayload));
+      io.to(room(loungeId)).emit('lounge.sentiment.score', envelope('lounge.sentiment.score', loungeId, sentiment));
+      return { message: messagePayload, sentiment };
+    }));
+
+    command('lounge.chat.history', (payload) => authorizedLoungeAction(async ({ loungeId }) => {
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload) || Object.keys(payload).some((key) => key !== 'limit')) {
+        throw Object.assign(new Error('Payload may contain only limit'), { status: 400, code: 'VALIDATION_ERROR' });
+      }
+      const limit = payload.limit ?? 50;
+      if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw Object.assign(new Error('limit must be an integer between 1 and 100'), { status: 400, code: 'VALIDATION_ERROR' });
+      return { messages: await chatService.history(loungeId, limit) };
+    }));
+
     socket.on('disconnect', async () => {
       const loungeId = loungeBySocket.get(socket.id);
       if (!loungeId) return;
@@ -141,7 +173,7 @@ export function attachLoungeGateway(io, { repository = queueRepository, queueSer
       }
     });
   });
-  return { io, queueService };
+  return { io, queueService, chatService, sentimentService };
 }
 
 function queueRows(state) {

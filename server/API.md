@@ -96,6 +96,8 @@ Each command takes a payload and a Socket.io acknowledgement callback. Success h
 | `lounge.queue.vote` | `{ "trackId": "t_2002", "value": 1 }` | Any joined participant may vote on a queued track. Values are `1`, `-1`, or `0` (remove the participant's vote). Order is computed server-side by vote total, with stable insertion order for ties. Ack includes authoritative state. |
 | `lounge.sync.request` | `{}` | Joined participant only; ack includes a fresh complete state snapshot. Use after reconnect/resume. |
 | `lounge.sync.ping` | `{ "clientSentAt": 1792490000000 }` | Joined participant only; ack includes the pong values and the sender receives `lounge.sync.pong`. |
+| `lounge.chat.message` | `{ "body": "This set is amazing!" }` | Authenticated Lounge member only. Server sanitizes text, assigns its own sentiment bucket, and acks with the accepted message and current sentiment snapshot. |
+| `lounge.chat.history` | `{ "limit": 50 }` (limit optional) | Authenticated Lounge member only; returns the latest 1–100 persisted plus pending messages in chronological order. |
 
 Queue mutation commands are frozen for everyone when the Host has no connected socket in the Lounge. Reconnecting the Host clears that state. A vote that does not change a participant's existing vote returns current state without writing another event.
 
@@ -106,12 +108,24 @@ Queue mutation commands are frozen for everyone when the Host has no connected s
 | `lounge.queue.update` | `{ "queue": [{ "trackId": "t_2001", "position": 0 }], "reason": "add" }` | Broadcast to all Lounge sockets after a persisted queue command. Position `0` is Now Playing; following positions are Next Up. PRD reasons `vote`, `segue`, and `battle` remain reserved for those operations; this increment also uses `add` for explicit Host/Co-DJ queue additions. |
 | `lounge.presence.update` | `{ "participantId": "<user id>", "action": "joined", "participantCount": 2, "hostDisconnected": false }` | Broadcast when a participant's first socket joins or last socket leaves. `participantCount` counts users, not tabs. |
 | `lounge.sync.pong` | `{ "clientSentAt": 1792490000000, "serverReceivedAt": 1792490000001 }` | Returned to the requesting socket for latency measurement. |
+| `lounge.chat.message` | `{ "messageId": "<uuid>", "userId": "<user id>", "body": "This set is amazing!", "sentimentBucket": "positive", "tsSeconds": 1792490000 }` | Emitted only to sockets in the authorized Lounge room after acceptance. `userId` and sentiment are server-derived; client-supplied identity or bucket fields are rejected. `tsSeconds` is server Unix time. |
+| `lounge.sentiment.score` | `{ "rollingScore": 1, "windowSeconds": 300, "sampleSize": 1 }` | Emitted to the same Lounge after each accepted message. Score is 0–1, with 0.5 neutral; sample size counts messages in the rolling window. |
 
 `lounge.sync.ping` is accepted as a client command and its matching pong is emitted to that client. Queue update broadcasts currently include ordered track IDs; clients can resolve titles/artwork through the catalog endpoints.
 
+### Lounge chat and sentiment
+
+Chat accepts only `{ body }`. The server NFKC-normalizes text, removes control characters and HTML-like tags, trims whitespace, and accepts 1–500 Unicode code points after sanitization. Each user is limited to five accepted messages per Lounge per rolling 10 seconds. Authentication, joined socket state, persisted `participantIds` membership, and current user role are checked server-side on every command. History reads use the same authorization and cannot select a Lounge ID from the client.
+
+Messages are buffered per Lounge and persisted as `ChatMessage` documents in batches of 20 or after one second. Mongo writes use message-ID upserts so a retry does not duplicate a message; graceful shutdown flushes pending chat batches. `lounge.chat.history` returns at most 100 recent messages, including messages in the write buffer, for reconnect/context restoration. Stored records include `msgType: "chat"`, the bucket, and its 0–1 numeric score.
+
+The PRD does not specify a classifier, score scale/formula, or aggregation duration. This implementation uses a deliberately small deterministic English keyword lexicon (not ML): buckets are `positive`, `neutral`, or `negative`; bucket values map to 1, 0.5, and 0 respectively; room score is their arithmetic mean over the previous 300 seconds. This behavior is testable but sentiment accuracy is **not evaluated** and the PRD's 85% KPI is not claimed. Empty windows report neutral `0.5` with `sampleSize: 0`. The segue service trusts room sentiment only after at least three recent messages; with fewer messages it supplies neutral `0.5` to the unchanged acoustic matcher, preserving the current track's energy target. The existing `currentSentimentScore` request field remains required for request compatibility but is not authoritative.
+
+Chat buffers, sentiment windows, and rate-limit state are process-local. A single API process is supported; multi-replica synchronization and distributed rate limiting are not implemented. Typing indicators and emoji reactions named in the broader PRD remain unimplemented because their event payload contracts are unspecified.
+
 ### Error codes
 
-`VALIDATION_ERROR` indicates malformed invite, track, vote, or timestamp input; `LOUNGE_NOT_FOUND` indicates an invalid/ended invite or missing room; `LOUNGE_FULL` indicates participant capacity; `LOUNGE_MEMBERSHIP_REQUIRED` indicates a protected command before join; `FORBIDDEN` indicates an insufficient role; `TRACK_NOT_FOUND` or `TRACK_NOT_QUEUED` indicates an invalid target; `TRACK_ALREADY_QUEUED` indicates a duplicate add; `HOST_DISCONNECTED` indicates frozen mutations; `AUTH_REQUIRED` and `INVALID_TOKEN` indicate failed authentication.
+`VALIDATION_ERROR` indicates malformed invite, track, vote, timestamp, or chat input; `CHAT_RATE_LIMITED` indicates more than five chat messages in ten seconds; `LOUNGE_NOT_FOUND` indicates an invalid/ended invite or missing room; `LOUNGE_FULL` indicates participant capacity; `LOUNGE_MEMBERSHIP_REQUIRED` indicates a protected command before join; `FORBIDDEN` indicates an insufficient role; `TRACK_NOT_FOUND` or `TRACK_NOT_QUEUED` indicates an invalid target; `TRACK_ALREADY_QUEUED` indicates a duplicate add; `HOST_DISCONNECTED` indicates frozen mutations; `AUTH_REQUIRED` and `INVALID_TOKEN` indicate failed authentication.
 
 ## Persistence and recovery
 
@@ -124,4 +138,4 @@ cd server
 npm test
 ```
 
-The Socket.io suite creates an actual local Socket.io server and clients but injects an in-memory repository. The optional `tests/segue.mongo.integration.test.js` suite uses `MONGODB_TEST_URI`, creates a unique `astradj_segues_test_*` database, runs the authenticated API against real Mongoose models, and drops only that test database in cleanup. Do not point it at production data. For a local MongoDB without credentials, set `MONGODB_TEST_URI=mongodb://127.0.0.1:27017` in the shell before running the full suite. The current `server/.env` is absent, so the API's normal runtime connection and production seed have not been configured or run.
+The Socket.io suite creates an actual local Socket.io server and clients but injects an in-memory repository. Optional `tests/segue.mongo.integration.test.js` and `tests/chat.mongo.integration.test.js` suites use `MONGODB_TEST_URI`, create unique temporary databases, exercise real Mongoose persistence, and drop only those test databases in cleanup. Do not point them at production data. For a local MongoDB without credentials, set `MONGODB_TEST_URI=mongodb://127.0.0.1:27017` in the shell before running the full suite. The current `server/.env` is absent, so the API's normal runtime connection and production seed have not been configured or run.

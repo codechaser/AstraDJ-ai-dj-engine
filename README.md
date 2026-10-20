@@ -39,6 +39,8 @@ The frontend is not yet connected to the new API. Most backend HTTP and Socket.i
 
 The backend also exposes an authenticated, Lounge-member-only acoustic segue endpoint at `POST /api/v1/lounges/:id/ai/segue`. It applies BPM/Camelot rules, ranks eligible tracks, and uses a metadata-grounded deterministic fallback until an AI provider is configured. See [the API reference](server/API.md).
 
+Authenticated Lounge members can also use Socket.io `lounge.chat.message` and `lounge.chat.history`. Messages are sanitized, rate-limited, persisted in MongoDB batches, and broadcast with a deterministic rolling room-sentiment score. The keyword scorer is not ML and its accuracy has not been evaluated. See [the API reference](server/API.md) for event payloads and fallbacks.
+
 ## Current UI routes
 
 `/`, `/ai-dj`, `/now-playing`, `/search`, `/playlist`, `/queue`, `/artist`, `/profile`, `/album`, and `/settings`. Mobile layouts are responsive states of these routes.

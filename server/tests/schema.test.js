@@ -2,6 +2,7 @@ import { User } from '../src/models/User.js';
 import { Track, CAMELOT_KEYS } from '../src/models/Track.js';
 import { DJLounge } from '../src/models/DJLounge.js';
 import { QueueEvent } from '../src/models/QueueEvent.js';
+import { ChatMessage } from '../src/models/ChatMessage.js';
 
 test('User schema restricts accounts to the four defined roles', () => {
   const user = new User({ email: 'a@example.com', displayName: 'A', passwordHash: 'hash', role: 'Superuser' });
@@ -46,4 +47,14 @@ test('QueueEvent stores compact typed append-only commands with a per-Lounge seq
     actorUserId: 'not-an-id', payload: {},
   });
   expect(invalid.validateSync()).toBeDefined();
+});
+
+test('ChatMessage validates sanitized bounded text, sentiment bucket, and message identity', () => {
+  const valid = new ChatMessage({
+    messageId: 'e54eb334-2b10-4dc1-9e9d-9ccf01713452', loungeId: 'lg_123456789abc',
+    userId: '507f1f77bcf86cd799439011', msgType: 'chat', body: 'Good set', sentimentBucket: 'positive', sentimentScore: 1, tsSeconds: 100,
+  });
+  expect(valid.validateSync()).toBeUndefined();
+  valid.sentimentBucket = 'very positive';
+  expect(valid.validateSync().errors.sentimentBucket).toBeDefined();
 });

@@ -33,6 +33,7 @@ await jest.unstable_mockModule('../src/models/DJLounge.js', () => ({ DJLounge })
 
 const { app } = await import('../src/app.js');
 const { createSegueService } = await import('../src/services/segueService.js');
+const { createRoomSentimentService } = await import('../src/services/roomSentimentService.js');
 
 const loungeId = 'lg_123456789abc';
 const memberId = '507f1f77bcf86cd799439011';
@@ -52,13 +53,13 @@ const incompatibleTrack = {
   acoustic: { bpm: 90, camelotKey: '9B', energy: 0.1, valence: 0.1 }, timeline: [],
 };
 
-function makeService({ provider } = {}) {
+function makeService({ provider, sentimentService = createRoomSentimentService() } = {}) {
   const loungeModel = { findOne: jest.fn(({ loungeId: requestedId }) => new Query(lounges.get(requestedId) ?? null)) };
   const trackModel = {
     findOne: jest.fn(({ trackId }) => new Query(tracks.get(trackId) ?? null)),
     find: jest.fn(({ trackId }) => new Query((trackId?.$in ?? []).map((id) => tracks.get(id)).filter(Boolean))),
   };
-  return createSegueService({ loungeModel, trackModel, ...(provider ? { transitionProvider: provider } : {}) });
+  return createSegueService({ loungeModel, trackModel, sentimentService, ...(provider ? { transitionProvider: provider } : {}) });
 }
 function input(overrides = {}) {
   return { currentTrackId: 't_2001', currentTs: 198, candidateTrackIds: ['t_2002', 't_2003'], currentSentimentScore: 0.72, ...overrides };
@@ -117,6 +118,18 @@ test('uses an injected transition provider without changing the matching decisio
   expect(provider.generate).toHaveBeenCalledWith(expect.objectContaining({ currentTrack: expect.objectContaining({ trackId: 't_2001' }), selectedTrack: expect.objectContaining({ trackId: 't_2002' }) }));
   expect(result.selectedTrackId).toBe('t_2002');
   expect(result.provider).toBe('test-provider');
+});
+
+test('uses reliable rolling Lounge sentiment for matcher energy fit and neutral fallback for sparse data', async () => {
+  const sentimentService = createRoomSentimentService();
+  const service = makeService({ sentimentService });
+  const before = await service.requestSegue({ loungeId, userId: memberId, input: input({ currentSentimentScore: 1 }) });
+  expect(before.matchReason.targetEnergy).toBe(0.78);
+  sentimentService.record(loungeId, { sentimentBucket: 'positive' });
+  sentimentService.record(loungeId, { sentimentBucket: 'positive' });
+  sentimentService.record(loungeId, { sentimentBucket: 'positive' });
+  const after = await service.requestSegue({ loungeId, userId: memberId, input: input({ currentSentimentScore: 0 }) });
+  expect(after.matchReason.targetEnergy).toBe(0.98);
 });
 
 test('HTTP endpoint requires authentication, Lounge membership, and a valid payload', async () => {
