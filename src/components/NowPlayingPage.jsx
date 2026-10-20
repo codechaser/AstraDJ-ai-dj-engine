@@ -7,7 +7,8 @@ const timeLabel = (seconds = 0) => `${Math.floor(seconds / 60)}:${String(Math.fl
 
 export default function NowPlayingPage({ track, playing, onToggle, liked, setLiked, currentTime, duration, audioStatus }) {
   const hasAudio = Boolean(track?.audioAssetUrl);
-  const audioMessage = audioStatus === 'duration_mismatch' ? 'Audio duration does not match the catalog metadata; history was not recorded.'
+  const audioMessage = audioStatus === 'loading' ? 'Loading audio asset…'
+    : audioStatus === 'duration_mismatch' ? 'Audio duration does not match the catalog metadata; history was not recorded.'
     : audioStatus === 'history_error' ? 'Playback ended, but the listening report could not be saved.'
       : audioStatus === 'error' ? 'This audio asset could not be loaded.'
         : !hasAudio ? 'Audio unavailable — this catalog entry includes metadata only.' : '';

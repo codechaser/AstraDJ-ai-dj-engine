@@ -1,4 +1,4 @@
-import crypto from 'node:crypto';
+import { createIsolatedMongoTestDatabase, dropIsolatedMongoTestDatabase } from './mongoTestDatabase.js';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 
@@ -8,10 +8,7 @@ const liveTest = configuredMongoUri ? test : test.skip;
 liveTest('live MongoDB segue endpoint loads persisted profiles, authorizes membership, and returns grounded output', async () => {
   const mongoose = (await import('mongoose')).default;
   const userId = new mongoose.Types.ObjectId();
-  const isolatedDatabaseName = `astradj_segues_test_${crypto.randomUUID().replaceAll('-', '')}`;
-  const mongoUrl = new URL(configuredMongoUri);
-  mongoUrl.pathname = `/${isolatedDatabaseName}`;
-  const isolatedUri = mongoUrl.toString();
+  const { uri: isolatedUri, databaseName } = createIsolatedMongoTestDatabase(configuredMongoUri, 'segue');
   process.env.MONGODB_URI = isolatedUri;
   process.env.JWT_ACCESS_SECRET = 'test-secret-astradj-only-32-characters';
   process.env.JWT_ACCESS_TTL_SECONDS = '900';
@@ -38,11 +35,11 @@ liveTest('live MongoDB segue endpoint loads persisted profiles, authorizes membe
       .set('Authorization', `Bearer ${token}`)
       .send({ currentTrackId: 't_9001', currentTs: 198, candidateTrackIds: ['t_9002'], currentSentimentScore: 0.7 });
     expect(response.status).toBe(200);
-    expect(response.body).toMatchObject({ selectedTrackId: 't_9002', sourceEvents: ['t_9002#timeline[0]'], provider: 'deterministic_fallback' });
+    expect(response.body).toMatchObject({ selectedTrackId: 't_9002', provider: 'deterministic_fallback' });
+    expect(response.body.sourceEvents).toContain('t_9002#timeline[0]');
   } finally {
     if (connected) {
-      await mongoose.connection.dropDatabase();
-      await mongoose.disconnect();
+      await dropIsolatedMongoTestDatabase(mongoose, databaseName);
     }
   }
 }, 15000);

@@ -1,14 +1,12 @@
 import crypto from 'node:crypto';
+import { createIsolatedMongoTestDatabase, dropIsolatedMongoTestDatabase } from './mongoTestDatabase.js';
 
 const configuredMongoUri = process.env.MONGODB_TEST_URI;
 const liveTest = configuredMongoUri ? test : test.skip;
 
 liveTest('MongoDB persists client-reported interactions and supports scoped hybrid recommendations', async () => {
   const mongoose = (await import('mongoose')).default;
-  const databaseName = `astradj_recommend_test_${crypto.randomUUID().replaceAll('-', '')}`;
-  const mongoUrl = new URL(configuredMongoUri);
-  mongoUrl.pathname = `/${databaseName}`;
-  const isolatedUri = mongoUrl.toString();
+  const { uri: isolatedUri, databaseName } = createIsolatedMongoTestDatabase(configuredMongoUri, 'recommendations');
   let connected = false;
 
   try {
@@ -51,8 +49,7 @@ liveTest('MongoDB persists client-reported interactions and supports scoped hybr
     expect(JSON.stringify(result)).not.toContain(String(peers[0]._id));
   } finally {
     if (connected) {
-      await mongoose.connection.dropDatabase();
-      await mongoose.disconnect();
+      await dropIsolatedMongoTestDatabase(mongoose, databaseName);
     }
   }
 }, 20000);

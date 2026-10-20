@@ -1,14 +1,11 @@
-import crypto from 'node:crypto';
+import { createIsolatedMongoTestDatabase, dropIsolatedMongoTestDatabase } from './mongoTestDatabase.js';
 
 const configuredMongoUri = process.env.MONGODB_TEST_URI;
 const liveTest = configuredMongoUri ? test : test.skip;
 
 liveTest('ChatMessage history writes and reads through MongoDB in an isolated temporary database', async () => {
   const mongoose = (await import('mongoose')).default;
-  const isolatedDatabaseName = `astradj_chat_test_${crypto.randomUUID().replaceAll('-', '')}`;
-  const mongoUrl = new URL(configuredMongoUri);
-  mongoUrl.pathname = `/${isolatedDatabaseName}`;
-  const isolatedUri = mongoUrl.toString();
+  const { uri: isolatedUri, databaseName } = createIsolatedMongoTestDatabase(configuredMongoUri, 'chat');
   let connected = false;
   let chatService;
 
@@ -31,9 +28,8 @@ liveTest('ChatMessage history writes and reads through MongoDB in an isolated te
     expect(await ChatMessage.countDocuments({ loungeId: 'lg_123456789abc' })).toBe(1);
   } finally {
     if (connected) {
-      await chatService?.flushAll();
-      await mongoose.connection.dropDatabase();
-      await mongoose.disconnect();
+      try { await chatService?.flushAll(); }
+      finally { await dropIsolatedMongoTestDatabase(mongoose, databaseName); }
     }
   }
 }, 15000);

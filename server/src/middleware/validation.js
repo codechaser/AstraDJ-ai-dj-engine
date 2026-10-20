@@ -1,5 +1,6 @@
 import { body, param, query } from 'express-validator';
 import { CAMELOT_KEYS } from '../models/Track.js';
+import { isSafeAudioAssetUrl } from '../utils/audioAsset.js';
 
 export const registerValidation = [
   body('email').isEmail().withMessage('Must be a valid email').normalizeEmail(),
@@ -54,7 +55,7 @@ export const createTrackValidation = [
   body('title').isString().trim().isLength({ min: 1, max: 120 }).matches(/^[^<>\u0000-\u001f]+$/).withMessage('title must be 1 to 120 plain-text characters'),
   body('artist').isString().trim().isLength({ min: 1, max: 120 }).matches(/^[^<>\u0000-\u001f]+$/).withMessage('artist must be 1 to 120 plain-text characters'),
   body('durationSeconds').isInt({ min: 1 }).toInt().withMessage('durationSeconds must be a positive integer'),
-  body('audioAssetUrl').optional({ nullable: true }).isURL({ protocols: ['http', 'https'], require_protocol: true }).withMessage('audioAssetUrl must be an HTTP(S) URL'),
+  body('audioAssetUrl').optional({ nullable: true }).custom(isSafeAudioAssetUrl).withMessage('audioAssetUrl must be a local /audio asset or HTTPS URL from an allow-listed host'),
   body('acoustic').isObject().withMessage('acoustic profile is required'),
   body('acoustic.bpm').isFloat({ min: 1, max: 300 }).toFloat().withMessage('bpm must be greater than 0 and no more than 300'),
   body('acoustic.camelotKey').isIn(CAMELOT_KEYS).withMessage('camelotKey must be one of the 24 Camelot keys'),
