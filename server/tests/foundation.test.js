@@ -151,7 +151,12 @@ describe('track catalog and acoustic-profile HTTP contract', () => {
     const catalog = await request(app).get('/api/v1/tracks?limit=2&skip=0');
     expect(catalog.status).toBe(200);
     expect(catalog.body.items).toHaveLength(2);
-    expect(catalog.body.page).toEqual({ limit: 2, skip: 0, total: 3 });
+    expect(catalog.body.page).toEqual({ limit: 2, skip: 0, total: 4 });
+    const demo = await request(app).get('/api/v1/tracks?q=Thoughtness');
+    expect(demo.body.items).toContainEqual(expect.objectContaining({
+      trackId: 't_cc0_thoughtness', title: 'Thoughtness', artist: 'Kian Moretz', durationSeconds: 46,
+      audioAssetUrl: '/audio/thoughtness.ogg', acoustic: null,
+    }));
     const profile = await request(app).get('/api/v1/tracks/t_2001/acoustic-profile');
     expect(profile.status).toBe(200);
     expect(profile.body).toEqual({
@@ -165,6 +170,9 @@ describe('track catalog and acoustic-profile HTTP contract', () => {
     expect((await request(app).get('/api/v1/tracks?limit=101')).status).toBe(400);
     expect((await request(app).get('/api/v1/tracks/not-a-track/acoustic-profile')).status).toBe(400);
     expect((await request(app).get('/api/v1/tracks/t_9999/acoustic-profile')).status).toBe(404);
+    const demoProfile = await request(app).get('/api/v1/tracks/t_cc0_thoughtness/acoustic-profile');
+    expect(demoProfile.status).toBe(409);
+    expect(demoProfile.body.error.code).toBe('ACOUSTIC_PROFILE_UNAVAILABLE');
   });
 
   test('restricts acoustic-profile writes to Admin and rejects invalid feature values', async () => {

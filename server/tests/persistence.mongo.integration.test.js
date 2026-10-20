@@ -17,10 +17,10 @@ liveTest('MongoDB persists auth, catalog, interactions, queue events, and author
   try {
     await mongoose.connect(uri, { serverSelectionTimeoutMS: 5000 });
     connected = true;
-    const [{ app }, { User }, { RefreshToken }, { Track }, { Interaction }, { DJLounge }, { QueueEvent }, { ChatMessage }] = await Promise.all([
+    const [{ app }, { User }, { RefreshToken }, { Track }, { Interaction }, { DJLounge }, { QueueEvent }, { ChatMessage }, { seedTracks }] = await Promise.all([
       import('../src/app.js'), import('../src/models/User.js'), import('../src/models/RefreshToken.js'),
       import('../src/models/Track.js'), import('../src/models/Interaction.js'), import('../src/models/DJLounge.js'),
-      import('../src/models/QueueEvent.js'), import('../src/models/ChatMessage.js'),
+      import('../src/models/QueueEvent.js'), import('../src/models/ChatMessage.js'), import('../src/seed/tracks.js'),
     ]);
 
     const suffix = crypto.randomUUID().slice(0, 8);
@@ -49,6 +49,18 @@ liveTest('MongoDB persists auth, catalog, interactions, queue events, and author
     expect(profile.status).toBe(200);
     expect(profile.body).toMatchObject({ trackId: 't_9101', acoustic: { bpm: 120, camelotKey: '8A' } });
 
+    const demoSeed = seedTracks.find(({ trackId }) => trackId === 't_cc0_thoughtness');
+    expect(demoSeed).toMatchObject({ durationSeconds: 46, audioAssetUrl: '/audio/thoughtness.ogg', acoustic: null });
+    await Track.create(demoSeed);
+    const catalogDemo = await request(app).get('/api/v1/tracks?q=Thoughtness');
+    expect(catalogDemo.status).toBe(200);
+    expect(catalogDemo.body.items).toContainEqual(expect.objectContaining({
+      trackId: 't_cc0_thoughtness', audioAssetUrl: '/audio/thoughtness.ogg', durationSeconds: 46, acoustic: null,
+    }));
+    const profileUnavailable = await request(app).get('/api/v1/tracks/t_cc0_thoughtness/acoustic-profile');
+    expect(profileUnavailable.status).toBe(409);
+    expect(profileUnavailable.body.error.code).toBe('ACOUSTIC_PROFILE_UNAVAILABLE');
+
     const loungeId = `lg_${crypto.randomUUID().replaceAll('-', '').slice(0, 12)}`;
     await DJLounge.create({
       loungeId, inviteCode: 'SP-ABCD', hostUserId: hostId,
@@ -65,6 +77,15 @@ liveTest('MongoDB persists auth, catalog, interactions, queue events, and author
     expect(history.status).toBe(200);
     expect(history.body.items).toMatchObject([{ trackId: 't_9101', completed: true, source: 'self_reported' }]);
 
+    const demoInteraction = await request(app).post('/api/v1/interactions')
+      .set('Authorization', `Bearer ${hostLogin.body.accessToken}`)
+      .send({ trackId: 't_cc0_thoughtness', playedSeconds: 46, completed: true, liked: false });
+    expect(demoInteraction.status).toBe(201);
+    const demoHistory = await request(app).get('/api/v1/dashboard/playback-history')
+      .set('Authorization', `Bearer ${hostLogin.body.accessToken}`);
+    expect(demoHistory.body.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ trackId: 't_cc0_thoughtness', completed: true, source: 'self_reported' }),
+    ]));
     await QueueEvent.create([
       { loungeId, seq: 1, type: 'track.added', actorUserId: hostId, payload: { trackId: 't_9101' } },
       { loungeId, seq: 2, type: 'soundclash.opened', actorUserId: hostId, payload: { battleId: 'mongo-battle', candidateTrackIds: ['t_9101', 't_9102'] } },
@@ -83,6 +104,11 @@ liveTest('MongoDB persists auth, catalog, interactions, queue events, and author
     const outsiderToken = jwt.sign({}, process.env.JWT_ACCESS_SECRET, {
       subject: String(outsider._id), issuer: 'astradj-api', audience: 'astradj-client', expiresIn: 900, algorithm: 'HS256',
     });
+    const outsiderHistory = await request(app).get('/api/v1/dashboard/playback-history')
+      .set('Authorization', `Bearer ${outsiderToken}`);
+    expect(outsiderHistory.status).toBe(200);
+    expect(outsiderHistory.body.items).toEqual([]);
+    expect(await Interaction.countDocuments({ userId: outsider._id, trackId: 't_cc0_thoughtness' })).toBe(0);
     const denied = await request(app).get(`/api/v1/dashboard/lounges/${loungeId}/analytics`)
       .set('Authorization', `Bearer ${outsiderToken}`);
     expect(denied.status).toBe(403);

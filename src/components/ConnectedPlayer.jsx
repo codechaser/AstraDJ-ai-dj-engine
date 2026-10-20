@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { NavLink } from 'react-router-dom';
 import { Heart, ListMusic, MoreHorizontal, Pause, Play, Repeat, Shuffle, SkipBack, SkipForward, SlidersHorizontal, Volume2 } from 'lucide-react';
 import { apiRequest } from '../api/client.js';
@@ -7,24 +7,41 @@ import { buildCompletionInteraction } from '../api/playbackEvents.js';
 const imageUrl = (id) => `https://images.unsplash.com/${id || 'photo-1514525253161-7a46d19cd819'}?auto=format&fit=crop&w=180&q=80`;
 const timeLabel = (seconds = 0) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 
-export default function ConnectedPlayer({ track, playing, onToggle, liked, setLiked, currentTime, setCurrentTime, setDuration, setAudioStatus, onPlaybackChange }) {
+export default function ConnectedPlayer({ track, playing, onToggle, registerPlaybackToggle, liked, setLiked, currentTime, setCurrentTime, setDuration, setAudioStatus, onPlaybackChange }) {
   const audioRef = useRef(null);
   const completedRef = useRef(null);
+  const trackIdRef = useRef(track?.trackId);
+  trackIdRef.current = track?.trackId;
   const available = Boolean(track?.audioAssetUrl);
 
   useEffect(() => {
     completedRef.current = null;
+    const audio = audioRef.current;
+    if (audio) { audio.pause(); audio.currentTime = 0; }
     setCurrentTime(0); setDuration(0);
     if (!available) setAudioStatus('unavailable');
     else setAudioStatus('loading');
   }, [track?.trackId, track?.audioAssetUrl, available, setCurrentTime, setDuration, setAudioStatus]);
 
-  useEffect(() => {
+  const toggleAudio = useCallback(() => {
     const audio = audioRef.current;
-    if (!audio || !available) return;
-    if (playing) audio.play().catch(() => { setAudioStatus('error'); onPlaybackChange(false); });
-    else audio.pause();
-  }, [playing, available, track?.audioAssetUrl, setAudioStatus, onPlaybackChange]);
+    const requestedTrackId = track?.trackId;
+    if (!audio || !available) { setAudioStatus('unavailable'); return; }
+    if (audio.paused || audio.ended) {
+      audio.play().then(() => {
+        if (audioRef.current === audio && trackIdRef.current === requestedTrackId && !audio.paused) onPlaybackChange(true);
+      }).catch(() => {
+        if (audioRef.current === audio && trackIdRef.current === requestedTrackId) { setAudioStatus('error'); onPlaybackChange(false); }
+      });
+    } else {
+      audio.pause(); onPlaybackChange(false);
+    }
+  }, [available, onPlaybackChange, setAudioStatus, track?.trackId]);
+
+  useEffect(() => {
+    registerPlaybackToggle?.(toggleAudio);
+    return () => registerPlaybackToggle?.(null);
+  }, [registerPlaybackToggle, toggleAudio]);
 
   async function handleEnded() {
     const audio = audioRef.current;

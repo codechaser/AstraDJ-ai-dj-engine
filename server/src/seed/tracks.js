@@ -17,4 +17,8 @@ export const seedTracks = [
     acoustic: { bpm: 125, camelotKey: '9A', energy: 0.67, valence: 0.71 },
     timeline: [{ ts: 54, type: 'glossary', text: 'The track uses a warm pad: a sustained synthesizer texture.' }],
   },
+  {
+    trackId: 't_cc0_thoughtness', title: 'Thoughtness', artist: 'Kian Moretz', durationSeconds: 46,
+    audioAssetUrl: '/audio/thoughtness.ogg', acoustic: null, timeline: [],
+  },
 ];

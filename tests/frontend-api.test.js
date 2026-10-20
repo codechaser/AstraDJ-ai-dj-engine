@@ -90,6 +90,12 @@ test('only a completed, app-observed audio asset can create a playback interacti
   assert.deepEqual(buildCompletionInteraction({ ...catalogTrack, audioAssetUrl: '/assets/test.ogg' }, 224.5, true), {
     trackId: 't_2001', playedSeconds: 224, completed: true, liked: true,
   });
+  const demoTrack = { trackId: 't_cc0_thoughtness', durationSeconds: 46, audioAssetUrl: '/audio/thoughtness.ogg' };
+  assert.deepEqual(buildCompletionInteraction(demoTrack, 46.13224489795918), {
+    trackId: 't_cc0_thoughtness', playedSeconds: 46, completed: true, liked: false,
+  });
+  assert.equal(buildCompletionInteraction(demoTrack, 47.2), null);
+  assert.equal(buildCompletionInteraction({ ...demoTrack, audioAssetUrl: null }, 46.132), null);
 });
 
 test('catalog search uses the backend query contract without browser credentials', async () => {

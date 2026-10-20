@@ -13,6 +13,7 @@ export async function listTracks({ q, limit = 20, skip = 0 }) {
 export async function getAcousticProfile(trackId) {
   const track = await Track.findOne({ trackId }).select('-_id trackId title artist acoustic timeline').lean();
   if (!track) throw new ApiError(404, 'TRACK_NOT_FOUND', 'Track not found');
+  if (!track.acoustic) throw new ApiError(409, 'ACOUSTIC_PROFILE_UNAVAILABLE', 'This track does not have a verified acoustic profile');
   return track;
 }
 

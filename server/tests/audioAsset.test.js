@@ -19,6 +19,13 @@ test('tracks accept absent and in-app audio assets, while rejecting unsafe or un
   await expect(new Track(trackData('file:///C:/music/song.mp3')).validate()).rejects.toThrow('audioAssetUrl');
 });
 
+test('licensed audio demo can be catalogued without inventing an acoustic profile', async () => {
+  await expect(new Track({
+    trackId: 't_cc0_thoughtness', title: 'Thoughtness', artist: 'Kian Moretz', durationSeconds: 46,
+    audioAssetUrl: '/audio/thoughtness.ogg', acoustic: null, timeline: [],
+  }).validate()).resolves.toBeUndefined();
+});
+
 test('optional remote media is accepted only from exact HTTPS host allow-list entries', () => {
   const previous = process.env.AUDIO_ASSET_ALLOWED_HOSTS;
   process.env.AUDIO_ASSET_ALLOWED_HOSTS = 'media.example.test, cdn.example.test';
