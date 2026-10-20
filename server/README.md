@@ -1,6 +1,6 @@
 # AstraDJ backend setup
 
-This is the Week 1 backend foundation in JavaScript, following PRD Option B: Node.js, Express.js, MongoDB, and Mongoose. The existing Vite frontend remains at the repository root and is not connected to the API yet.
+This backend follows PRD Option B: Node.js, Express.js, MongoDB, Mongoose, and Socket.io. The existing AstraDJ Vite frontend remains at the repository root and is not connected to live queue data yet; its reference screens and styling are unchanged.
 
 ## Requirements
 
@@ -28,7 +28,7 @@ To create a Host for local development, first register an account, then use a pr
 
 Seed the fictional three-track catalog with `npm run seed`. The authored acoustic profiles form a valid segue chain. The values and lore are synthetic; no licensed or Spotify catalog data is included.
 
-Run the backend suite with `npm test`. Jest + Supertest verify the HTTP contract with in-memory repository fakes, while direct Mongoose schema tests validate the document constraints. Live MongoDB integration remains unverified in the current environment.
+Run the backend suite with `npm test`. Jest + Supertest verify HTTP contracts using repository fakes, Socket.io client/server tests exercise real local WebSocket sessions against an isolated fake repository, and direct Mongoose schema tests validate document constraints. These tests do not connect to MongoDB. Live MongoDB integration remains unverified in the current environment because `server/.env` is absent.
 
 ## Endpoints in this increment
 
@@ -43,8 +43,14 @@ Run the backend suite with `npm test`. Jest + Supertest verify the HTTP contract
 - `POST /api/v1/lounges` — Host-only lounge creation using the PRD request and response contract.
 - `GET /health` and `GET /api/v1/health` — API and database state.
 
+## Socket.io DJ Lounge queue
+
+Connect to the same API origin with `io(API_ORIGIN, { auth: { token: ACCESS_JWT } })`, then emit `lounge.join` with an invite code. The gateway authenticates the JWT at handshake, resolves the invite server-side, enforces capacity and membership, and acknowledges with the current complete queue state. Queue mutations are authoritative, append compact `QueueEvent` commands, and broadcast the PRD `lounge.queue.update` event. Queue state and vote tallies are reconstructed from the persisted Lounge seed and event log after a process restart. See [API and Socket.io reference](API.md) for payloads, acknowledgements, event envelopes, validation failures, and role rules.
+
+The in-memory room state is per process. This implementation supports multiple Lounge IDs in one API process; running multiple API replicas would require a shared Socket.io adapter and coordinated queue state, and is not claimed here. The 50 participant configuration maximum is enforced at join time; capacity/performance has not been load-tested.
+
 Validation errors use `{ "error": { "code", "message", "details" } }`; profile responses use the PRD's `trackId`, `title`, `artist`, `acoustic`, and `timeline` fields.
 
 ## Current limits
 
-The authoritative live queue, lounge join/rejoin, Socket.io, chat/presence, Soundclash, sentiment aggregation, deterministic segue selection, grounded AI/RAG, recommendations, analytics, interaction/event persistence, and WebSocket RBAC are not implemented yet. The frontend continues to show the original mock data. See `../docs/prd-compliance.md` for the audit.
+Live join, shared queue add/vote ordering, presence, sync ping/pong, reconnect snapshots, Host-disconnect freeze, and append-only queue event recovery are implemented and tested with local socket clients. The frontend continues to show its existing mock data because no login/join flow is ready to authenticate against this API; UI files were not changed. Chat, Soundclash, sentiment aggregation, deterministic segue selection, grounded AI/RAG, recommendations, analytics, and the remaining moderation features are not implemented yet. Live MongoDB verification and 50-user load evidence are also pending. See `../docs/prd-compliance.md` for the audit.

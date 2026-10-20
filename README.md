@@ -9,7 +9,7 @@ AstraDJ is a reference-led music experience. Its existing React + Vite frontend 
 - Client: React + Vite, JavaScript, Tailwind CSS, React Router
 - API: Node.js + Express.js
 - Database: MongoDB + Mongoose
-- Real-time gateway: Socket.io (planned next increment)
+- Real-time gateway: Socket.io (authenticated Lounge join, shared queue, presence, sync and reconnect)
 - Authentication: JWT access token plus rotating refresh cookie
 - Tests: Jest + Supertest
 
@@ -35,7 +35,7 @@ npm run seed
 npm run dev
 ```
 
-The frontend is not yet connected to the new API. Backend HTTP tests currently mock repository calls; direct live-MongoDB integration and deployment configuration are still to be verified.
+The frontend is not yet connected to the new API. Backend HTTP and Socket.io tests use repository fakes; direct live-MongoDB integration and deployment configuration are still to be verified.
 
 ## Current UI routes
 

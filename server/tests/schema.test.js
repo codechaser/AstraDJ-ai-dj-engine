@@ -1,6 +1,7 @@
 import { User } from '../src/models/User.js';
 import { Track, CAMELOT_KEYS } from '../src/models/Track.js';
 import { DJLounge } from '../src/models/DJLounge.js';
+import { QueueEvent } from '../src/models/QueueEvent.js';
 
 test('User schema restricts accounts to the four defined roles', () => {
   const user = new User({ email: 'a@example.com', displayName: 'A', passwordHash: 'hash', role: 'Superuser' });
@@ -32,4 +33,17 @@ test('DJ Lounge schema limits capacity and BPM tolerance to project bounds', () 
   expect(lounge.validateSync()).toBeUndefined();
   lounge.settings.maxParticipants = 51;
   expect(lounge.validateSync().errors['settings.maxParticipants']).toBeDefined();
+});
+
+test('QueueEvent stores compact typed append-only commands with a per-Lounge sequence', () => {
+  const valid = new QueueEvent({
+    loungeId: 'lg_123456789abc', seq: 1, type: 'track.voted',
+    actorUserId: '507f1f77bcf86cd799439011', payload: { trackId: 't_2002', value: 1 },
+  });
+  expect(valid.validateSync()).toBeUndefined();
+  const invalid = new QueueEvent({
+    loungeId: 'lg_123456789abc', seq: 0, type: 'track.deleted',
+    actorUserId: 'not-an-id', payload: {},
+  });
+  expect(invalid.validateSync()).toBeDefined();
 });

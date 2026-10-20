@@ -18,10 +18,12 @@
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.9.5",
-    "pino-http": "^10.4.0"
+    "pino-http": "^10.4.0",
+    "socket.io": "^4.8.4"
   },
   "devDependencies": {
     "jest": "^30.5.2",
+    "socket.io-client": "^4.8.4",
     "supertest": "^7.0.0"
   }
 }
