@@ -1,6 +1,6 @@
 import test, { afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { apiRequest, askTrackQuestion, clearAccessToken, getLoungeAnalytics, getRecommendations, login, logout, registerAccount, requestSegue, restoreSession, searchTracks } from '../src/api/client.js';
+import { apiRequest, askTrackQuestion, clearAccessToken, createLounge, getLoungeAnalytics, getRecommendations, login, logout, registerAccount, requestSegue, restoreSession, searchTracks } from '../src/api/client.js';
 import { buildCompletionInteraction } from '../src/api/playbackEvents.js';
 import { connectToLounge } from '../src/api/loungeConnection.js';
 import { subscribeToLoungeEvents } from '../src/api/loungeEvents.js';
@@ -106,6 +106,23 @@ test('catalog search uses the backend query contract without browser credentials
   assert.equal(request.url.pathname, '/api/v1/tracks');
   assert.equal(request.url.searchParams.get('q'), 'Mira Sol');
   assert.equal(request.options.headers.Authorization, undefined);
+});
+
+test('Host Lounge creation sends the validated PRD request with the authenticated access token', async () => {
+  let request;
+  globalThis.fetch = async (url, options) => {
+    request = { url, options };
+    if (url.endsWith('/auth/login')) return response({ accessToken: 'host-access', user: { id: 'host-1', role: 'Host' } });
+    return response({ loungeId: 'lg_123456789abc', inviteCode: 'SP-ABCD', status: 'scheduled', hostUserId: 'host-1', createdAt: '2026-10-21T10:00:00.000Z' }, 201);
+  };
+  await login({ email: 'host@example.test', password: 'not-a-real-secret' });
+  const payload = { seedTrackId: 't_2001', vibeProfile: 'Chill & Focus', maxParticipants: 8, bpmTolerancePct: 8, soundclashEnabled: true, aiVerbosity: 'normal' };
+  const created = await createLounge(payload);
+  assert.equal(created.inviteCode, 'SP-ABCD');
+  assert.equal(request.url, '/api/v1/lounges');
+  assert.equal(request.options.method, 'POST');
+  assert.equal(request.options.headers.Authorization, 'Bearer host-access');
+  assert.deepEqual(JSON.parse(request.options.body), payload);
 });
 
 test('Lounge client rejoins on reconnect, filters cross-room updates, and removes listeners on cleanup', () => {

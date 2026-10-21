@@ -107,6 +107,10 @@ export async function getLoungeAnalytics(loungeId) {
   return apiRequest(`/dashboard/lounges/${encodeURIComponent(loungeId)}/analytics`);
 }
 
+export async function createLounge(input) {
+  return apiRequest('/lounges', { method: 'POST', body: JSON.stringify(input) });
+}
+
 export async function requestSegue(loungeId, input) {
   return apiRequest(`/lounges/${encodeURIComponent(loungeId)}/ai/segue`, {
     method: 'POST', body: JSON.stringify(input),
