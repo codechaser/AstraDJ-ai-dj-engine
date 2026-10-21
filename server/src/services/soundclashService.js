@@ -83,7 +83,7 @@ export function createSoundclashService({
       timers.delete(lounge.loungeId);
       void serialized(lounge.loungeId, async () => {
         const currentLounge = await repository.findLoungeById(lounge.loungeId);
-        if (!currentLounge) { states.delete(lounge.loungeId); cancelTimer(lounge.loungeId); return; }
+        if (!currentLounge || currentLounge.status === 'ended') { states.delete(lounge.loungeId); cancelTimer(lounge.loungeId); return; }
         const current = await loadState(currentLounge);
         if (current.status === 'open' && current.battleId === state.battleId && current.closesAt <= now()) await closeVoting(currentLounge, current);
       }).catch(() => {
@@ -261,6 +261,12 @@ export function createSoundclashService({
       for (const timer of timers.values()) clearTimer(timer);
       timers.clear();
       states.clear();
+    },
+    async closeLounge(loungeId) {
+      return serialized(loungeId, async () => {
+        cancelTimer(loungeId);
+        states.delete(loungeId);
+      });
     },
   };
 }

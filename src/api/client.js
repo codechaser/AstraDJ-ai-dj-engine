@@ -107,6 +107,10 @@ export async function getLoungeAnalytics(loungeId) {
   return apiRequest(`/dashboard/lounges/${encodeURIComponent(loungeId)}/analytics`);
 }
 
+export async function getLoungeHistory(limit = 50) {
+  return apiRequest(`/dashboard/lounge-history?limit=${limit}`);
+}
+
 export async function createLounge(input) {
   return apiRequest('/lounges', { method: 'POST', body: JSON.stringify(input) });
 }

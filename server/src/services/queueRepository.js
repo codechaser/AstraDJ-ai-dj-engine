@@ -9,11 +9,19 @@ export const queueRepository = {
     return DJLounge.findOne({ inviteCode: inviteCode.toUpperCase(), status: { $ne: 'ended' } }).lean();
   },
   findLoungeById(loungeId) {
-    return DJLounge.findOne({ loungeId, status: { $ne: 'ended' } }).lean();
+    return DJLounge.findOne({ loungeId }).lean();
   },
   async joinLounge(lounge, userId) {
-    if (lounge.participantIds.some((id) => String(id) === String(userId))) return lounge;
-    return DJLounge.findOneAndUpdate({ loungeId: lounge.loungeId, status: { $ne: 'ended' } }, { $addToSet: { participantIds: userId } }, { new: true }).lean();
+    if (lounge.status === 'scheduled') {
+      const started = await DJLounge.findOneAndUpdate(
+        { loungeId: lounge.loungeId, status: 'scheduled' },
+        { $addToSet: { participantIds: userId }, $set: { status: 'live', startedAt: new Date() } },
+        { new: true },
+      ).lean();
+      if (started) return started;
+    }
+    if (lounge.participantIds.some((id) => String(id) === String(userId)) && lounge.status !== 'scheduled') return lounge;
+    return DJLounge.findOneAndUpdate({ loungeId: lounge.loungeId, status: 'live' }, { $addToSet: { participantIds: userId } }, { new: true }).lean();
   },
   listQueueEvents(loungeId) {
     return QueueEvent.find({ loungeId }).sort({ seq: 1 }).lean();

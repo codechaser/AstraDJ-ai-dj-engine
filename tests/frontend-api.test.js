@@ -1,6 +1,6 @@
 import test, { afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { apiRequest, askTrackQuestion, clearAccessToken, createLounge, getLoungeAnalytics, getRecommendations, login, logout, registerAccount, requestSegue, restoreSession, searchTracks } from '../src/api/client.js';
+import { apiRequest, askTrackQuestion, clearAccessToken, createLounge, getLoungeAnalytics, getLoungeHistory, getRecommendations, login, logout, registerAccount, requestSegue, restoreSession, searchTracks } from '../src/api/client.js';
 import { buildCompletionInteraction } from '../src/api/playbackEvents.js';
 import { connectToLounge } from '../src/api/loungeConnection.js';
 import { subscribeToLoungeEvents } from '../src/api/loungeEvents.js';
@@ -125,7 +125,7 @@ test('Host Lounge creation sends the validated PRD request with the authenticate
   assert.deepEqual(JSON.parse(request.options.body), payload);
 });
 
-test('Lounge client rejoins on reconnect, filters cross-room updates, and removes listeners on cleanup', () => {
+test('Lounge client rejoins on reconnect, filters cross-room and ended events, and removes listeners on cleanup', () => {
   class FakeSocket {
     handlers = new Map();
     commands = [];
@@ -140,12 +140,16 @@ test('Lounge client rejoins on reconnect, filters cross-room updates, and remove
     connect() { this.connected = true; this.trigger('connect'); }
     disconnect() { this.connected = false; this.disconnected = true; }
   }
-  const socket = new FakeSocket(), received = [], statuses = [];
-  const connection = connectToLounge({ inviteCode: 'sp-abcd', token: 'memory-token', origin: 'http://test', ioFactory: () => socket, onQueueUpdate: (event) => received.push(event), onStatus: (status) => statuses.push(status) });
+  const socket = new FakeSocket(), received = [], ended = [], statuses = [];
+  const connection = connectToLounge({ inviteCode: 'sp-abcd', token: 'memory-token', origin: 'http://test', ioFactory: () => socket, onQueueUpdate: (event) => received.push(event), onSessionEnded: (event) => ended.push(event), onStatus: (status) => statuses.push(status) });
   assert.deepEqual(socket.commands[0], { event: 'lounge.join', payload: { inviteCode: 'SP-ABCD' } });
   socket.trigger('lounge.queue.update', { loungeId: 'lg_other', payload: {} });
   socket.trigger('lounge.queue.update', { loungeId: 'lg_current', payload: { queue: [] } });
+  socket.trigger('lounge.session.ended', { loungeId: 'lg_other', payload: { endedAt: '2026-10-21T00:00:00Z' } });
+  socket.trigger('lounge.session.ended', { loungeId: 'lg_current', payload: {} });
+  socket.trigger('lounge.session.ended', { loungeId: 'lg_current', payload: { endedAt: '2026-10-21T00:00:00Z', summary: {} } });
   assert.equal(received.length, 1);
+  assert.equal(ended.length, 1);
   socket.trigger('disconnect');
   socket.trigger('connect');
   assert.equal(socket.commands.filter(({ event }) => event === 'lounge.join').length, 2);
@@ -153,11 +157,12 @@ test('Lounge client rejoins on reconnect, filters cross-room updates, and remove
   connection.disconnect();
   assert.equal(socket.disconnected, true);
   assert.equal(socket.handlers.get('lounge.queue.update').size, 0);
+  assert.equal(socket.handlers.get('lounge.session.ended').size, 0);
   socket.trigger('lounge.queue.update', { loungeId: 'lg_current', payload: {} });
   assert.equal(received.length, 1);
 });
 
-test('recommendation, Lounge analytics, segue, and Q&A calls use existing authenticated API contracts', async () => {
+test('recommendation, Lounge history/analytics, segue, and Q&A calls use existing authenticated API contracts', async () => {
   const calls = [];
   globalThis.fetch = async (url, options) => {
     calls.push({ url, options });
@@ -168,16 +173,18 @@ test('recommendation, Lounge analytics, segue, and Q&A calls use existing authen
   };
   await login({ email: 'mira@example.test', password: 'password' });
   await getRecommendations();
+  await getLoungeHistory();
   await getLoungeAnalytics('lg_123456789abc');
   await requestSegue('lg_123456789abc', { currentTrackId: 't_2001', currentTs: 0, candidateTrackIds: ['t_2002'], currentSentimentScore: 0.5 });
   await askTrackQuestion('lg_123456789abc', 'What is the track title?');
   assert.ok(calls[1].url.endsWith('/api/v1/recommendations?limit=10'));
-  assert.ok(calls[2].url.endsWith('/api/v1/dashboard/lounges/lg_123456789abc/analytics'));
-  assert.equal(calls[3].url, '/api/v1/lounges/lg_123456789abc/ai/segue');
-  assert.equal(JSON.parse(calls[3].options.body).currentSentimentScore, 0.5);
-  assert.equal(calls[3].options.headers.Authorization, 'Bearer integration-token');
-  assert.equal(calls[4].url, '/api/v1/lounges/lg_123456789abc/ai/ask');
-  assert.deepEqual(JSON.parse(calls[4].options.body), { question: 'What is the track title?' });
+  assert.ok(calls[2].url.endsWith('/api/v1/dashboard/lounge-history?limit=50'));
+  assert.ok(calls[3].url.endsWith('/api/v1/dashboard/lounges/lg_123456789abc/analytics'));
+  assert.equal(calls[4].url, '/api/v1/lounges/lg_123456789abc/ai/segue');
+  assert.equal(JSON.parse(calls[4].options.body).currentSentimentScore, 0.5);
+  assert.equal(calls[4].options.headers.Authorization, 'Bearer integration-token');
+  assert.equal(calls[5].url, '/api/v1/lounges/lg_123456789abc/ai/ask');
+  assert.deepEqual(JSON.parse(calls[5].options.body), { question: 'What is the track title?' });
 });
 
 test('room event subscriptions ignore other Lounges and remove each listener on cleanup', () => {

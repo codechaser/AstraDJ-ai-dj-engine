@@ -15,7 +15,9 @@ const loungeSchema = new mongoose.Schema({
   status: { type: String, enum: ['scheduled', 'live', 'ended'], default: 'scheduled', required: true },
   participantIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   createdAt: { type: Date, default: Date.now },
+  startedAt: { type: Date, default: null },
   endedAt: { type: Date, default: null },
+  sessionSummary: { type: mongoose.Schema.Types.Mixed, default: null },
   settings: {
     maxParticipants: { type: Number, required: true, min: 2, max: 50 },
     aiVerbosity: { type: String, enum: ['low', 'normal', 'high'], default: 'normal' },

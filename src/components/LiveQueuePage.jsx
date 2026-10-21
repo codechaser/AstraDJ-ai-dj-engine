@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Grip, ThumbsDown, ThumbsUp, X } from 'lucide-react';
+import { Grip, Power, ThumbsDown, ThumbsUp, X } from 'lucide-react';
 import { createLounge, getAccessToken, getActiveLounge, getSocketOrigin, getTrack, saveActiveLounge, searchTracks } from '../api/client.js';
 import { connectToLounge } from '../api/loungeConnection.js';
 import LoungeCollaborationPanel from './LoungeCollaborationPanel.jsx';
@@ -71,6 +71,12 @@ export default function LiveQueuePage({ track, onCurrentTrack, user }) {
         if (state?.nowPlaying?.trackId) onCurrentTrack(formatTrack(state.nowPlaying));
       },
       onQueueUpdate: (eventEnvelope) => { void hydrateUpdate(eventEnvelope); },
+      onSessionEnded: (eventEnvelope) => {
+        saveActiveLounge(null);
+        setStatus('ended');
+        const seconds = eventEnvelope.payload.summary?.durationSeconds;
+        setMessage(seconds == null ? 'Lounge session ended. Session duration is unavailable.' : `Lounge session ended. Session duration: ${seconds} seconds.`);
+      },
       onStatus: setStatus,
       onError: (error) => setMessage(error?.message === 'AUTH_REQUIRED' ? 'Your session expired. Sign in again.' : error?.message ?? 'Could not connect to the Lounge service.'),
     });
@@ -122,9 +128,23 @@ export default function LiveQueuePage({ track, onCurrentTrack, user }) {
     });
   }
 
+  function endSession() {
+    if (!window.confirm('End this Lounge session for everyone? Participants will receive the session summary.')) return;
+    const socket = socketRef.current?.socket;
+    if (!socket?.connected) { setMessage('Connect to the Lounge before ending its session.'); return; }
+    socket.emit('lounge.session.end', {}, (ack) => {
+      if (!ack?.ok) { setMessage(ack?.error?.message ?? 'The Lounge session could not be ended.'); return; }
+      if (ack.alreadyEnded) {
+        saveActiveLounge(null);
+        setStatus('ended');
+        setMessage('This Lounge session has already ended. Its summary remains in your Profile.');
+      }
+    });
+  }
+
   const nowPlaying = queueState?.nowPlaying ?? track;
   return <div className="page queue-page">
-    <div className="page-heading"><div><span className="eyebrow">YOUR LISTENING FLOW</span><h1>Queue</h1></div><span className="muted">{status === 'connected' ? 'Live' : 'Not connected'}</span></div>
+    <div className="page-heading"><div><span className="eyebrow">YOUR LISTENING FLOW</span><h1>Queue</h1></div><span className="muted">{status === 'connected' ? 'Live' : status === 'ended' ? 'Ended' : 'Not connected'}</span></div>
     {!user ? <div className="panel integration-status">Sign in from your Profile to join a shared Lounge queue.</div> : <>
       {user.role === 'Host' && <form className="lounge-create panel" onSubmit={createHostLounge}>
         <div><b>Create a DJ Lounge</b><small>Choose a catalog track to start, then share the invite code.</small></div>
@@ -155,8 +175,9 @@ export default function LiveQueuePage({ track, onCurrentTrack, user }) {
     {status === 'connected' && catalogStatus === 'error' && <p className="integration-error" role="alert">{catalogError}</p>}
     <SectionTitle>Up Next <span className="muted">{queueState?.nextUp?.length ?? 0} tracks</span></SectionTitle>
     {status === 'connected' && queueState?.nextUp?.length ? <div className="queue-list">{queueState.nextUp.map((item, index) => <div className="queue-item" key={item.trackId}><span className="rank">{index + 1}</span><div className="catalog-cover"/><div><b>{item.title ?? item.trackId}</b><small>{item.artist ?? 'Catalog details unavailable'} · {item.votes ?? 0} votes</small></div><button aria-label={`Vote for ${item.title ?? item.trackId}`} onClick={() => command('lounge.queue.vote', { trackId: item.trackId, value: 1 })}><ThumbsUp size={14}/></button><button aria-label={`Downvote ${item.title ?? item.trackId}`} onClick={() => command('lounge.queue.vote', { trackId: item.trackId, value: -1 })}><ThumbsDown size={14}/></button><Grip size={17} className="grip"/></div>)}</div> : <div className="panel integration-status">{status === 'connected' ? 'Nothing is up next yet.' : 'Join a Lounge to see its shared queue.'}</div>}
+    {status === 'connected' && queueState?.isHost && <button className="btn-outline lounge-end" onClick={endSession}><Power size={14}/> End Lounge</button>}
     {status === 'connected' && <button className="btn-outline sync-button" onClick={() => command('lounge.sync.request', {})}>Refresh shared state</button>}
-    {activeLoungeId && <LoungeCollaborationPanel socket={socketRef.current?.socket} loungeId={activeLoungeId} status={status} user={user} catalog={catalog} initialBattle={queueState?.soundclash}/>}
+    {activeLoungeId && status === 'connected' && <LoungeCollaborationPanel socket={socketRef.current?.socket} loungeId={activeLoungeId} status={status} user={user} catalog={catalog} initialBattle={queueState?.soundclash}/>}
   </div>;
 }
 

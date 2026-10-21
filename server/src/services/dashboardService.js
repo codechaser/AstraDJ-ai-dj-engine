@@ -24,19 +24,21 @@ export function createDashboardService(repository = dashboardRepository) {
         repository.listQueueEvents(loungeId), repository.listSentimentMessages(loungeId),
       ]);
       const soundclashBattles = events.filter((event) => event.type === 'soundclash.opened').length;
+      const start = lounge.startedAt ? new Date(lounge.startedAt).getTime() : null;
+      const end = lounge.endedAt ? new Date(lounge.endedAt).getTime() : null;
       const sentimentTimeline = messages.map((message) => ({
         at: new Date(message.createdAt).toISOString(), score: message.sentimentScore,
         bucket: message.sentimentBucket,
       }));
       return {
         loungeId, status: lounge.status,
-        durationSeconds: null,
+        durationSeconds: Number.isFinite(start) && Number.isFinite(end) ? Math.max(0, Math.floor((end - start) / 1000)) : null,
         queueEventCount: events.length, soundclashBattles,
         chatMessageCount: messages.length, sentimentTimeline,
         peakConcurrentParticipants: null,
         aiDjQuestionCount: null,
         unavailableMetrics: {
-          durationSeconds: 'A session start timestamp is not persisted; createdAt may include scheduled/setup time.',
+          durationSeconds: Number.isFinite(start) && Number.isFinite(end) ? null : 'Session start or end timestamp is not persisted.',
           peakConcurrentParticipants: 'Concurrent presence is currently process-local and is not persisted.',
           aiDjQuestionCount: 'AI DJ questions are not currently persisted as Lounge events.',
         },

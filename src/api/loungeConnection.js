@@ -1,6 +1,6 @@
 import { io } from 'socket.io-client';
 
-export function connectToLounge({ inviteCode, token, origin, ioFactory = io, onState = () => {}, onQueueUpdate = () => {}, onStatus = () => {}, onError = () => {} }) {
+export function connectToLounge({ inviteCode, token, origin, ioFactory = io, onState = () => {}, onQueueUpdate = () => {}, onSessionEnded = () => {}, onStatus = () => {}, onError = () => {} }) {
   let loungeId = null;
   let disposed = false;
   const socket = ioFactory(origin, { auth: { token }, autoConnect: false });
@@ -17,6 +17,9 @@ export function connectToLounge({ inviteCode, token, origin, ioFactory = io, onS
   const queueUpdate = (envelope) => {
     if (!disposed && loungeId && envelope?.loungeId === loungeId) onQueueUpdate(envelope);
   };
+  const sessionEnded = (envelope) => {
+    if (!disposed && loungeId && envelope?.loungeId === loungeId && envelope?.payload?.endedAt) onSessionEnded(envelope);
+  };
   const connectError = (error) => { if (!disposed) { onStatus('error'); onError(error); } };
   const disconnectEvent = () => { if (!disposed) onStatus('disconnected'); };
 
@@ -24,6 +27,7 @@ export function connectToLounge({ inviteCode, token, origin, ioFactory = io, onS
   socket.on('connect_error', connectError);
   socket.on('disconnect', disconnectEvent);
   socket.on('lounge.queue.update', queueUpdate);
+  socket.on('lounge.session.ended', sessionEnded);
   socket.connect();
   return {
     socket,
@@ -34,6 +38,7 @@ export function connectToLounge({ inviteCode, token, origin, ioFactory = io, onS
       socket.off('connect_error', connectError);
       socket.off('disconnect', disconnectEvent);
       socket.off('lounge.queue.update', queueUpdate);
+      socket.off('lounge.session.ended', sessionEnded);
       socket.disconnect();
     },
   };

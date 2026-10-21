@@ -65,6 +65,7 @@ liveTest('MongoDB persists auth, catalog, interactions, queue events, and author
     await DJLounge.create({
       loungeId, inviteCode: 'SP-ABCD', hostUserId: hostId,
       vibeProfile: 'Mongo test', queue: ['t_9101'], currentTrackId: 't_9101', participantIds: [hostId], status: 'live',
+      startedAt: new Date(Date.now() - 10_000),
       settings: { maxParticipants: 10, bpmTolerancePct: 8, soundclashEnabled: true, aiVerbosity: 'normal' },
     });
     const interaction = await request(app).post('/api/v1/interactions')
@@ -112,6 +113,23 @@ liveTest('MongoDB persists auth, catalog, interactions, queue events, and author
     const denied = await request(app).get(`/api/v1/dashboard/lounges/${loungeId}/analytics`)
       .set('Authorization', `Bearer ${outsiderToken}`);
     expect(denied.status).toBe(403);
+
+    await User.findByIdAndUpdate(hostId, { role: 'Host' });
+    const { loungeLifecycleService } = await import('../src/services/loungeLifecycleService.js');
+    const firstEnd = await loungeLifecycleService.end({ loungeId, userId: hostId, userRole: 'Host' });
+    const endRetry = await loungeLifecycleService.end({ loungeId, userId: hostId, userRole: 'Host' });
+    expect(firstEnd.alreadyEnded).toBe(false);
+    expect(endRetry.alreadyEnded).toBe(true);
+    expect(firstEnd.lounge.sessionSummary).toMatchObject({ durationSeconds: expect.any(Number), queueEventCount: 2, soundclashBattles: 1, chatMessageCount: 1 });
+    expect(await DJLounge.countDocuments({ loungeId, status: 'ended' })).toBe(1);
+    const loungeHistory = await request(app).get('/api/v1/dashboard/lounge-history')
+      .set('Authorization', `Bearer ${hostLogin.body.accessToken}`);
+    expect(loungeHistory.status).toBe(200);
+    expect(loungeHistory.body.items).toEqual([expect.objectContaining({ loungeId, role: 'Host', status: 'ended', summary: expect.objectContaining({ queueEventCount: 2, soundclashBattles: 1, chatMessageCount: 1 }) })]);
+    expect(loungeHistory.body.items[0]).not.toHaveProperty('inviteCode');
+    const outsiderLoungeHistory = await request(app).get('/api/v1/dashboard/lounge-history')
+      .set('Authorization', `Bearer ${outsiderToken}`);
+    expect(outsiderLoungeHistory.body.items).toEqual([]);
   } finally {
     if (connected) await dropIsolatedMongoTestDatabase(mongoose, databaseName);
   }

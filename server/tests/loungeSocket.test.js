@@ -42,9 +42,10 @@ function makeRepository() {
   return {
     lounges,
     events,
-    async findLoungeByInvite(code) { return [...lounges.values()].find((lounge) => lounge.inviteCode === code.toUpperCase()) ?? null; },
+    async findLoungeByInvite(code) { return [...lounges.values()].find((lounge) => lounge.inviteCode === code.toUpperCase() && lounge.status !== 'ended') ?? null; },
     async findLoungeById(id) { return lounges.get(id) ?? null; },
     async joinLounge(lounge, userId) {
+      if (lounge.status === 'ended') return null;
       if (lounge.participantIds.includes(userId)) return lounge;
       if (lounge.participantIds.length >= lounge.settings.maxParticipants) return null;
       lounge.participantIds.push(userId);
@@ -112,15 +113,26 @@ let chatService;
 let sentimentService;
 let soundclashService;
 let publishAnnouncement;
+let loungeLifecycleService;
 let sockets;
 
 beforeEach(async () => {
   repository = makeRepository();
+  loungeLifecycleService = {
+    async end({ loungeId, userId }) {
+      const lounge = repository.lounges.get(loungeId);
+      if (String(lounge.hostUserId) !== String(userId)) throw Object.assign(new Error('Only the Lounge Host can end this session'), { status: 403, code: 'LOUNGE_HOST_REQUIRED' });
+      if (lounge.status === 'ended') return { lounge, alreadyEnded: true };
+      lounge.status = 'ended'; lounge.endedAt = new Date();
+      lounge.sessionSummary = { durationSeconds: 120, queueEventCount: 0, soundclashBattles: 0, chatMessageCount: 0, sentimentTimeline: [], peakConcurrentParticipants: null, aiDjQuestionCount: null };
+      return { lounge, alreadyEnded: false };
+    },
+  };
   queueService = createQueueService(repository, { voteFlushMs: 30_000 });
   sentimentService = createRoomSentimentService();
   server = createServer();
   ioServer = new Server(server, { transports: ['websocket'] });
-  ({ chatService, soundclashService, publishAnnouncement } = attachLoungeGateway(ioServer, { repository, queueService, secret, sentimentService, soundclashOptions: { voteDurationMs: 160 } }));
+  ({ chatService, soundclashService, publishAnnouncement } = attachLoungeGateway(ioServer, { repository, queueService, secret, sentimentService, loungeLifecycleService, soundclashOptions: { voteDurationMs: 160 } }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   port = server.address().port;
   sockets = [];
@@ -140,6 +152,30 @@ test('authenticated Host and Listener join the invite-authorized Lounge', async 
   expect(h.ok).toBe(true); expect(l.ok).toBe(true);
   expect(l.state.nowPlaying.trackId).toBe('t_2001');
   expect(l.state.hostDisconnected).toBe(false);
+});
+
+test('Host ends once, participants receive an isolated lifecycle envelope, and ended Lounge mutations and joins are rejected', async () => {
+  const host = client(uidHost); const listener = client(uidListener); const outsider = client(uidListener2);
+  await Promise.all([join(host), join(listener)]);
+  await command(outsider, 'lounge.join', { inviteCode: 'SP-8X2L' });
+  const hostEnded = waitFor(host, 'lounge.session.ended');
+  const listenerEnded = waitFor(listener, 'lounge.session.ended');
+  const ended = await command(host, 'lounge.session.end', {});
+  expect(ended).toMatchObject({ ok: true, alreadyEnded: false, summary: { durationSeconds: 120 } });
+  const [hostEvent, listenerEvent] = await Promise.all([hostEnded, listenerEnded]);
+  expect(hostEvent).toMatchObject({ event: 'lounge.session.ended', loungeId: 'lg_123456789abc', payload: { endedAt: expect.any(String), summary: { durationSeconds: 120 } }, ts: expect.any(Number) });
+  expect(listenerEvent).toEqual(hostEvent);
+  expect((await command(listener, 'lounge.session.end', {})).error.code).toBe('LOUNGE_HOST_REQUIRED');
+  expect((await command(host, 'lounge.queue.add', { trackId: 't_2002' })).error.code).toBe('LOUNGE_ENDED');
+  expect((await command(listener, 'lounge.queue.vote', { trackId: 't_2001', value: 1 })).error.code).toBe('LOUNGE_ENDED');
+  expect((await command(listener, 'lounge.chat.message', { body: 'After the end' })).error.code).toBe('LOUNGE_ENDED');
+  expect((await command(listener, 'lounge.soundclash.submit', { trackId: 't_2003' })).error.code).toBe('LOUNGE_ENDED');
+  expect((await command(outsider, 'lounge.join', { inviteCode: 'SP-9X2L' })).error.code).toBe('LOUNGE_NOT_FOUND');
+  expect((await command(host, 'lounge.session.end', {}))).toMatchObject({ ok: true, alreadyEnded: true });
+  const duplicateEvent = new Promise((resolve) => host.once('lounge.session.ended', resolve));
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  await expect(Promise.race([duplicateEvent, Promise.resolve('no-duplicate')])).resolves.toBe('no-duplicate');
+  expect(repository.lounges.get('lg_123456789abc').status).toBe('ended');
 });
 
 test('segue announcements use the PRD event envelope and are isolated to the authorized Lounge room', async () => {

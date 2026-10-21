@@ -85,7 +85,53 @@ test('Host creates a Lounge from the catalog and another authenticated listener 
   await listenerPage.getByRole('button', { name: 'Join Lounge' }).click();
   await expect(listenerPage.getByText('Live', { exact: true })).toBeVisible();
   await expect(listenerPage.getByRole('main').getByText('Night Drive', { exact: true })).toBeVisible();
+
+  hostPage.on('dialog', (dialog) => dialog.accept());
+  await hostPage.getByRole('button', { name: 'End Lounge' }).click();
+  await expect(hostPage.getByText('Ended', { exact: true })).toBeVisible();
+  await expect(hostPage.getByText(/Lounge session ended\./)).toBeVisible();
+  await expect(listenerPage.getByText('Ended', { exact: true })).toBeVisible();
+  await expect(listenerPage.getByText(/Lounge session ended\./)).toBeVisible();
+
+  await mongoose.connect(process.env.MONGODB_URI, { serverSelectionTimeoutMS: 5000 });
+  try {
+    const storedEndedLounge = await DJLounge.findOne({ loungeId: created.loungeId }).lean();
+    expect(storedEndedLounge).toMatchObject({ status: 'ended', hostUserId: expect.anything(), endedAt: expect.any(Date), startedAt: expect.any(Date) });
+    expect(storedEndedLounge.participantIds).toHaveLength(2);
+    expect(storedEndedLounge.sessionSummary).toMatchObject({
+      durationSeconds: expect.any(Number), queueEventCount: 0, soundclashBattles: 0,
+      chatMessageCount: 0, sentimentTimeline: [], peakConcurrentParticipants: null, aiDjQuestionCount: null,
+    });
+    expect(await DJLounge.countDocuments({ loungeId: created.loungeId, status: 'ended' })).toBe(1);
+  } finally {
+    await mongoose.disconnect();
+  }
+
+  await hostPage.goto('/profile', { waitUntil: 'domcontentloaded' });
+  await expect(hostPage.getByRole('heading', { name: 'Lounge History' })).toBeVisible();
+  await expect(hostPage.getByText('After Work House', { exact: true })).toBeVisible();
+  await listenerPage.goto('/profile', { waitUntil: 'domcontentloaded' });
+  await expect(listenerPage.getByText('After Work House', { exact: true })).toBeVisible();
+
+  const outsiderContext = await browser.newContext();
+  const outsiderPage = await outsiderContext.newPage();
+  outsiderPage.on('pageerror', (error) => pageErrors.push(error.message));
+  await outsiderPage.goto('/profile', { waitUntil: 'domcontentloaded' });
+  await outsiderPage.getByRole('button', { name: 'Create account' }).click();
+  await outsiderPage.getByLabel('Display name').fill('Unrelated Account');
+  await outsiderPage.getByLabel('Email').fill(`outsider-${randomUUID()}@example.invalid`);
+  await outsiderPage.getByLabel('Password').fill(`Outsider!${randomUUID()}123`);
+  await outsiderPage.getByRole('button', { name: 'Create Account' }).click();
+  await expect(outsiderPage.getByRole('heading', { name: 'Unrelated Account' })).toBeVisible();
+  await outsiderPage.goto('/');
+  await outsiderPage.getByRole('link', { name: 'Live', exact: true }).click();
+  await outsiderPage.getByRole('textbox', { name: 'Lounge invite code' }).fill(created.inviteCode);
+  await outsiderPage.getByRole('button', { name: 'Join Lounge' }).click();
+  await expect(outsiderPage.getByText('The Lounge invite code is invalid or expired')).toBeVisible();
+  await outsiderPage.goto('/profile');
+  await expect(outsiderPage.getByText('No ended Lounge sessions yet.')).toBeVisible();
   expect(pageErrors).toEqual([]);
+  await outsiderContext.close();
   await listenerContext.close();
   await hostContext.close();
 });

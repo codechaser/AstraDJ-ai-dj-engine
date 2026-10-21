@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { LogOut, UserRound } from 'lucide-react';
-import { getPlaybackHistory, getTrack } from '../api/client.js';
+import { getLoungeHistory, getPlaybackHistory, getTrack } from '../api/client.js';
 
 export default function AccountPage({ user, sessionStatus, onLogin, onRegister, onLogout, authError }) {
   const [mode, setMode] = useState('login');
@@ -8,12 +8,18 @@ export default function AccountPage({ user, sessionStatus, onLogin, onRegister, 
   const [error, setError] = useState('');
   const [history, setHistory] = useState([]);
   const [historyMessage, setHistoryMessage] = useState('');
+  const [loungeHistory, setLoungeHistory] = useState([]);
+  const [loungeHistoryMessage, setLoungeHistoryMessage] = useState('');
 
   useEffect(() => {
     let active = true;
     setHistory([]);
     setHistoryMessage('');
+    setLoungeHistory([]);
+    setLoungeHistoryMessage('');
     if (!user) return () => { active = false; };
+    getLoungeHistory().then(({ items }) => { if (active) setLoungeHistory(items ?? []); })
+      .catch(() => { if (active) setLoungeHistoryMessage('Lounge history is unavailable right now.'); });
     getPlaybackHistory().then(async ({ items }) => {
       const rows = await Promise.all(items.map(async (item) => {
         try { return { ...item, track: await getTrack(item.trackId) }; }
@@ -56,5 +62,8 @@ export default function AccountPage({ user, sessionStatus, onLogin, onRegister, 
     <div className="section-title"><h2>Listening Reports</h2><span className="muted">Self-reported history</span></div>
     {historyMessage && <p className="integration-error" role="status">{historyMessage}</p>}
     {history.length ? <div className="recent-grid">{history.map((item) => <div className="recent-card" key={item.interactionId}><div className="catalog-cover"/><div><b>{item.track?.title ?? item.trackId}</b><small>{item.track?.artist ?? item.source} · {item.playedSeconds}s reported</small></div></div>)}</div> : <div className="panel integration-status">{historyMessage ? 'Listening history could not be loaded.' : user ? 'No listening reports yet.' : 'Sign in to view history.'}</div>}
+    <div className="section-title"><h2>Lounge History</h2><span className="muted">Ended sessions you hosted or joined</span></div>
+    {loungeHistoryMessage && <p className="integration-error" role="status">{loungeHistoryMessage}</p>}
+    {loungeHistory.length ? <div className="recent-grid">{loungeHistory.map((item) => <div className="recent-card lounge-history-card" key={item.loungeId}><div className="catalog-cover"/><div><b>{item.vibeProfile}</b><small>{item.role} · {item.endedAt ? new Date(item.endedAt).toLocaleString() : 'Ended'}</small><small>{item.summary?.durationSeconds == null ? 'Duration unavailable' : `${Math.floor(item.summary.durationSeconds / 60)} min`} · {item.summary?.soundclashBattles ?? 0} battles · {item.summary?.chatMessageCount ?? 0} chat messages</small></div></div>)}</div> : <div className="panel integration-status">{loungeHistoryMessage ? 'Lounge history could not be loaded.' : 'No ended Lounge sessions yet.'}</div>}
   </div>;
 }

@@ -5,6 +5,7 @@ import { createQueueService } from '../services/queueService.js';
 import { createChatService } from '../services/chatService.js';
 import { roomSentimentService } from '../services/roomSentimentService.js';
 import { createSoundclashService } from '../services/soundclashService.js';
+import { loungeLifecycleService as defaultLoungeLifecycleService } from '../services/loungeLifecycleService.js';
 
 const ROOM_PREFIX = 'lounge:';
 const room = (loungeId) => `${ROOM_PREFIX}${loungeId}`;
@@ -14,11 +15,26 @@ export function publishLoungeEvent(io, event, loungeId, payload) {
 }
 const ackError = (error) => ({ ok: false, error: { code: error.code ?? 'INTERNAL_ERROR', message: error.status && error.status < 500 ? error.message : 'The request could not be completed' } });
 
-export function attachLoungeGateway(io, { repository = queueRepository, queueService = createQueueService(repository), secret = config.jwtAccessSecret, sentimentService = roomSentimentService, chatService = createChatService({ repository, sentimentService }), soundclashService = null, soundclashOptions = {} } = {}) {
+export function attachLoungeGateway(io, { repository = queueRepository, queueService = createQueueService(repository), secret = config.jwtAccessSecret, sentimentService = roomSentimentService, chatService = createChatService({ repository, sentimentService }), soundclashService = null, soundclashOptions = {}, loungeLifecycleService = defaultLoungeLifecycleService } = {}) {
   soundclashService ??= createSoundclashService({ repository, queueService, ...soundclashOptions, onEvent: (event, loungeId, payload) => publishLoungeEvent(io, event, loungeId, payload) });
   const loungeBySocket = new Map();
   const socketsByLounge = new Map();
   const joiningUsers = new Map();
+  const loungeCommandLocks = new Map();
+
+  async function serializeLoungeCommand(loungeId, operation) {
+    const previous = loungeCommandLocks.get(loungeId) ?? Promise.resolve();
+    let release;
+    const gate = new Promise((resolve) => { release = resolve; });
+    const chain = previous.then(() => gate);
+    loungeCommandLocks.set(loungeId, chain);
+    await previous;
+    try { return await operation(); }
+    finally {
+      release();
+      if (loungeCommandLocks.get(loungeId) === chain) loungeCommandLocks.delete(loungeId);
+    }
+  }
 
   io.use(async (socket, next) => {
     try {
@@ -51,12 +67,15 @@ export function attachLoungeGateway(io, { repository = queueRepository, queueSer
     }
     async function authorizedLoungeAction(callback) {
       return authorizedAction(async ({ loungeId, user }) => {
-        const lounge = await repository.findLoungeById(loungeId);
-        if (!lounge || lounge.status === 'ended') throw Object.assign(new Error('Lounge no longer exists'), { status: 404, code: 'LOUNGE_NOT_FOUND' });
-        if (!lounge.participantIds?.some((participantId) => String(participantId) === String(user.id))) {
-          throw Object.assign(new Error('Join this Lounge before using this operation'), { status: 403, code: 'LOUNGE_MEMBERSHIP_REQUIRED' });
-        }
-        return callback({ loungeId, user, lounge });
+        return serializeLoungeCommand(loungeId, async () => {
+          const lounge = await repository.findLoungeById(loungeId);
+          if (!lounge) throw Object.assign(new Error('Lounge no longer exists'), { status: 404, code: 'LOUNGE_NOT_FOUND' });
+          if (lounge.status === 'ended') throw Object.assign(new Error('This Lounge session has ended'), { status: 409, code: 'LOUNGE_ENDED' });
+          if (!lounge.participantIds?.some((participantId) => String(participantId) === String(user.id))) {
+            throw Object.assign(new Error('Join this Lounge before using this operation'), { status: 403, code: 'LOUNGE_MEMBERSHIP_REQUIRED' });
+          }
+          return callback({ loungeId, user, lounge });
+        });
       });
     }
     function command(event, handler) {
@@ -75,58 +94,65 @@ export function attachLoungeGateway(io, { repository = queueRepository, queueSer
       const candidate = await repository.findLoungeByInvite(inviteCode);
       if (!candidate) return queueService.join({ inviteCode, userId: socket.data.userId });
       const loungeId = candidate.loungeId;
-      const existingRoom = loungeBySocket.get(socket.id);
-      if (existingRoom && existingRoom !== loungeId) throw Object.assign(new Error('One socket connection may join one Lounge at a time'), { status: 409, code: 'ALREADY_IN_LOUNGE' });
-      const currentMembers = members(loungeId);
-      let pending = joiningUsers.get(loungeId);
-      if (!pending) { pending = new Set(); joiningUsers.set(loungeId, pending); }
-      const alreadyConnected = currentMembers.has(socket.data.userId);
-      const alreadyJoining = pending.has(socket.data.userId);
-      const pendingOtherUsers = [...pending].filter((id) => !currentMembers.has(id) && id !== socket.data.userId).length;
-      if (!alreadyConnected && !alreadyJoining && currentMembers.size + pendingOtherUsers >= candidate.settings.maxParticipants) {
-        if (pending.size === 0) joiningUsers.delete(loungeId);
-        throw Object.assign(new Error('The Lounge has reached its participant limit'), { status: 409, code: 'LOUNGE_FULL' });
-      }
-      if (!alreadyConnected) pending.add(socket.data.userId);
-      let joinedResult;
-      try { joinedResult = await queueService.join({ inviteCode, userId: socket.data.userId }); }
-      finally {
-        if (!alreadyConnected) pending.delete(socket.data.userId);
-        if (pending.size === 0) joiningUsers.delete(loungeId);
-      }
-      const { lounge, state: initial } = joinedResult;
-      const isFirstSocket = !currentMembers.has(socket.data.userId);
-      currentMembers.set(socket.data.userId, { displayName: socket.data.user.displayName, role: socket.data.user.role, sockets: new Set([...(currentMembers.get(socket.data.userId)?.sockets ?? []), socket.id]) });
-      socketsByLounge.set(loungeId, currentMembers);
-      loungeBySocket.set(socket.id, loungeId);
-      await socket.join(room(loungeId));
-      const state = await queueService.snapshot(lounge);
-      state.soundclash = await soundclashService.snapshot(lounge);
-      state.presence = participants(loungeId);
-      state.hostDisconnected = !hasHost(loungeId, lounge.hostUserId);
-      if (isFirstSocket) emitPresence(loungeId, socket.data.userId, 'joined', state.hostDisconnected);
-      return { loungeId, state: { ...initial, ...state } };
+      return serializeLoungeCommand(loungeId, async () => {
+        const activeCandidate = await repository.findLoungeByInvite(inviteCode);
+        if (!activeCandidate) return queueService.join({ inviteCode, userId: socket.data.userId });
+        const existingRoom = loungeBySocket.get(socket.id);
+        if (existingRoom && existingRoom !== loungeId) throw Object.assign(new Error('One socket connection may join one Lounge at a time'), { status: 409, code: 'ALREADY_IN_LOUNGE' });
+        const currentMembers = members(loungeId);
+        let pending = joiningUsers.get(loungeId);
+        if (!pending) { pending = new Set(); joiningUsers.set(loungeId, pending); }
+        const alreadyConnected = currentMembers.has(socket.data.userId);
+        const alreadyJoining = pending.has(socket.data.userId);
+        const pendingOtherUsers = [...pending].filter((id) => !currentMembers.has(id) && id !== socket.data.userId).length;
+        if (!alreadyConnected && !alreadyJoining && currentMembers.size + pendingOtherUsers >= activeCandidate.settings.maxParticipants) {
+          if (pending.size === 0) joiningUsers.delete(loungeId);
+          throw Object.assign(new Error('The Lounge has reached its participant limit'), { status: 409, code: 'LOUNGE_FULL' });
+        }
+        if (!alreadyConnected) pending.add(socket.data.userId);
+        let joinedResult;
+        try { joinedResult = await queueService.join({ inviteCode, userId: socket.data.userId }); }
+        finally {
+          if (!alreadyConnected) pending.delete(socket.data.userId);
+          if (pending.size === 0) joiningUsers.delete(loungeId);
+        }
+        const { lounge, state: initial } = joinedResult;
+        const isFirstSocket = !currentMembers.has(socket.data.userId);
+        currentMembers.set(socket.data.userId, { displayName: socket.data.user.displayName, role: socket.data.user.role, sockets: new Set([...(currentMembers.get(socket.data.userId)?.sockets ?? []), socket.id]) });
+        socketsByLounge.set(loungeId, currentMembers);
+        loungeBySocket.set(socket.id, loungeId);
+        await socket.join(room(loungeId));
+        const state = await queueService.snapshot(lounge);
+        state.soundclash = await soundclashService.snapshot(lounge);
+        state.presence = participants(loungeId);
+        state.hostDisconnected = !hasHost(loungeId, lounge.hostUserId);
+        state.isHost = String(lounge.hostUserId) === socket.data.userId;
+        if (isFirstSocket) emitPresence(loungeId, socket.data.userId, 'joined', state.hostDisconnected);
+        return { loungeId, state: { ...initial, ...state } };
+      });
     });
 
-    command('lounge.queue.add', (payload) => authorizedAction(async ({ loungeId, user }) => {
+    command('lounge.queue.add', (payload) => authorizedAction(({ loungeId, user }) => serializeLoungeCommand(loungeId, async () => {
       const joined = await repository.findLoungeById(loungeId);
       if (!joined) throw Object.assign(new Error('Lounge no longer exists'), { status: 404, code: 'LOUNGE_NOT_FOUND' });
+      if (joined.status === 'ended') throw Object.assign(new Error('This Lounge session has ended'), { status: 409, code: 'LOUNGE_ENDED' });
       if (!hasHost(loungeId, joined.hostUserId)) throw Object.assign(new Error('Queue mutations are frozen while the Host is disconnected'), { status: 409, code: 'HOST_DISCONNECTED' });
       const state = await queueService.addTrack({ lounge: joined, actor: user, trackId: payload.trackId });
       const envelopeValue = envelope('lounge.queue.update', loungeId, { queue: queueRows(state), reason: 'add' });
       io.to(room(loungeId)).emit('lounge.queue.update', envelopeValue);
       return { state };
-    }));
+    })));
 
-    command('lounge.queue.vote', (payload) => authorizedAction(async ({ loungeId, user }) => {
+    command('lounge.queue.vote', (payload) => authorizedAction(({ loungeId, user }) => serializeLoungeCommand(loungeId, async () => {
       if (!['-1', '0', '1', -1, 0, 1].includes(payload.value)) throw Object.assign(new Error('value must be -1, 0, or 1'), { status: 400, code: 'VALIDATION_ERROR' });
       const joined = await repository.findLoungeById(loungeId);
       if (!joined) throw Object.assign(new Error('Lounge no longer exists'), { status: 404, code: 'LOUNGE_NOT_FOUND' });
+      if (joined.status === 'ended') throw Object.assign(new Error('This Lounge session has ended'), { status: 409, code: 'LOUNGE_ENDED' });
       if (!hasHost(loungeId, joined.hostUserId)) throw Object.assign(new Error('Queue mutations are frozen while the Host is disconnected'), { status: 409, code: 'HOST_DISCONNECTED' });
       const state = await queueService.vote({ lounge: joined, actor: user, trackId: payload.trackId, value: Number(payload.value) });
       io.to(room(loungeId)).emit('lounge.queue.update', envelope('lounge.queue.update', loungeId, { queue: queueRows(state), reason: 'vote' }));
       return { state };
-    }));
+    })));
 
     command('lounge.sync.request', () => authorizedAction(async ({ loungeId }) => {
       const joined = await repository.findLoungeById(loungeId);
@@ -137,6 +163,26 @@ export function attachLoungeGateway(io, { repository = queueRepository, queueSer
       state.hostDisconnected = !hasHost(loungeId, joined.hostUserId);
       return { state };
     }));
+
+    command('lounge.session.end', (payload) => authorizedAction(({ loungeId, user }) => serializeLoungeCommand(loungeId, async () => {
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload) || Object.keys(payload).length !== 0) {
+        throw Object.assign(new Error('Payload must be empty'), { status: 400, code: 'VALIDATION_ERROR' });
+      }
+      const currentLounge = await repository.findLoungeById(loungeId);
+      if (!currentLounge) throw Object.assign(new Error('Lounge no longer exists'), { status: 404, code: 'LOUNGE_NOT_FOUND' });
+      if (user.role !== 'Host' || String(currentLounge.hostUserId) !== String(user.id)) {
+        throw Object.assign(new Error('Only the owning Host can end this session'), { status: 403, code: 'LOUNGE_HOST_REQUIRED' });
+      }
+      await soundclashService.closeLounge?.(loungeId);
+      await queueService.flush(loungeId);
+      await chatService.flush(loungeId);
+      const result = await loungeLifecycleService.end({ loungeId, userId: user.id, userRole: user.role });
+      if (!result.alreadyEnded) {
+        const eventPayload = { endedAt: result.lounge.endedAt.toISOString(), summary: result.lounge.sessionSummary };
+        io.to(room(loungeId)).emit('lounge.session.ended', envelope('lounge.session.ended', loungeId, eventPayload));
+      }
+      return { alreadyEnded: result.alreadyEnded, endedAt: result.lounge.endedAt.toISOString(), summary: result.lounge.sessionSummary };
+    })));
 
     command('lounge.soundclash.submit', (payload) => authorizedLoungeAction(async ({ loungeId, user, lounge }) => {
       if (!payload || typeof payload !== 'object' || Array.isArray(payload) || Object.keys(payload).some((key) => key !== 'trackId')) throw Object.assign(new Error('Payload must contain only trackId'), { status: 400, code: 'VALIDATION_ERROR' });
