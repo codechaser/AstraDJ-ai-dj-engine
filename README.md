@@ -11,9 +11,9 @@ AstraDJ is a reference-led music experience. Its existing React + Vite frontend 
 - Database: MongoDB + Mongoose
 - Real-time gateway: Socket.io (authenticated Lounge join, shared queue, presence, sync and reconnect)
 - Authentication: JWT access token plus rotating refresh cookie
-- Tests: Jest + Supertest, Playwright for real-browser audio E2E
+- Tests: Jest + Supertest, Playwright for audio and settings E2E
 
-Account/Profile, Search, shared Lounge queue, live chat, sentiment, Soundclash, recommendation shelves, AI DJ Q&A/segue actions, and Lounge analytics use existing backend APIs or Socket.io events. Home artist/vibe/trending content and Playlist/Artist/Album details remain explicitly marked sample previews; settings are display-only. No Spotify infrastructure, accounts, catalog, or user data are used.
+Account/Profile, Search, shared Lounge queue, live chat, sentiment, Soundclash, recommendation shelves, AI DJ Q&A/segue actions, Lounge analytics, and the supported audio preferences use existing backend APIs or Socket.io events. Home artist/vibe/trending content and Playlist/Artist/Album details remain explicitly marked sample previews. Settings persists streaming quality, crossfade, normalize volume, lyrics visibility, AI DJ commentary, download quality, and autoplay choices per authenticated account; those choices are not all wired to playback behavior. No Spotify infrastructure, accounts, catalog, or user data are used.
 
 ## Run the frontend
 
@@ -68,3 +68,5 @@ For local Vite development, set `VITE_DEV_API_TARGET` if the API is not at the d
 Install the root dependencies and Chrome, create `server/.env.test` from `server/.env.test.example`, and set `MONGODB_TEST_URI` to a local, disposable MongoDB database whose name contains `test`. Run `npm run test:e2e:audio` from the repository root. The runner refuses remote or non-test database targets, creates a uniquely named `astradj_e2e_*` database, seeds it, starts the API and Vite with test-only credentials, then drops only that database after the run. The test registers throwaway accounts through the UI and uses actual Chrome Ogg playback at normal speed; it waits for the real track end, then verifies the authenticated interaction/history and isolation. It requires Chrome and local MongoDB to be available.
 
 To verify the Lounge lifecycle, run `npm run test:e2e:lounge` with the same safe local `.env.test` setup. This creates a per-run Host account in an isolated test database, signs in through the UI, creates and joins a catalog-backed Lounge, reloads/rejoins while active, and joins a second Listener. It then ends the Lounge from the Host UI, verifies both connected clients receive the event, checks the persisted end summary and owner/member history, and confirms an unrelated account cannot join or read it. The generated test database is dropped after the run.
+
+To verify audio preference persistence, run `npm run test:e2e:settings` with the same local `.env.test` setup. Playwright registers accounts through the UI, changes settings, reloads, signs out/in, verifies another account starts with its own defaults, and checks a simulated failed-save response is shown as an error.

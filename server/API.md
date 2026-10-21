@@ -21,6 +21,8 @@ Home and AI DJ recommendation shelves render only `GET /api/v1/recommendations` 
 | `POST /api/v1/auth/refresh` | Refresh cookie | Rotate refresh token and issue an access JWT |
 | `POST /api/v1/auth/logout` | Refresh cookie | Revoke the presented refresh token |
 | `GET /api/v1/auth/me` | Bearer JWT | Current user profile and server-side role |
+| `GET /api/v1/auth/me/preferences` | Bearer JWT | Read the caller's saved audio preferences |
+| `PATCH /api/v1/auth/me/preferences` | Bearer JWT | Update supported audio preferences for the caller only |
 | `GET /api/v1/tracks?q=&limit=&skip=` | Public | Validated track catalog page |
 | `GET /api/v1/tracks/:trackId/acoustic-profile` | Public | Acoustic vector and metadata timeline |
 | `POST /api/v1/tracks` | Admin | Add a validated acoustic profile |
@@ -32,6 +34,12 @@ Home and AI DJ recommendation shelves render only `GET /api/v1/recommendations` 
 | `GET /api/v1/dashboard/playback-history?limit=20` | Bearer JWT | Return the caller's own explicitly self-reported Interaction history |
 | `GET /api/v1/dashboard/lounge-history?limit=50` | Bearer JWT | Return ended Lounge summaries where the caller is the Host or a persisted participant |
 | `GET /api/v1/dashboard/lounges/:id/analytics` | Bearer JWT + Lounge membership | Aggregate available persisted Lounge metrics; unavailable metrics are returned as `null` |
+
+### User audio preferences
+
+Settings are stored in the existing authenticated User document under `preferences.audio`; no separate preferences collection is used. Both routes resolve the account from the access JWT and expose no user-ID parameter, so a caller cannot read or update another account's settings.
+
+`GET /api/v1/auth/me/preferences` returns `{ "preferences": { "audio": { ... } } }`. If a preference has not yet been explicitly changed, the server returns the current product default. `PATCH /api/v1/auth/me/preferences` accepts a partial update shaped as `{ "audio": { "streamingQuality": "Normal (160 kbps)", "crossfadeSeconds": 12 } }`; the only accepted keys are `streamingQuality` (`High (320 kbps)`, `Normal (160 kbps)`, `Low (96 kbps)`), `crossfadeSeconds` (`0`, `6`, or `12`), `normalizeVolume`, `showLyrics`, `aiDjCommentary`, `downloadQuality` (`High` or `Normal`), and `autoPlay`. Boolean controls require JSON booleans. Unknown fields, empty updates, invalid types, and out-of-range values return `400 INVALID_PREFERENCES`. The response returns the merged persisted preference object. This records user intent; streaming quality, crossfade DSP, volume normalization, downloads, lyric rendering, AI commentary toggling, and autoplay behavior are not yet wired into playback.
 
 ### Track audio assets
 

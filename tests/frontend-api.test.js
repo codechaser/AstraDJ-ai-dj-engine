@@ -1,6 +1,6 @@
 import test, { afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { apiRequest, askTrackQuestion, clearAccessToken, createLounge, getLoungeAnalytics, getLoungeHistory, getRecommendations, login, logout, registerAccount, requestSegue, restoreSession, searchTracks } from '../src/api/client.js';
+import { apiRequest, askTrackQuestion, clearAccessToken, createLounge, getLoungeAnalytics, getLoungeHistory, getPreferences, getRecommendations, login, logout, registerAccount, requestSegue, restoreSession, searchTracks, updatePreferences } from '../src/api/client.js';
 import { buildCompletionInteraction } from '../src/api/playbackEvents.js';
 import { connectToLounge } from '../src/api/loungeConnection.js';
 import { subscribeToLoungeEvents } from '../src/api/loungeEvents.js';
@@ -27,6 +27,23 @@ test('surfaces structured invalid-credential errors without retrying login', asy
   globalThis.fetch = async () => { calls += 1; return response({ error: { code: 'INVALID_CREDENTIALS', message: 'Email or password is incorrect' } }, 401); };
   await assert.rejects(login({ email: 'bad@example.test', password: 'wrong' }), (error) => error.code === 'INVALID_CREDENTIALS' && error.status === 401);
   assert.equal(calls, 1);
+});
+
+test('audio preferences use the authenticated API and rejected saves surface as errors', async () => {
+  const calls = [];
+  globalThis.fetch = async (url, options) => {
+    calls.push({ url, options });
+    if (url.endsWith('/auth/login')) return response({ user: { id: 'settings-user' }, accessToken: 'settings-token' });
+    if (options.method === 'PATCH') return response({ error: { code: 'INVALID_PREFERENCES', message: 'Unsupported setting' } }, 400);
+    return response({ preferences: { audio: { autoPlay: false } } });
+  };
+  await login({ email: 'settings@example.test', password: 'test-password' });
+  assert.deepEqual(await getPreferences(), { preferences: { audio: { autoPlay: false } } });
+  await assert.rejects(updatePreferences({ autoPlay: true }), (error) => error.code === 'INVALID_PREFERENCES' && error.message === 'Unsupported setting');
+  assert.equal(calls[1].options.headers.Authorization, 'Bearer settings-token');
+  assert.equal(calls[2].url, '/api/v1/auth/me/preferences');
+  assert.equal(calls[2].options.method, 'PATCH');
+  assert.deepEqual(JSON.parse(calls[2].options.body), { audio: { autoPlay: true } });
 });
 
 test('registration sends only account fields and accepts the server-derived Listener role', async () => {

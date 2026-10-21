@@ -13,6 +13,7 @@ const frontendPort = 4318;
 const backendOrigin = `http://127.0.0.1:${backendPort}`;
 const frontendOrigin = `http://127.0.0.1:${frontendPort}`;
 const loungeMode = process.argv.includes('--lounge');
+const settingsMode = process.argv.includes('--settings');
 
 function parseEnvFile(path) {
   const values = {};
@@ -134,7 +135,7 @@ try {
   }
 
   const playwrightCli = join(root, 'node_modules/@playwright/test/cli.js');
-  const config = loungeMode ? 'playwright.lounge-e2e.config.js' : 'playwright.audio-e2e.config.js';
+  const config = loungeMode ? 'playwright.lounge-e2e.config.js' : settingsMode ? 'playwright.settings-e2e.config.js' : 'playwright.audio-e2e.config.js';
   run(process.execPath, [playwrightCli, 'test', `--config=${config}`], { cwd: root, env: runtimeEnv });
   exitCode = 0;
 } catch (error) {

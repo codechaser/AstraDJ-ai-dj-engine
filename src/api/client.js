@@ -99,6 +99,14 @@ export async function getPlaybackHistory(limit = 20) {
   return apiRequest(`/dashboard/playback-history?limit=${limit}`);
 }
 
+export async function getPreferences() {
+  return apiRequest('/auth/me/preferences');
+}
+
+export async function updatePreferences(audio) {
+  return apiRequest('/auth/me/preferences', { method: 'PATCH', body: JSON.stringify({ audio }) });
+}
+
 export async function getRecommendations(limit = 10) {
   return apiRequest(`/recommendations?limit=${limit}`);
 }

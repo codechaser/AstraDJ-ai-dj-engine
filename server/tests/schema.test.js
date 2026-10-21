@@ -12,6 +12,13 @@ test('User schema restricts accounts to the four defined roles', () => {
   expect(CAMELOT_KEYS).toHaveLength(24);
 });
 
+test('User schema restricts persisted audio preferences to supported values', () => {
+  const user = new User({ email: 'settings@example.com', displayName: 'Settings', passwordHash: 'hash' });
+  expect(user.preferences.audio).toMatchObject({ streamingQuality: 'High (320 kbps)', crossfadeSeconds: 6, autoPlay: true });
+  user.preferences.audio.crossfadeSeconds = 5;
+  expect(user.validateSync().errors['preferences.audio.crossfadeSeconds']).toBeDefined();
+});
+
 test('Track schema validates acoustic range, Camelot key, and timeline metadata', () => {
   const invalid = new Track({
     trackId: 't_bad', title: 'Bad', artist: 'Artist', durationSeconds: 120,

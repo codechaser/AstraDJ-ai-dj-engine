@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test": "node --test tests/frontend-api.test.js",
     "test:e2e:audio": "node scripts/run-audio-e2e.mjs",
-    "test:e2e:lounge": "node scripts/run-audio-e2e.mjs --lounge"
+    "test:e2e:lounge": "node scripts/run-audio-e2e.mjs --lounge",
+    "test:e2e:settings": "node scripts/run-audio-e2e.mjs --settings"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",

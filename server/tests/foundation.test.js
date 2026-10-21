@@ -26,6 +26,21 @@ const User = {
   }),
   findOne: jest.fn((filter) => new Query(() => [...users.values()].find((u) => u.email === filter.email) ?? null)),
   findById: jest.fn((id) => new Query(() => users.get(String(id)) ?? null)),
+  findByIdAndUpdate: jest.fn((id, update) => new Query(() => {
+    const user = users.get(String(id));
+    if (!user) return null;
+    for (const [path, value] of Object.entries(update.$set ?? {})) {
+      const parts = path.split('.');
+      let target = user;
+      while (parts.length > 1) {
+        const part = parts.shift();
+        target[part] ??= {};
+        target = target[part];
+      }
+      target[parts[0]] = value;
+    }
+    return user;
+  })),
 };
 const RefreshToken = {
   create: jest.fn(async (data) => {
@@ -141,6 +156,48 @@ describe('authentication HTTP contract', () => {
     expect(invalid.body.error.code).toBe('VALIDATION_ERROR');
     const login = await request(app).post('/api/v1/auth/login').send({ email: 'none@example.com', password: 'wrong-password' });
     expect(login.status).toBe(401);
+  });
+});
+
+describe('authenticated user audio preferences contract', () => {
+  async function account(email) {
+    const created = await request(app).post('/api/v1/auth/register').send({ email, displayName: email.split('@')[0], password: 'correct-horse-42' });
+    return { token: created.body.accessToken, id: created.body.user.id };
+  }
+
+  test('requires authentication and reads defaults, then persists only the authenticated account fields', async () => {
+    expect((await request(app).get('/api/v1/auth/me/preferences')).status).toBe(401);
+    const first = await account('settings-a@example.com');
+    const second = await account('settings-b@example.com');
+    const defaults = await request(app).get('/api/v1/auth/me/preferences').set('Authorization', `Bearer ${first.token}`);
+    expect(defaults.status).toBe(200);
+    expect(defaults.body.preferences.audio).toMatchObject({ streamingQuality: 'High (320 kbps)', crossfadeSeconds: 6, autoPlay: true });
+    const saved = await request(app).patch('/api/v1/auth/me/preferences').set('Authorization', `Bearer ${first.token}`).send({ audio: { streamingQuality: 'Normal (160 kbps)', crossfadeSeconds: 12, normalizeVolume: false } });
+    expect(saved.status).toBe(200);
+    expect(saved.body.preferences.audio).toMatchObject({ streamingQuality: 'Normal (160 kbps)', crossfadeSeconds: 12, normalizeVolume: false, showLyrics: true });
+    const isolated = await request(app).get('/api/v1/auth/me/preferences').set('Authorization', `Bearer ${second.token}`);
+    expect(isolated.body.preferences.audio).toMatchObject({ streamingQuality: 'High (320 kbps)', crossfadeSeconds: 6, normalizeVolume: true });
+    expect([...users.values()].find((user) => user.id === first.id).preferences.audio.streamingQuality).toBe('Normal (160 kbps)');
+    expect([...users.values()].find((user) => user.id === second.id).preferences).toBeUndefined();
+  });
+
+  test('rejects unsupported fields, invalid values, and empty patches without modifying preferences', async () => {
+    const { token, id } = await account('settings-invalid@example.com');
+    const url = '/api/v1/auth/me/preferences';
+    const auth = { Authorization: `Bearer ${token}` };
+    for (const body of [
+      { audio: { streamingQuality: 'Lossless' } },
+      { audio: { crossfadeSeconds: 7 } },
+      { audio: { autoPlay: 'yes' } },
+      { audio: { hackedField: 'value' } },
+      { audio: {} },
+      { role: 'Admin', audio: { autoPlay: false } },
+    ]) {
+      const response = await request(app).patch(url).set(auth).send(body);
+      expect(response.status).toBe(400);
+      expect(response.body.error.code).toBe('INVALID_PREFERENCES');
+    }
+    expect(users.get(id).preferences).toBeUndefined();
   });
 });
 
