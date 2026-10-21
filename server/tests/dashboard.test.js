@@ -6,17 +6,19 @@ describe('dashboard history and Lounge analytics', () => {
   const lounge = {
     loungeId: 'lg_123456789abc', hostUserId: 'host-1', participantIds: ['host-1', 'listener-1'],
     status: 'ended', createdAt: new Date('2026-01-01T00:00:00Z'), endedAt: new Date('2026-01-01T00:10:00Z'),
+    analyticsTrackingVersion: 0,
   };
   const repo = {
     listInteractionsForUser: jest.fn(async (userId) => [{ _id: 'i-1', trackId: 't_2001', playedSeconds: 40, completed: false, liked: false, createdAt: new Date('2026-01-02T00:00:00Z'), source: 'self_reported' }]),
     findLounge: jest.fn(async () => lounge),
     listQueueEvents: jest.fn(async () => [
-      { type: 'track.added' }, { type: 'soundclash.opened' }, { type: 'soundclash.resolved' },
+      { type: 'track.added' }, { type: 'soundclash.opened', payload: { battleId: 'battle-1' } }, { type: 'soundclash.resolved' },
     ]),
     listSentimentMessages: jest.fn(async () => [
       { createdAt: new Date('2026-01-01T00:01:00Z'), sentimentScore: 1, sentimentBucket: 'positive' },
       { createdAt: new Date('2026-01-01T00:02:00Z'), sentimentScore: 0, sentimentBucket: 'negative' },
     ]),
+    listLoungeMetricEvents: jest.fn(async () => []),
   };
   const service = createDashboardService(repo);
 

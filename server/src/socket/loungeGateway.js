@@ -6,6 +6,8 @@ import { createChatService } from '../services/chatService.js';
 import { roomSentimentService } from '../services/roomSentimentService.js';
 import { createSoundclashService } from '../services/soundclashService.js';
 import { loungeLifecycleService as defaultLoungeLifecycleService } from '../services/loungeLifecycleService.js';
+import { loungeMetricEventService as defaultLoungeMetricEventService } from '../services/loungeMetricEventService.js';
+import { loungeCommandCoordinator } from '../services/loungeCommandCoordinator.js';
 
 const ROOM_PREFIX = 'lounge:';
 const room = (loungeId) => `${ROOM_PREFIX}${loungeId}`;
@@ -15,26 +17,12 @@ export function publishLoungeEvent(io, event, loungeId, payload) {
 }
 const ackError = (error) => ({ ok: false, error: { code: error.code ?? 'INTERNAL_ERROR', message: error.status && error.status < 500 ? error.message : 'The request could not be completed' } });
 
-export function attachLoungeGateway(io, { repository = queueRepository, queueService = createQueueService(repository), secret = config.jwtAccessSecret, sentimentService = roomSentimentService, chatService = createChatService({ repository, sentimentService }), soundclashService = null, soundclashOptions = {}, loungeLifecycleService = defaultLoungeLifecycleService } = {}) {
+export function attachLoungeGateway(io, { repository = queueRepository, queueService = createQueueService(repository), secret = config.jwtAccessSecret, sentimentService = roomSentimentService, chatService = createChatService({ repository, sentimentService }), soundclashService = null, soundclashOptions = {}, loungeLifecycleService = defaultLoungeLifecycleService, loungeMetricEventService = defaultLoungeMetricEventService } = {}) {
   soundclashService ??= createSoundclashService({ repository, queueService, ...soundclashOptions, onEvent: (event, loungeId, payload) => publishLoungeEvent(io, event, loungeId, payload) });
   const loungeBySocket = new Map();
   const socketsByLounge = new Map();
   const joiningUsers = new Map();
-  const loungeCommandLocks = new Map();
-
-  async function serializeLoungeCommand(loungeId, operation) {
-    const previous = loungeCommandLocks.get(loungeId) ?? Promise.resolve();
-    let release;
-    const gate = new Promise((resolve) => { release = resolve; });
-    const chain = previous.then(() => gate);
-    loungeCommandLocks.set(loungeId, chain);
-    await previous;
-    try { return await operation(); }
-    finally {
-      release();
-      if (loungeCommandLocks.get(loungeId) === chain) loungeCommandLocks.delete(loungeId);
-    }
-  }
+  const serializeLoungeCommand = (loungeId, operation) => loungeCommandCoordinator.run(loungeId, operation);
 
   io.use(async (socket, next) => {
     try {
@@ -52,8 +40,9 @@ export function attachLoungeGateway(io, { repository = queueRepository, queueSer
   const members = (loungeId) => socketsByLounge.get(loungeId) ?? new Map();
   const participants = (loungeId) => [...members(loungeId)].map(([userId, entry]) => ({ userId, displayName: entry.displayName, role: entry.role, connected: true }));
   const hasHost = (loungeId, hostUserId) => members(loungeId).has(String(hostUserId));
-  const emitPresence = (loungeId, participantId, action, hostDisconnected) => {
+  const emitPresence = async (loungeId, participantId, action, hostDisconnected) => {
     const payload = { participantId, action, participantCount: members(loungeId).size, hostDisconnected };
+    await loungeMetricEventService.recordPresence({ loungeId, userId: participantId, action, participantCount: payload.participantCount });
     io.to(room(loungeId)).emit('lounge.presence.update', envelope('lounge.presence.update', loungeId, payload));
   };
 
@@ -127,7 +116,7 @@ export function attachLoungeGateway(io, { repository = queueRepository, queueSer
         state.presence = participants(loungeId);
         state.hostDisconnected = !hasHost(loungeId, lounge.hostUserId);
         state.isHost = String(lounge.hostUserId) === socket.data.userId;
-        if (isFirstSocket) emitPresence(loungeId, socket.data.userId, 'joined', state.hostDisconnected);
+        if (isFirstSocket) await emitPresence(loungeId, socket.data.userId, 'joined', state.hostDisconnected);
         return { loungeId, state: { ...initial, ...state } };
       });
     });
@@ -238,16 +227,20 @@ export function attachLoungeGateway(io, { repository = queueRepository, queueSer
     socket.on('disconnect', async () => {
       const loungeId = loungeBySocket.get(socket.id);
       if (!loungeId) return;
-      loungeBySocket.delete(socket.id);
-      const currentMembers = members(loungeId);
-      const entry = currentMembers.get(socket.data.userId);
-      if (!entry) return;
-      entry.sockets.delete(socket.id);
-      if (entry.sockets.size === 0) {
-        currentMembers.delete(socket.data.userId);
-        const lounge = await repository.findLoungeById(loungeId);
-        emitPresence(loungeId, socket.data.userId, 'left', lounge ? !hasHost(loungeId, lounge.hostUserId) : true);
-      }
+      try {
+        await serializeLoungeCommand(loungeId, async () => {
+          loungeBySocket.delete(socket.id);
+          const currentMembers = members(loungeId);
+          const entry = currentMembers.get(socket.data.userId);
+          if (!entry) return;
+          entry.sockets.delete(socket.id);
+          if (entry.sockets.size === 0) {
+            currentMembers.delete(socket.data.userId);
+            const lounge = await repository.findLoungeById(loungeId);
+            if (lounge?.status === 'live') await emitPresence(loungeId, socket.data.userId, 'left', !hasHost(loungeId, lounge.hostUserId));
+          }
+        });
+      } catch { /* A disconnected socket cannot receive an error; the next analytics read reports incomplete sources. */ }
     });
   });
   return {

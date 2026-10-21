@@ -24,6 +24,7 @@ export async function createLounge({ input, hostUserId }) {
     status: 'scheduled',
     participantIds: [hostUserId],
     createdAt: now,
+    analyticsTrackingVersion: 1,
     settings: { maxParticipants, bpmTolerancePct, soundclashEnabled, aiVerbosity },
   });
 }

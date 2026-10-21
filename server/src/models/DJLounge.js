@@ -18,6 +18,10 @@ const loungeSchema = new mongoose.Schema({
   startedAt: { type: Date, default: null },
   endedAt: { type: Date, default: null },
   sessionSummary: { type: mongoose.Schema.Types.Mixed, default: null },
+  // Version 1 means presence and AI question analytics have complete event coverage
+  // from this Lounge's creation. Legacy documents remain explicitly unavailable.
+  analyticsTrackingVersion: { type: Number, default: 0 },
+  sessionEventSeq: { type: Number, default: 0, min: 0 },
   settings: {
     maxParticipants: { type: Number, required: true, min: 2, max: 50 },
     aiVerbosity: { type: String, enum: ['low', 'normal', 'high'], default: 'normal' },

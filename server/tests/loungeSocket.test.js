@@ -114,6 +114,7 @@ let sentimentService;
 let soundclashService;
 let publishAnnouncement;
 let loungeLifecycleService;
+let loungeMetricEventService;
 let sockets;
 
 beforeEach(async () => {
@@ -130,9 +131,10 @@ beforeEach(async () => {
   };
   queueService = createQueueService(repository, { voteFlushMs: 30_000 });
   sentimentService = createRoomSentimentService();
+  loungeMetricEventService = { events: [], async recordPresence(event) { this.events.push(structuredClone(event)); } };
   server = createServer();
   ioServer = new Server(server, { transports: ['websocket'] });
-  ({ chatService, soundclashService, publishAnnouncement } = attachLoungeGateway(ioServer, { repository, queueService, secret, sentimentService, loungeLifecycleService, soundclashOptions: { voteDurationMs: 160 } }));
+  ({ chatService, soundclashService, publishAnnouncement } = attachLoungeGateway(ioServer, { repository, queueService, secret, sentimentService, loungeLifecycleService, loungeMetricEventService, soundclashOptions: { voteDurationMs: 160 } }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   port = server.address().port;
   sockets = [];
@@ -152,6 +154,13 @@ test('authenticated Host and Listener join the invite-authorized Lounge', async 
   expect(h.ok).toBe(true); expect(l.ok).toBe(true);
   expect(l.state.nowPlaying.trackId).toBe('t_2001');
   expect(l.state.hostDisconnected).toBe(false);
+});
+
+test('rejoining the same socket does not persist a duplicate participant join event', async () => {
+  const host = client(uidHost);
+  expect((await join(host)).ok).toBe(true);
+  expect((await join(host)).ok).toBe(true);
+  expect(loungeMetricEventService.events).toEqual([{ loungeId: 'lg_123456789abc', userId: uidHost, action: 'joined', participantCount: 1 }]);
 });
 
 test('Host ends once, participants receive an isolated lifecycle envelope, and ended Lounge mutations and joins are rejected', async () => {

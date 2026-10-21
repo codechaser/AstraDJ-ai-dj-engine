@@ -2,6 +2,7 @@ import { ChatMessage } from '../models/ChatMessage.js';
 import { DJLounge } from '../models/DJLounge.js';
 import { Interaction } from '../models/Interaction.js';
 import { QueueEvent } from '../models/QueueEvent.js';
+import { LoungeMetricEvent } from '../models/LoungeMetricEvent.js';
 
 export const dashboardRepository = {
   listInteractionsForUser(userId, limit) {
@@ -12,5 +13,9 @@ export const dashboardRepository = {
   listSentimentMessages(loungeId) {
     return ChatMessage.find({ loungeId }).sort({ createdAt: 1, messageId: 1 })
       .select('createdAt sentimentScore sentimentBucket').lean();
+  },
+  listLoungeMetricEvents(loungeId) {
+    return LoungeMetricEvent.find({ loungeId }).sort({ seq: 1 })
+      .select('seq type userId requestId participantCount createdAt').lean();
   },
 };

@@ -3,6 +3,7 @@ import { Track, CAMELOT_KEYS } from '../src/models/Track.js';
 import { DJLounge } from '../src/models/DJLounge.js';
 import { QueueEvent } from '../src/models/QueueEvent.js';
 import { ChatMessage } from '../src/models/ChatMessage.js';
+import { LoungeMetricEvent } from '../src/models/LoungeMetricEvent.js';
 import { Interaction } from '../src/models/Interaction.js';
 
 test('User schema restricts accounts to the four defined roles', () => {
@@ -64,6 +65,17 @@ test('ChatMessage validates sanitized bounded text, sentiment bucket, and messag
   expect(valid.validateSync()).toBeUndefined();
   valid.sentimentBucket = 'very positive';
   expect(valid.validateSync().errors.sentimentBucket).toBeDefined();
+});
+
+test('LoungeMetricEvent stores only typed, sequence-ordered analytics fields', () => {
+  const valid = new LoungeMetricEvent({
+    eventId: 'e54eb334-2b10-4dc1-9e9d-9ccf01713452', loungeId: 'lg_123456789abc', seq: 1,
+    type: 'ai.question.asked', userId: '507f1f77bcf86cd799439011', requestId: 'request-0001',
+  });
+  expect(valid.validateSync()).toBeUndefined();
+  expect(valid.toObject()).not.toHaveProperty('question');
+  valid.type = 'chat.message';
+  expect(valid.validateSync().errors.type).toBeDefined();
 });
 
 test('Interaction schema stores only bounded, typed listening records and private co-listener references', () => {

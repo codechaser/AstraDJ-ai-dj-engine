@@ -6,6 +6,7 @@ const camelotKeys = Array.from({ length: 12 }, (_, index) => [`${index + 1}A`, `
 const users = new Map();
 const lounges = new Map();
 const tracks = new Map();
+const metricEvents = [];
 
 class Query {
   constructor(value) { this.value = value; }
@@ -24,12 +25,22 @@ const Track = {
 };
 const DJLounge = {
   findOne: jest.fn(({ loungeId }) => new Query(lounges.get(loungeId) ?? null)),
+  findOneAndUpdate: jest.fn(({ loungeId }, update) => {
+    const lounge = lounges.get(loungeId);
+    if (lounge) lounge.sessionEventSeq = (lounge.sessionEventSeq ?? 0) + update.$inc.sessionEventSeq;
+    return new Query(lounge ?? null);
+  }),
+};
+const LoungeMetricEvent = {
+  findOne: jest.fn(({ loungeId, requestId }) => new Query(metricEvents.find((event) => event.loungeId === loungeId && event.requestId === requestId) ?? null)),
+  create: jest.fn(async (event) => { metricEvents.push(structuredClone(event)); return event; }),
 };
 
 await jest.unstable_mockModule('../src/models/User.js', () => ({ User }));
 await jest.unstable_mockModule('../src/models/RefreshToken.js', () => ({ RefreshToken }));
 await jest.unstable_mockModule('../src/models/Track.js', () => ({ Track, CAMELOT_KEYS: camelotKeys }));
 await jest.unstable_mockModule('../src/models/DJLounge.js', () => ({ DJLounge }));
+await jest.unstable_mockModule('../src/models/LoungeMetricEvent.js', () => ({ LoungeMetricEvent }));
 
 const { app } = await import('../src/app.js');
 const { createSegueService, segueService } = await import('../src/services/segueService.js');
@@ -69,7 +80,7 @@ function accessToken(userId) {
 }
 
 beforeEach(() => {
-  users.clear(); lounges.clear(); tracks.clear();
+  users.clear(); lounges.clear(); tracks.clear(); metricEvents.length = 0;
   users.set(memberId, { _id: memberId, id: memberId, email: 'member@example.invalid', displayName: 'Lounge Member', role: 'Listener' });
   users.set(outsiderId, { _id: outsiderId, id: outsiderId, email: 'outsider@example.invalid', displayName: 'Outsider', role: 'Listener' });
   lounges.set(loungeId, {
@@ -191,15 +202,20 @@ test('successful segue REST request publishes the exact Lounge-scoped PRD announ
 test('track Q&A REST contract authenticates, enforces Lounge membership, validates input, and grounds answers', async () => {
   const url = `/api/v1/lounges/${loungeId}/ai/ask`;
   expect((await request(app).post(url).send({ question: 'What is the BPM?' })).status).toBe(401);
-  const outsider = await request(app).post(url).set('Authorization', `Bearer ${accessToken(outsiderId)}`).send({ question: 'What is the BPM?' });
+  const outsider = await request(app).post(url).set('Authorization', `Bearer ${accessToken(outsiderId)}`).set('Idempotency-Key', 'request-0000').send({ question: 'What is the BPM?' });
   expect(outsider.status).toBe(403);
-  const oversized = await request(app).post(url).set('Authorization', `Bearer ${accessToken(memberId)}`).send({ question: 'x'.repeat(501) });
+  const oversized = await request(app).post(url).set('Authorization', `Bearer ${accessToken(memberId)}`).set('Idempotency-Key', 'request-0001').send({ question: 'x'.repeat(501) });
   expect(oversized.status).toBe(400);
-  const unexpectedField = await request(app).post(url).set('Authorization', `Bearer ${accessToken(memberId)}`).send({ question: 'What is the BPM?', loungeId: 'lg_otherroom' });
+  const unexpectedField = await request(app).post(url).set('Authorization', `Bearer ${accessToken(memberId)}`).set('Idempotency-Key', 'request-0001').send({ question: 'What is the BPM?', loungeId: 'lg_otherroom' });
   expect(unexpectedField.status).toBe(400);
-  const bpm = await request(app).post(url).set('Authorization', `Bearer ${accessToken(memberId)}`).send({ question: 'What is the BPM?' });
+  expect((await request(app).post(url).set('Authorization', `Bearer ${accessToken(memberId)}`).send({ question: 'What is the BPM?' })).status).toBe(400);
+  const bpm = await request(app).post(url).set('Authorization', `Bearer ${accessToken(memberId)}`).set('Idempotency-Key', 'request-0001').send({ question: 'What is the BPM?' });
   expect(bpm.status).toBe(200);
   expect(bpm.body).toMatchObject({ trackId: 't_2001', answer: 'The catalog lists the BPM as 124 BPM.', sourceEvents: ['t_2001#acoustic.bpm'], grounded: true, provider: 'deterministic_metadata_retrieval' });
-  const unsupported = await request(app).post(url).set('Authorization', `Bearer ${accessToken(memberId)}`).send({ question: 'What are the lyrics about?' });
+  const unsupported = await request(app).post(url).set('Authorization', `Bearer ${accessToken(memberId)}`).set('Idempotency-Key', 'request-0002').send({ question: 'What are the lyrics about?' });
   expect(unsupported.body).toMatchObject({ grounded: false, sourceEvents: [] });
+  const retry = await request(app).post(url).set('Authorization', `Bearer ${accessToken(memberId)}`).set('Idempotency-Key', 'request-0001').send({ question: 'What is the BPM?' });
+  expect(retry.status).toBe(200);
+  expect(metricEvents.filter((event) => event.type === 'ai.question.asked')).toHaveLength(2);
+  expect(metricEvents[0]).not.toHaveProperty('question');
 });

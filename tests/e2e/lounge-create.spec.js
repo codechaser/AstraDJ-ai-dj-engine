@@ -100,7 +100,7 @@ test('Host creates a Lounge from the catalog and another authenticated listener 
     expect(storedEndedLounge.participantIds).toHaveLength(2);
     expect(storedEndedLounge.sessionSummary).toMatchObject({
       durationSeconds: expect.any(Number), queueEventCount: 0, soundclashBattles: 0,
-      chatMessageCount: 0, sentimentTimeline: [], peakConcurrentParticipants: null, aiDjQuestionCount: null,
+      chatMessageCount: 0, sentimentTimeline: [], peakConcurrentParticipants: 2, aiDjQuestionCount: 0, unavailableMetrics: {},
     });
     expect(await DJLounge.countDocuments({ loungeId: created.loungeId, status: 'ended' })).toBe(1);
   } finally {
@@ -110,8 +110,10 @@ test('Host creates a Lounge from the catalog and another authenticated listener 
   await hostPage.goto('/profile', { waitUntil: 'domcontentloaded' });
   await expect(hostPage.getByRole('heading', { name: 'Lounge History' })).toBeVisible();
   await expect(hostPage.getByText('After Work House', { exact: true })).toBeVisible();
+  await expect(hostPage.getByText('Peak 2 · 0 AI questions · 0 sentiment samples')).toBeVisible();
   await listenerPage.goto('/profile', { waitUntil: 'domcontentloaded' });
   await expect(listenerPage.getByText('After Work House', { exact: true })).toBeVisible();
+  await expect(listenerPage.getByText('Peak 2 · 0 AI questions · 0 sentiment samples')).toBeVisible();
 
   const outsiderContext = await browser.newContext();
   const outsiderPage = await outsiderContext.newPage();

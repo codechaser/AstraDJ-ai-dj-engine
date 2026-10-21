@@ -121,9 +121,10 @@ export async function requestSegue(loungeId, input) {
   });
 }
 
-export async function askTrackQuestion(loungeId, question) {
+export async function askTrackQuestion(loungeId, question, requestId = null) {
+  requestId ??= globalThis.crypto?.randomUUID?.() ?? `q-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   return apiRequest(`/lounges/${encodeURIComponent(loungeId)}/ai/ask`, {
-    method: 'POST', body: JSON.stringify({ question }),
+    method: 'POST', body: JSON.stringify({ question }), headers: { 'Idempotency-Key': requestId },
   });
 }
 
