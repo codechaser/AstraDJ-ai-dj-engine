@@ -102,13 +102,23 @@ describe('segue eligibility and scoring', () => {
 
   test('keeps 20 simulated decisions within BPM and Camelot rules', () => {
     const validKeys = ['12A', '11A', '1A', '12B'];
+    let decisions = 0;
+    let invalidSelections = 0;
     for (let decision = 0; decision < 20; decision += 1) {
       const current = track(`t_current_${decision}`, 120 + (decision % 6), '12A', 0.2 + (decision % 5) * 0.15, 0.5);
       const candidate = track(`t_candidate_${decision}`, current.acoustic.bpm * [1, 0.5, 2][decision % 3], validKeys[decision % validKeys.length], 0.1 + (decision % 8) * 0.1, 0.5);
-      const result = matchSegueCandidate(current, candidate, { currentSentimentScore: (decision % 11) / 10 });
-      expect(result.eligible).toBe(true);
-      expect(result.bpmDeltaPct).toBeLessThanOrEqual(8);
-      expect(['same', 'adjacent', 'relative']).toContain(result.camelotRelation);
+      const ranked = rankSegueCandidates(current, [
+        candidate,
+        track(`t_bad_bpm_${decision}`, 90, '12A'),
+        track(`t_bad_key_${decision}`, current.acoustic.bpm, '9B'),
+      ], { currentSentimentScore: (decision % 11) / 10 });
+      decisions += 1;
+      if (!ranked.eligible[0] || ranked.eligible[0].track.trackId !== candidate.trackId) invalidSelections += 1;
+      expect(ranked.eligible[0].match.bpmDeltaPct).toBeLessThanOrEqual(8);
+      expect(['same', 'adjacent', 'relative']).toContain(ranked.eligible[0].match.camelotRelation);
+      expect(ranked.rejected).toHaveLength(2);
     }
+    expect({ decisions, invalidSelections, compliancePct: (decisions - invalidSelections) / decisions * 100 })
+      .toEqual({ decisions: 20, invalidSelections: 0, compliancePct: 100 });
   });
 });

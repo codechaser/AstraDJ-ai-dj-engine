@@ -1,4 +1,5 @@
 import { buildAcousticTasteProfile, createRecommendationService, precisionAtK } from '../src/services/recommendationService.js';
+import { runMultiProfileRecommendationEvaluation } from '../src/services/recommendationEvaluation.js';
 
 const track = (trackId, { bpm = 120, camelotKey = '8A', energy = 0.7, valence = 0.6, durationSeconds = 100 } = {}) => ({
   trackId, title: trackId, artist: 'Fixture Artist', durationSeconds,
@@ -139,6 +140,12 @@ test('held-out synthetic evaluation compares acoustic ranking with a training-on
   const baseline = precisionAtK(popularityRank, heldOutRelevantTrackIds, 5);
   expect(result).toEqual({ precision: 0.6, hits: 3, denominator: 5, recommended: 5 });
   expect(baseline).toEqual({ precision: 0, hits: 0, denominator: 5, recommended: 5 });
+});
+
+test('multi-profile held-out evaluation keeps input interactions separate from relevance labels', async () => {
+  const result = await runMultiProfileRecommendationEvaluation();
+  expect(result).toMatchObject({ profiles: 3, totalTrainingInteractions: 6, candidateCount: 30, totalHeldOutRelevantLabels: 9, denominator: 15, acoustic: { hits: 9, precisionAt5: 0.6 }, popularity: { hits: 0, precisionAt5: 0 } });
+  expect(result.perUser.every((profile) => profile.candidateCount === 10 && profile.acoustic.hits === 3 && profile.popularity.hits === 0)).toBe(true);
 });
 
 test('Precision@K counts only the top K positions and validates its cutoff', () => {

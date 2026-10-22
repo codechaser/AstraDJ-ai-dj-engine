@@ -1,4 +1,19 @@
 import { bucketSentiment, createRoomSentimentService } from '../src/services/roomSentimentService.js';
+import { sentimentLabeledDataset } from './fixtures/sentimentLabeledDataset.js';
+
+test('frozen synthetic sentiment diagnostic reports its confusion matrix', () => {
+  const labels = ['positive', 'neutral', 'negative'];
+  const confusion = Object.fromEntries(labels.map((actual) => [actual, Object.fromEntries(labels.map((predicted) => [predicted, 0]))]));
+  for (const { label, text } of sentimentLabeledDataset) confusion[label][bucketSentiment(text)] += 1;
+  const correct = labels.reduce((sum, label) => sum + confusion[label][label], 0);
+  expect(sentimentLabeledDataset).toHaveLength(40);
+  expect(confusion).toEqual({
+    positive: { positive: 10, neutral: 2, negative: 1 },
+    neutral: { positive: 1, neutral: 13, negative: 0 },
+    negative: { positive: 1, neutral: 3, negative: 9 },
+  });
+  expect(correct / sentimentLabeledDataset.length).toBe(0.8);
+});
 
 test('deterministic lexicon assigns positive, neutral, and negative buckets', () => {
   expect(bucketSentiment('This is amazing, love the vibe!')).toBe('positive');
