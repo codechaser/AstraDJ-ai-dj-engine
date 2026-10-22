@@ -85,6 +85,12 @@ const Track = {
     return track;
   }),
   findById: jest.fn((id) => new Query(() => [...tracks.values()].find((track) => track.id === String(id)) ?? null)),
+  findOneAndUpdate: jest.fn((filter, update) => new Query(() => {
+    const track = tracks.get(filter.trackId);
+    if (!track) return null;
+    track.acoustic = structuredClone(update.$set.acoustic);
+    return structuredClone(track);
+  })),
 };
 const DJLounge = {
   create: jest.fn(async (data) => {
@@ -252,6 +258,71 @@ describe('track catalog and acoustic-profile HTTP contract', () => {
     });
     expect(good.status).toBe(201);
     expect(good.body.acoustic.camelotKey).toBe('9A');
+  });
+
+  test('Admin can create or replace an existing track acoustic profile and the matcher reads the saved values', async () => {
+    const { default: jwt } = await import('jsonwebtoken');
+    const admin = await User.create({ email: 'profile-admin@example.com', displayName: 'Profile Admin', passwordHash: 'test-only', role: 'Admin' });
+    const token = jwt.sign({}, process.env.JWT_ACCESS_SECRET, { subject: admin.id, issuer: 'astradj-api', audience: 'astradj-client', expiresIn: 900, algorithm: 'HS256' });
+    const missingBefore = await request(app).get('/api/v1/tracks?q=Thoughtness');
+    expect(missingBefore.body.items.find((item) => item.trackId === 't_cc0_thoughtness').acoustic).toBeNull();
+
+    const created = await request(app).put('/api/v1/tracks/t_cc0_thoughtness/acoustic-profile')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ acoustic: { bpm: 130, camelotKey: '10A', energy: 0, valence: 1 } });
+    expect(created.status).toBe(200);
+    expect(created.body).toMatchObject({ trackId: 't_cc0_thoughtness', acoustic: { bpm: 130, camelotKey: '10A', energy: 0, valence: 1 } });
+    expect((await request(app).get('/api/v1/tracks/t_cc0_thoughtness/acoustic-profile')).body.acoustic).toEqual(created.body.acoustic);
+    const { matchSegueCandidate } = await import('../src/services/acousticMatcher.js');
+    expect(matchSegueCandidate(tracks.get('t_2001'), tracks.get('t_cc0_thoughtness')).eligible).toBe(false);
+    expect(matchSegueCandidate(tracks.get('t_2001'), tracks.get('t_cc0_thoughtness')).reasonCode).toBe('CAMELOT_INCOMPATIBLE');
+    const updated = await request(app).put('/api/v1/tracks/t_cc0_thoughtness/acoustic-profile')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ acoustic: { bpm: 126, camelotKey: '9A', energy: 0.7, valence: 0.8 } });
+    expect(updated.body.acoustic).toEqual({ bpm: 126, camelotKey: '9A', energy: 0.7, valence: 0.8 });
+    const current = { ...tracks.get('t_2001'), acoustic: { bpm: 126, camelotKey: '8A', energy: 0.7, valence: 0.6 } };
+    expect(matchSegueCandidate(current, tracks.get('t_cc0_thoughtness')).eligible).toBe(true);
+    expect(tracks.get('t_2003').acoustic).toEqual(seedTracks.find((track) => track.trackId === 't_2003').acoustic);
+  });
+
+  test('acoustic profile write checks persisted Admin role and denies all other roles and anonymous requests', async () => {
+    const { default: jwt } = await import('jsonwebtoken');
+    const profile = { acoustic: { bpm: 120, camelotKey: '8A', energy: 0.5, valence: 0.5 } };
+    expect((await request(app).put('/api/v1/tracks/t_cc0_thoughtness/acoustic-profile').send(profile)).status).toBe(401);
+    for (const role of ['Listener', 'Co-DJ', 'Host']) {
+      const user = await User.create({ email: `${role}@profile.example`, displayName: role, passwordHash: 'test-only', role });
+      const token = jwt.sign({}, process.env.JWT_ACCESS_SECRET, { subject: user.id, issuer: 'astradj-api', audience: 'astradj-client', expiresIn: 900, algorithm: 'HS256' });
+      const denied = await request(app).put('/api/v1/tracks/t_cc0_thoughtness/acoustic-profile').set('Authorization', `Bearer ${token}`).send(profile);
+      expect(denied.status).toBe(403);
+      expect(denied.body.error.code).toBe('FORBIDDEN');
+    }
+  });
+
+  test('acoustic profile writes reject missing, malformed, non-finite, out-of-range and unknown fields', async () => {
+    const { default: jwt } = await import('jsonwebtoken');
+    const admin = await User.create({ email: 'validation-admin@example.com', displayName: 'Validation Admin', passwordHash: 'test-only', role: 'Admin' });
+    const token = jwt.sign({}, process.env.JWT_ACCESS_SECRET, { subject: admin.id, issuer: 'astradj-api', audience: 'astradj-client', expiresIn: 900, algorithm: 'HS256' });
+    const invalidBodies = [
+      {},
+      { acoustic: { bpm: 0, camelotKey: '8A', energy: 0.5, valence: 0.5 } },
+      { acoustic: { bpm: 0.5, camelotKey: '8A', energy: 0.5, valence: 0.5 } },
+      { acoustic: { bpm: 301, camelotKey: '8A', energy: 0.5, valence: 0.5 } },
+      { acoustic: { bpm: 121, camelotKey: '13A', energy: 0.5, valence: 0.5 } },
+      { acoustic: { bpm: 121, camelotKey: '8A', energy: -0.01, valence: 0.5 } },
+      { acoustic: { bpm: 121, camelotKey: '8A', energy: 0.5, valence: 1.01 } },
+      { acoustic: { bpm: '121', camelotKey: '8A', energy: 0.5, valence: 0.5 } },
+      { acoustic: { bpm: 121, camelotKey: '8A', energy: 0.5, valence: 0.5, source: 'guessed' } },
+      { acoustic: { bpm: 121, camelotKey: '8A', energy: 0.5, valence: 0.5 }, title: 'unsupported' },
+    ];
+    for (const body of invalidBodies) {
+      const response = await request(app).put('/api/v1/tracks/t_cc0_thoughtness/acoustic-profile').set('Authorization', `Bearer ${token}`).send(body);
+      expect(response.status).toBe(400);
+      expect(response.body.error.code).toBe('VALIDATION_ERROR');
+      expect(response.body.error.details.length).toBeGreaterThan(0);
+    }
+    const missingTrack = await request(app).put('/api/v1/tracks/t_9999/acoustic-profile').set('Authorization', `Bearer ${token}`)
+      .send({ acoustic: { bpm: 120, camelotKey: '8A', energy: 0.5, valence: 0.5 } });
+    expect(missingTrack.status).toBe(404);
   });
 });
 

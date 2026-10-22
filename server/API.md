@@ -10,6 +10,8 @@ The Account/Profile view uses the auth endpoints, private playback-history endpo
 
 Home artist and track lists and the Playlist and Artist routes read `GET /api/v1/tracks`; artist pages filter returned tracks by the catalog's `artist` string. The Home recommendation shelf still uses the authenticated `GET /api/v1/recommendations` endpoint. The catalog schema supplies track ID, title, artist, duration, optional audio URL, optional acoustic profile, and metadata timeline only. It has no artwork, genre/mood, popularity, artist biography/listener counts, album fields, saved playlist entities, or album-track relationship. The UI uses neutral gradient artwork placeholders and labels catalog items accurately; it does not claim popularity or album data. The Album route reports the missing album fields. The AI DJ form sends `POST /api/v1/lounges/:id/ai/ask` and `POST /api/v1/lounges/:id/ai/segue` for the active Lounge context. The browser's session-scoped Lounge snapshot is a request convenience only: the server revalidates JWT, membership, current track, catalog IDs, and acoustic rules. The API uses deterministic metadata retrieval/templates; it does not connect an LLM. If the user's audio track is unrelated to the Lounge's authoritative current track, the segue request uses `currentTs: 0`; the server still validates that the requested track is current.
 
+Admin accounts see an Acoustic Profiles navigation item. The screen searches the catalog, shows whether each track has a saved profile, and edits profiles on existing tracks. The server checks the account's current database role for every write; the UI is not an authorization boundary.
+
 ## REST endpoints
 
 | Method and path | Access | Purpose |
@@ -25,6 +27,7 @@ Home artist and track lists and the Playlist and Artist routes read `GET /api/v1
 | `PATCH /api/v1/auth/me/preferences` | Bearer JWT | Update supported audio preferences for the caller only |
 | `GET /api/v1/tracks?q=&limit=&skip=` | Public | Validated track catalog page |
 | `GET /api/v1/tracks/:trackId/acoustic-profile` | Public | Acoustic vector and metadata timeline |
+| `PUT /api/v1/tracks/:trackId/acoustic-profile` | Admin | Create or replace an existing track's acoustic profile |
 | `POST /api/v1/tracks` | Admin | Add a validated acoustic profile |
 | `POST /api/v1/lounges` | Host | Create a Lounge and return its invite code |
 | `POST /api/v1/lounges/:id/ai/segue` | Authenticated Lounge member | Select an acoustically compatible segue and return a grounded transition |
@@ -34,6 +37,23 @@ Home artist and track lists and the Playlist and Artist routes read `GET /api/v1
 | `GET /api/v1/dashboard/playback-history?limit=20` | Bearer JWT | Return the caller's own explicitly self-reported Interaction history |
 | `GET /api/v1/dashboard/lounge-history?limit=50` | Bearer JWT | Return ended Lounge summaries where the caller is the Host or a persisted participant |
 | `GET /api/v1/dashboard/lounges/:id/analytics` | Bearer JWT + Lounge membership | Aggregate available persisted Lounge metrics; unavailable metrics are returned as `null` |
+
+### Admin acoustic-profile management
+
+`PUT /api/v1/tracks/:trackId/acoustic-profile` requires a Bearer access token whose account currently has the `Admin` role. It creates the profile when the track has `acoustic: null`, or replaces the complete profile on an existing track. `POST /api/v1/tracks` remains the Admin endpoint for creating a new catalog track. No bulk upload endpoint is defined.
+
+The request must contain exactly one top-level field, `acoustic`, with exactly four fields. BPM, energy, and valence must be finite JSON numbers; BPM uses the existing positive 1–300 schema/matcher range, and energy and valence must be in the inclusive range 0–1. `camelotKey` must exactly match one of `1A`–`12A` or `1B`–`12B`. Missing fields, strings in place of numbers, non-finite values, extra keys, and invalid ranges return `400 VALIDATION_ERROR` with field-level details. An unknown track returns `404 TRACK_NOT_FOUND`.
+
+Example request:
+
+```json
+PUT /api/v1/tracks/t_cc0_thoughtness/acoustic-profile
+{
+  "acoustic": { "bpm": 124, "camelotKey": "8A", "energy": 0.78, "valence": 0.65 }
+}
+```
+
+The response is the catalog track representation including the persisted `acoustic` object. Subsequent catalog reads, the public acoustic-profile endpoint, recommendations, and the segue matcher use the same stored values. The API stores Admin-authored input; the current schema does not record measurement source, provenance, or verification, and AstraDJ does not run audio analysis. A missing profile remains `null` until an Admin supplies all four values; the UI leaves fields blank and explains this limitation.
 
 ### User audio preferences
 

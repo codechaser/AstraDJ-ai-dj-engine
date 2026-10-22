@@ -15,6 +15,7 @@ const frontendOrigin = `http://127.0.0.1:${frontendPort}`;
 const loungeMode = process.argv.includes('--lounge');
 const settingsMode = process.argv.includes('--settings');
 const catalogMode = process.argv.includes('--catalog');
+const adminAcousticMode = process.argv.includes('--admin-acoustic');
 
 function parseEnvFile(path) {
   const values = {};
@@ -112,6 +113,8 @@ const runtimeEnv = {
   ASTRADJ_E2E_BASE_URL: frontendOrigin,
   ASTRADJ_E2E_HOST_EMAIL: `host-${randomBytes(8).toString('hex')}@example.invalid`,
   ASTRADJ_E2E_HOST_PASSWORD: randomBytes(24).toString('base64url'),
+  ASTRADJ_E2E_ADMIN_EMAIL: `admin-${randomBytes(8).toString('hex')}@example.invalid`,
+  ASTRADJ_E2E_ADMIN_PASSWORD: randomBytes(24).toString('base64url'),
 };
 
 let backend;
@@ -122,6 +125,7 @@ let cleanupError;
 try {
   run(process.execPath, [join(serverDir, 'src/seed/run.js')], { cwd: serverDir, env: runtimeEnv });
   if (loungeMode) run(process.execPath, [join(root, 'scripts/seed-e2e-host.mjs')], { cwd: root, env: runtimeEnv });
+  if (adminAcousticMode) run(process.execPath, [join(root, 'scripts/seed-e2e-admin.mjs')], { cwd: root, env: runtimeEnv });
   backend = startNode([join(serverDir, 'src/index.js')], serverDir, runtimeEnv);
   frontend = startNode([join(root, 'node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', String(frontendPort), '--strictPort'], root, runtimeEnv);
   await waitForHealth(backend);
@@ -136,7 +140,7 @@ try {
   }
 
   const playwrightCli = join(root, 'node_modules/@playwright/test/cli.js');
-  const config = loungeMode ? 'playwright.lounge-e2e.config.js' : settingsMode ? 'playwright.settings-e2e.config.js' : catalogMode ? 'playwright.catalog-e2e.config.js' : 'playwright.audio-e2e.config.js';
+  const config = loungeMode ? 'playwright.lounge-e2e.config.js' : settingsMode ? 'playwright.settings-e2e.config.js' : adminAcousticMode ? 'playwright.admin-acoustic-e2e.config.js' : catalogMode ? 'playwright.catalog-e2e.config.js' : 'playwright.audio-e2e.config.js';
   run(process.execPath, [playwrightCli, 'test', `--config=${config}`], { cwd: root, env: runtimeEnv });
   exitCode = 0;
 } catch (error) {

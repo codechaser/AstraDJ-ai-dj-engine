@@ -95,6 +95,12 @@ export async function getTrack(trackId) {
   return apiRequest(`/tracks/${encodeURIComponent(trackId)}/acoustic-profile`, { token: null });
 }
 
+export async function updateTrackAcousticProfile(trackId, acoustic) {
+  return apiRequest(`/tracks/${encodeURIComponent(trackId)}/acoustic-profile`, {
+    method: 'PUT', body: JSON.stringify({ acoustic }),
+  });
+}
+
 export async function getPlaybackHistory(limit = 20) {
   return apiRequest(`/dashboard/playback-history?limit=${limit}`);
 }

@@ -1,6 +1,7 @@
 import { body, param, query } from 'express-validator';
 import { CAMELOT_KEYS } from '../models/Track.js';
 import { isSafeAudioAssetUrl } from '../utils/audioAsset.js';
+import { ApiError } from '../utils/ApiError.js';
 
 export const registerValidation = [
   body('email').isEmail().withMessage('Must be a valid email').normalizeEmail(),
@@ -66,4 +67,39 @@ export const createTrackValidation = [
   body('timeline.*.type').optional().isIn(['sample_credit', 'trivia', 'glossary']).withMessage('timeline type is invalid'),
   body('timeline.*.text').optional().isString().trim().isLength({ min: 1, max: 500 }).matches(/^[^<>\u0000-\u001f]+$/).withMessage('timeline text must be 1 to 500 plain-text characters'),
 ];
+
+const ACOUSTIC_PROFILE_FIELDS = Object.freeze(['bpm', 'camelotKey', 'energy', 'valence']);
+export function acousticProfileUpdateValidation(req, _res, next) {
+  const issues = [];
+  const bodyKeys = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? Object.keys(req.body) : [];
+  if (bodyKeys.length !== 1 || bodyKeys[0] !== 'acoustic') {
+    issues.push({ field: 'body', message: 'body must contain only an acoustic profile' });
+  }
+  const profile = req.body?.acoustic;
+  if (!profile || typeof profile !== 'object' || Array.isArray(profile)) {
+    issues.push({ field: 'acoustic', message: 'acoustic profile is required' });
+  } else {
+    for (const field of Object.keys(profile)) {
+      if (!ACOUSTIC_PROFILE_FIELDS.includes(field)) issues.push({ field: `acoustic.${field}`, message: 'unsupported acoustic profile field' });
+    }
+    for (const field of ACOUSTIC_PROFILE_FIELDS) {
+      if (!Object.hasOwn(profile, field)) {
+        issues.push({ field: `acoustic.${field}`, message: `${field} is required` });
+        continue;
+      }
+      const value = profile[field];
+      if (field === 'camelotKey') {
+        if (typeof value !== 'string' || !CAMELOT_KEYS.includes(value)) issues.push({ field: 'acoustic.camelotKey', message: 'camelotKey must be one of the 24 valid Camelot keys' });
+      } else if (typeof value !== 'number' || !Number.isFinite(value)) {
+        issues.push({ field: `acoustic.${field}`, message: `${field} must be a finite JSON number` });
+      } else if (field === 'bpm' && (value < 1 || value > 300)) {
+        issues.push({ field: 'acoustic.bpm', message: 'bpm must be between 1 and 300' });
+      } else if ((field === 'energy' || field === 'valence') && (value < 0 || value > 1)) {
+        issues.push({ field: `acoustic.${field}`, message: `${field} must be between 0 and 1` });
+      }
+    }
+  }
+  if (issues.length) return next(new ApiError(400, 'VALIDATION_ERROR', 'Request validation failed', issues));
+  return next();
+}
 

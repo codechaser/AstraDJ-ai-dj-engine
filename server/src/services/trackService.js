@@ -27,4 +27,14 @@ export async function createTrack(profile) {
   }
 }
 
+export async function updateAcousticProfile(trackId, acoustic) {
+  const track = await Track.findOneAndUpdate(
+    { trackId },
+    { $set: { acoustic } },
+    { new: true, runValidators: true },
+  ).select('-_id -__v -createdAt -updatedAt').lean();
+  if (!track) throw new ApiError(404, 'TRACK_NOT_FOUND', 'Track not found');
+  return track;
+}
+
 function escapeRegex(value) { return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
