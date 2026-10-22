@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
 
 test('Home, artist and Playlist use catalog results and select real tracks in the player', async ({ page }) => {
   const pageErrors = [];
@@ -49,4 +50,36 @@ test('catalog pages show explicit loading, empty and API error states', async ({
   await page.route('**/api/v1/tracks**', async (route) => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: { message: 'Catalog temporarily unavailable' } }) }));
   await page.goto('/artist?name=Unknown');
   await expect(page.getByRole('alert')).toContainText('Catalog temporarily unavailable');
+});
+
+test('Profile renders a persisted acoustic taste profile after reload', async ({ page }) => {
+  await page.goto('/profile');
+  await page.getByRole('button', { name: 'Create account' }).click();
+  await page.getByLabel('Display name').fill('Taste Profile E2E');
+  await page.getByLabel('Email').fill(`taste-profile-${randomUUID()}@example.invalid`);
+  await page.getByLabel('Password').fill(`TasteE2E!${randomUUID()}9`);
+  const registrationResponse = page.waitForResponse((response) => response.url().endsWith('/api/v1/auth/register'));
+  await page.getByRole('button', { name: 'Create Account' }).click();
+  const registration = await registrationResponse;
+  expect(registration.status()).toBe(201);
+  const { accessToken } = await registration.json();
+
+  // These are explicit self-reported interaction records, not browser playback claims.
+  const firstSignal = await page.request.post('/api/v1/interactions', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    data: { trackId: 't_2001', playedSeconds: 224, completed: true, liked: true },
+  });
+  const secondSignal = await page.request.post('/api/v1/interactions', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    data: { trackId: 't_2002', playedSeconds: 104, completed: false, liked: false },
+  });
+  expect(firstSignal.status()).toBe(201);
+  expect(secondSignal.status()).toBe(201);
+
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Acoustic Taste' })).toBeVisible();
+  await expect(page.getByText('124–128', { exact: true })).toBeVisible();
+  await expect(page.getByText(/mean 125\.3333/)).toBeVisible();
+  await expect(page.getByText('8A · 9A', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Based on 2 eligible reports across 2 distinct tracks/)).toBeVisible();
 });

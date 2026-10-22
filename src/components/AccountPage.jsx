@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { LogOut, UserRound } from 'lucide-react';
-import { getLoungeHistory, getPlaybackHistory, getTrack } from '../api/client.js';
+import { getAcousticTaste, getLoungeHistory, getPlaybackHistory, getTrack } from '../api/client.js';
 
 export default function AccountPage({ user, sessionStatus, onLogin, onRegister, onLogout, authError }) {
   const [mode, setMode] = useState('login');
@@ -10,6 +10,8 @@ export default function AccountPage({ user, sessionStatus, onLogin, onRegister, 
   const [historyMessage, setHistoryMessage] = useState('');
   const [loungeHistory, setLoungeHistory] = useState([]);
   const [loungeHistoryMessage, setLoungeHistoryMessage] = useState('');
+  const [taste, setTaste] = useState(null);
+  const [tasteState, setTasteState] = useState('idle');
 
   useEffect(() => {
     let active = true;
@@ -17,7 +19,11 @@ export default function AccountPage({ user, sessionStatus, onLogin, onRegister, 
     setHistoryMessage('');
     setLoungeHistory([]);
     setLoungeHistoryMessage('');
+    setTaste(null);
+    setTasteState(user ? 'loading' : 'idle');
     if (!user) return () => { active = false; };
+    getAcousticTaste().then((result) => { if (active) { setTaste(result); setTasteState('ready'); } })
+      .catch(() => { if (active) setTasteState('error'); });
     getLoungeHistory().then(({ items }) => { if (active) setLoungeHistory(items ?? []); })
       .catch(() => { if (active) setLoungeHistoryMessage('Lounge history is unavailable right now.'); });
     getPlaybackHistory().then(async ({ items }) => {
@@ -59,6 +65,11 @@ export default function AccountPage({ user, sessionStatus, onLogin, onRegister, 
   return <div className="page profile-page">
     <div className="profile-card"><div className="account-avatar"><UserRound size={28}/></div><div><span className="eyebrow">YOUR PROFILE</span><h1>{user.displayName}</h1><p>{user.email} · {user.role}</p></div><button className="btn-outline" onClick={async () => { setBusy(true); try { await onLogout(); } finally { setBusy(false); } }} disabled={busy}><LogOut size={14}/> Sign Out</button></div>
     <div className="profile-stats"><div><b>—</b><small>Playlists</small></div><div><b>{history.length || '—'}</b><small>Listening reports</small></div><div><b>—</b><small>Following</small></div></div>
+    <div className="section-title"><h2>Acoustic Taste</h2><span className="muted">From reported listening</span></div>
+    {tasteState === 'loading' && <div className="panel integration-status" role="status">Calculating your acoustic taste from listening reports…</div>}
+    {tasteState === 'error' && <div className="panel integration-error" role="alert">Acoustic taste is unavailable right now.</div>}
+    {tasteState === 'ready' && taste?.status !== 'ready' && <div className="panel integration-status" role="status">{taste?.explanation ?? 'More eligible listening data is needed to show preferences.'} {taste?.coverage?.tracksWithValidAcoustics ?? 0} of {taste?.coverage?.distinctHistoryTracks ?? 0} distinct tracks in your history have valid acoustic profiles.</div>}
+    {tasteState === 'ready' && taste?.status === 'ready' && <><div className="profile-stats"><div><b>{taste.profile.bpmRange.min}–{taste.profile.bpmRange.max}</b><small>Observed BPM · mean {taste.profile.preferredBpm}</small></div><div><b>{taste.profile.preferredCamelotKeys.slice(0, 3).map(({ key }) => key).join(' · ')}</b><small>Preferred Camelot keys</small></div><div><b>{taste.profile.energy.toFixed(2)} / {taste.profile.valence.toFixed(2)}</b><small>Energy / valence preference</small></div></div><small className="recommendation-disclosure">Based on {taste.eligibleInteractionCount} eligible reports across {taste.distinctEligibleTrackCount} distinct tracks · acoustic coverage {taste.coverage.tracksWithValidAcoustics}/{taste.coverage.catalogTracks} catalogued history tracks.</small></>}
     <div className="section-title"><h2>Listening Reports</h2><span className="muted">Self-reported history</span></div>
     {historyMessage && <p className="integration-error" role="status">{historyMessage}</p>}
     {history.length ? <div className="recent-grid">{history.map((item) => <div className="recent-card" key={item.interactionId}><div className="catalog-cover"/><div><b>{item.track?.title ?? item.trackId}</b><small>{item.track?.artist ?? item.source} · {item.playedSeconds}s reported</small></div></div>)}</div> : <div className="panel integration-status">{historyMessage ? 'Listening history could not be loaded.' : user ? 'No listening reports yet.' : 'Sign in to view history.'}</div>}

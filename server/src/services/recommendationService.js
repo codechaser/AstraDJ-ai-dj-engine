@@ -3,28 +3,75 @@ import { recommendationRepository } from './recommendationRepository.js';
 import { ApiError } from '../utils/ApiError.js';
 
 const CO_LISTEN_WINDOW_MS = 10 * 60 * 1000;
+const MIN_TASTE_TRACKS = 2;
 const clamp = (value) => Math.max(0, Math.min(1, value));
 const round = (value) => Number(value.toFixed(4));
 const interactionWeight = (interaction, track) => {
-  if (!track || acousticProfileErrors(track.acoustic).length) return 0;
+  if (!track || acousticProfileErrors(track.acoustic).length || !Number.isFinite(track.durationSeconds) || track.durationSeconds <= 0
+    || !Number.isFinite(interaction?.playedSeconds) || interaction.playedSeconds < 0
+    || typeof interaction.completed !== 'boolean' || typeof interaction.liked !== 'boolean') return 0;
   if (interaction.liked || interaction.completed) return 1;
   return clamp(interaction.playedSeconds / track.durationSeconds);
 };
 const plainObject = (value) => value && typeof value === 'object' && !Array.isArray(value);
 
-function buildTasteProfile(interactions, trackById) {
-  const weighted = interactions.map((interaction) => ({
+export function buildAcousticTasteProfile(interactions, trackById) {
+  const historyTrackIds = new Set(interactions.map(({ trackId }) => trackId).filter((trackId) => typeof trackId === 'string'));
+  const catalogTrackIds = [...historyTrackIds].filter((trackId) => trackById.has(trackId));
+  const profiledTrackIds = catalogTrackIds.filter((trackId) => !acousticProfileErrors(trackById.get(trackId)?.acoustic).length);
+  const eligibleRows = interactions.map((interaction) => ({
     interaction,
     track: trackById.get(interaction.trackId),
     weight: interactionWeight(interaction, trackById.get(interaction.trackId)),
   })).filter(({ weight }) => weight > 0);
-  if (!weighted.length) return null;
+
+  // Treat multiple reports for one track as one taste signal: keep its strongest
+  // observed engagement. This avoids repeat plays or duplicate submissions
+  // silently multiplying that track's acoustic features.
+  const bestByTrack = new Map();
+  for (const row of eligibleRows) {
+    const existing = bestByTrack.get(row.track.trackId);
+    if (!existing || row.weight > existing.weight) bestByTrack.set(row.track.trackId, row);
+  }
+  const weighted = [...bestByTrack.values()];
+  const coverage = {
+    distinctHistoryTracks: historyTrackIds.size,
+    catalogTracks: catalogTrackIds.length,
+    tracksWithValidAcoustics: profiledTrackIds.length,
+    catalogCoverage: historyTrackIds.size ? round(catalogTrackIds.length / historyTrackIds.size) : 0,
+    acousticCoverage: catalogTrackIds.length ? round(profiledTrackIds.length / catalogTrackIds.length) : 0,
+  };
+  const result = {
+    status: weighted.length >= MIN_TASTE_TRACKS ? 'ready' : 'insufficient_data',
+    minimumDistinctTracks: MIN_TASTE_TRACKS,
+    eligibleInteractionCount: eligibleRows.length,
+    distinctEligibleTrackCount: weighted.length,
+    coverage,
+    profile: null,
+    explanation: weighted.length >= MIN_TASTE_TRACKS
+      ? 'Taste preferences use one strongest eligible signal per distinct track with a valid acoustic profile.'
+      : `At least ${MIN_TASTE_TRACKS} distinct tracks with valid acoustic profiles are needed to show preferences.`,
+  };
+  if (weighted.length < MIN_TASTE_TRACKS) return result;
+
   const totalWeight = weighted.reduce((sum, row) => sum + row.weight, 0);
   const mean = (field) => weighted.reduce((sum, row) => sum + row.track.acoustic[field] * row.weight, 0) / totalWeight;
   const keys = new Map();
   for (const row of weighted) keys.set(row.track.acoustic.camelotKey, (keys.get(row.track.acoustic.camelotKey) ?? 0) + row.weight);
-  const preferredKey = [...keys].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0][0];
-  return { bpm: mean('bpm'), energy: mean('energy'), valence: mean('valence'), camelotKey: preferredKey, signalCount: weighted.length };
+  const preferredCamelotKeys = [...keys].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([key, keyWeight]) => ({ key, share: round(keyWeight / totalWeight) }));
+  const bpms = weighted.map(({ track }) => track.acoustic.bpm);
+  const preferredBpm = mean('bpm');
+  const preferredCamelotKey = preferredCamelotKeys[0].key;
+  result.profile = {
+    bpmRange: { min: Math.min(...bpms), max: Math.max(...bpms) },
+    preferredBpm: round(preferredBpm),
+    preferredCamelotKeys,
+    energy: round(mean('energy')),
+    valence: round(mean('valence')),
+  };
+  result._rankingProfile = { bpm: preferredBpm, camelotKey: preferredCamelotKey, energy: result.profile.energy, valence: result.profile.valence, signalCount: weighted.length };
+  return result;
 }
 
 export function contentSimilarity(profile, track) {
@@ -67,6 +114,13 @@ export function precisionAtK(recommendedTrackIds, relevantTrackIds, k = 5) {
 
 export function createRecommendationService(repository = recommendationRepository, { now = () => new Date() } = {}) {
   return {
+    async acousticTasteForUser(userId) {
+      const [tracks, interactions] = await Promise.all([repository.listTracks(), repository.listInteractionsForUser(userId)]);
+      const trackById = new Map(tracks.filter((track) => track?.trackId).map((track) => [track.trackId, track]));
+      const { _rankingProfile, ...profile } = buildAcousticTasteProfile(interactions, trackById);
+      return profile;
+    },
+
     async recordInteraction({ userId, trackId, playedSeconds, completed, liked, loungeId = null }) {
       if (!/^t_[A-Za-z0-9_-]{1,64}$/.test(trackId ?? '') || !Number.isFinite(playedSeconds) || playedSeconds < 0 || typeof completed !== 'boolean' || typeof liked !== 'boolean') {
         throw new ApiError(400, 'VALIDATION_ERROR', 'trackId, non-negative playedSeconds, completed, and liked are required');
@@ -100,7 +154,7 @@ export function createRecommendationService(repository = recommendationRepositor
       const [tracks, ownInteractions] = await Promise.all([repository.listTracks(), repository.listInteractionsForUser(userId)]);
       const uniqueTracks = [...new Map(tracks.filter((track) => track?.trackId).map((track) => [track.trackId, track])).values()];
       const trackById = new Map(uniqueTracks.map((track) => [track.trackId, track]));
-      const profile = buildTasteProfile(ownInteractions, trackById);
+      const profile = buildAcousticTasteProfile(ownInteractions, trackById)._rankingProfile;
       const seenTrackIds = new Set(ownInteractions.map((interaction) => interaction.trackId));
       const coListenerCounts = new Map();
       for (const interaction of ownInteractions) for (const peerId of interaction.coListenedWith ?? []) {

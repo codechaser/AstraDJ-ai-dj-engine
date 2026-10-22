@@ -369,10 +369,11 @@ describe('authenticated interaction collection and private recommendations', () 
 
   test('recommendation reads are scoped to the authenticated user and validate limits', async () => {
     await request(app).post('/api/v1/interactions').set('Authorization', `Bearer ${tokenA}`).send({ trackId: 't_2001', playedSeconds: 224, completed: true, liked: true });
+    await request(app).post('/api/v1/interactions').set('Authorization', `Bearer ${tokenA}`).send({ trackId: 't_2002', playedSeconds: 208, completed: true, liked: true });
     const response = await request(app).get('/api/v1/recommendations?limit=2').set('Authorization', `Bearer ${tokenA}`);
     expect(response.status).toBe(200);
     expect(response.body.strategy).toBe('content_based');
-    expect(response.body.items).toHaveLength(2);
+    expect(response.body.items).toHaveLength(1);
     expect(JSON.stringify(response.body)).not.toContain(userA);
     expect(JSON.stringify(response.body)).not.toContain(userB);
     expect((await request(app).get(`/api/v1/recommendations?userId=${userB}`).set('Authorization', `Bearer ${tokenA}`)).status).toBe(400);

@@ -117,6 +117,10 @@ export async function getRecommendations(limit = 10) {
   return apiRequest(`/recommendations?limit=${limit}`);
 }
 
+export async function getAcousticTaste() {
+  return apiRequest('/recommendations/taste');
+}
+
 export async function getLoungeAnalytics(loungeId) {
   return apiRequest(`/dashboard/lounges/${encodeURIComponent(loungeId)}/analytics`);
 }

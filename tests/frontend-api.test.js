@@ -1,6 +1,6 @@
 import test, { afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { apiRequest, askTrackQuestion, clearAccessToken, createLounge, getLoungeAnalytics, getLoungeHistory, getPreferences, getRecommendations, login, logout, registerAccount, requestSegue, restoreSession, searchTracks, updatePreferences } from '../src/api/client.js';
+import { apiRequest, askTrackQuestion, clearAccessToken, createLounge, getAcousticTaste, getLoungeAnalytics, getLoungeHistory, getPreferences, getRecommendations, login, logout, registerAccount, requestSegue, restoreSession, searchTracks, updatePreferences } from '../src/api/client.js';
 import { buildCompletionInteraction } from '../src/api/playbackEvents.js';
 import { catalogDurationSeconds, formatTrackDuration, groupCatalogArtists, toPlayerTrack, tracksForArtist } from '../src/api/catalogData.js';
 import { connectToLounge } from '../src/api/loungeConnection.js';
@@ -195,6 +195,7 @@ test('recommendation, Lounge history/analytics, segue, and Q&A calls use existin
   await getLoungeAnalytics('lg_123456789abc');
   await requestSegue('lg_123456789abc', { currentTrackId: 't_2001', currentTs: 0, candidateTrackIds: ['t_2002'], currentSentimentScore: 0.5 });
   await askTrackQuestion('lg_123456789abc', 'What is the track title?', 'retry-key-123456');
+  await getAcousticTaste();
   assert.ok(calls[1].url.endsWith('/api/v1/recommendations?limit=10'));
   assert.ok(calls[2].url.endsWith('/api/v1/dashboard/lounge-history?limit=50'));
   assert.ok(calls[3].url.endsWith('/api/v1/dashboard/lounges/lg_123456789abc/analytics'));
@@ -204,6 +205,8 @@ test('recommendation, Lounge history/analytics, segue, and Q&A calls use existin
   assert.equal(calls[5].url, '/api/v1/lounges/lg_123456789abc/ai/ask');
   assert.deepEqual(JSON.parse(calls[5].options.body), { question: 'What is the track title?' });
   assert.equal(calls[5].options.headers['Idempotency-Key'], 'retry-key-123456');
+  assert.equal(calls[6].url, '/api/v1/recommendations/taste');
+  assert.equal(calls[6].options.headers.Authorization, 'Bearer integration-token');
 });
 
 test('room event subscriptions ignore other Lounges and remove each listener on cleanup', () => {
