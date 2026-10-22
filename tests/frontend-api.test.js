@@ -2,6 +2,7 @@ import test, { afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { apiRequest, askTrackQuestion, clearAccessToken, createLounge, getLoungeAnalytics, getLoungeHistory, getPreferences, getRecommendations, login, logout, registerAccount, requestSegue, restoreSession, searchTracks, updatePreferences } from '../src/api/client.js';
 import { buildCompletionInteraction } from '../src/api/playbackEvents.js';
+import { catalogDurationSeconds, formatTrackDuration, groupCatalogArtists, toPlayerTrack, tracksForArtist } from '../src/api/catalogData.js';
 import { connectToLounge } from '../src/api/loungeConnection.js';
 import { subscribeToLoungeEvents } from '../src/api/loungeEvents.js';
 import { applySoundclashEvent, displayAnalyticsMetric, normalizeRecommendations, segueCommentaryText, shouldShowAiDjCommentary, tiedCandidateIds, uniqueChatMessages } from '../src/api/uiData.js';
@@ -255,4 +256,19 @@ test('AI DJ commentary preference hides only segue text and preserves selection 
   assert.equal(shouldShowAiDjCommentary(false), false);
   assert.equal(result.selectedTrackId, 't_2002');
   assert.equal(result.matchReason.selectionReason, 'Adjacent Camelot key');
+});
+
+test('catalog helpers derive artist pages and player tracks only from catalog metadata', () => {
+  const tracks = [
+    { trackId: 't_1', title: 'Blue', artist: 'Mira Sol', durationSeconds: 61, audioAssetUrl: '/audio/blue.ogg' },
+    { trackId: 't_2', title: 'Afterglow', artist: 'Mira Sol', durationSeconds: 120 },
+    { trackId: 't_3', title: 'Night', artist: 'Nova Circuit', durationSeconds: 180 },
+  ];
+  const artists = groupCatalogArtists(tracks);
+  assert.deepEqual(artists.map(({ name, tracks: items }) => [name, items.length]), [['Mira Sol', 2], ['Nova Circuit', 1]]);
+  assert.deepEqual(tracksForArtist(tracks, 'mira sol').map((track) => track.trackId), ['t_2', 't_1']);
+  assert.equal(formatTrackDuration(61), '1:01');
+  assert.equal(catalogDurationSeconds(tracks), 361);
+  assert.deepEqual(toPlayerTrack(tracks[0]), { ...tracks[0], time: '1:01', img: 'photo-1514525253161-7a46d19cd819' });
+  assert.deepEqual(groupCatalogArtists([]), []);
 });

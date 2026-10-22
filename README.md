@@ -11,9 +11,9 @@ AstraDJ is a reference-led music experience. Its existing React + Vite frontend 
 - Database: MongoDB + Mongoose
 - Real-time gateway: Socket.io (authenticated Lounge join, shared queue, presence, sync and reconnect)
 - Authentication: JWT access token plus rotating refresh cookie
-- Tests: Jest + Supertest, Playwright for audio and settings E2E
+- Tests: Jest + Supertest, Playwright for catalog, audio, Lounge, and settings E2E
 
-Account/Profile, Search, shared Lounge queue, live chat, sentiment, Soundclash, recommendation shelves, AI DJ Q&A/segue actions, Lounge analytics, and the supported audio preferences use existing backend APIs or Socket.io events. Home artist/vibe/trending content and Playlist/Artist/Album details remain explicitly marked sample previews. Settings persists seven audio preferences per account; AI DJ commentary affects segue-script and Lounge announcement presentation, while the other six are saved-only and disabled until their underlying playback capabilities exist. No Spotify infrastructure, accounts, catalog, or user data are used.
+Account/Profile, Search, shared Lounge queue, live chat, sentiment, Soundclash, recommendation shelves, AI DJ Q&A/segue actions, Lounge analytics, and supported audio preferences use existing backend APIs or Socket.io events. Home artists/tracks and the Playlist and Artist screens use the public track catalog; recommendations use the private recommendation API. The catalog has no album, artwork, genre/mood, or popularity fields, so the Home labels sections as catalog content and the Album screen explains its missing data. Settings persists seven audio preferences per account; AI DJ commentary affects segue-script and Lounge announcement presentation, while the other six are saved-only and disabled until their underlying playback capabilities exist. No Spotify infrastructure, accounts, catalog, or user data are used.
 
 ## Run the frontend
 
@@ -70,3 +70,5 @@ Install the root dependencies and Chrome, create `server/.env.test` from `server
 To verify the Lounge lifecycle, run `npm run test:e2e:lounge` with the same safe local `.env.test` setup. This creates a per-run Host account in an isolated test database, signs in through the UI, creates and joins a catalog-backed Lounge, reloads/rejoins while active, and joins a second Listener. It then ends the Lounge from the Host UI, verifies both connected clients receive the event, checks the persisted end summary and owner/member history, and confirms an unrelated account cannot join or read it. The generated test database is dropped after the run.
 
 To verify audio preference persistence, run `npm run test:e2e:settings` with the same local `.env.test` setup. Playwright registers accounts through the UI, verifies the six saved-only controls are disabled, changes AI DJ commentary, reloads, signs out/in, verifies another account starts with its own defaults, and checks a simulated failed-save response is shown as an error. AI DJ commentary also controls segue-script and Lounge announcement presentation; other audio settings remain stored-only.
+
+To verify catalog screens, run `npm run test:e2e:catalog` with the same safe local `.env.test` setup. It uses the seeded disposable MongoDB catalog to verify Home artists/tracks, catalog-derived Artist tracks, Playlist rows, track selection in the persistent player, and the Album data gap. Separate intercepted responses cover loading, empty and API-error UI states; those states are mocked, not Mongo-backed.

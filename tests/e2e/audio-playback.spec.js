@@ -79,9 +79,9 @@ test('real audio playback creates only authenticated, owner-scoped completion hi
   });
   expect(await interaction.json()).toMatchObject({ trackId: 't_cc0_thoughtness', source: 'self_reported' });
 
-  const ownerHistoryResponse = firstPage.waitForResponse((response) => response.url().includes('/api/v1/dashboard/playback-history'));
+  const ownerHistoryResponse = firstPage.waitForResponse((response) => response.url().includes('/api/v1/dashboard/playback-history')).then((response) => response.json());
   await firstPage.goto('/profile');
-  const ownerHistory = await (await ownerHistoryResponse).json();
+  const ownerHistory = await ownerHistoryResponse;
   expect(ownerHistory.items).toEqual(expect.arrayContaining([
     expect.objectContaining({ trackId: 't_cc0_thoughtness', completed: true, playedSeconds: 46, source: 'self_reported' }),
   ]));
@@ -91,9 +91,9 @@ test('real audio playback creates only authenticated, owner-scoped completion hi
   const secondPage = await secondContext.newPage();
   secondPage.on('pageerror', (error) => consoleErrors.push(error.message));
   await registerThroughUi(secondPage, 'Audio E2E Other Listener');
-  const otherHistoryResponse = secondPage.waitForResponse((response) => response.url().includes('/api/v1/dashboard/playback-history'));
+  const otherHistoryResponse = secondPage.waitForResponse((response) => response.url().includes('/api/v1/dashboard/playback-history')).then((response) => response.json());
   await secondPage.goto('/profile');
-  const otherHistory = await (await otherHistoryResponse).json();
+  const otherHistory = await otherHistoryResponse;
   expect(otherHistory.items).not.toEqual(expect.arrayContaining([
     expect.objectContaining({ trackId: 't_cc0_thoughtness' }),
   ]));
