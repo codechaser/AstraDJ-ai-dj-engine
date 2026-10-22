@@ -8,9 +8,11 @@ function formatTrack(track) {
   return { ...track, img: 'photo-1514525253161-7a46d19cd819', time: `${Math.floor((track.durationSeconds ?? 0) / 60)}:${String(Math.floor((track.durationSeconds ?? 0) % 60)).padStart(2, '0')}` };
 }
 
-export default function LiveQueuePage({ track, onCurrentTrack, user, aiDjCommentary = false }) {
+export default function LiveQueuePage({ track, currentTime = 0, duration = 0, onCurrentTrack, onTransitionTrack = onCurrentTrack, user, aiDjCommentary = false }) {
   const socketRef = useRef(null);
   const loungeIdRef = useRef(null);
+  const segueAttemptRef = useRef(null);
+  const pendingSegueRef = useRef(null);
   const [inviteCode, setInviteCode] = useState('');
   const [queueState, setQueueState] = useState(null);
   const [activeLoungeId, setActiveLoungeId] = useState(null);
@@ -52,6 +54,10 @@ export default function LiveQueuePage({ track, onCurrentTrack, user, aiDjComment
       if (saved?.loungeId === event.loungeId) saveActiveLounge({ ...saved, snapshot: next });
       return next;
     });
+    if (event.payload?.reason === 'segue' && hydrated[0]?.audioAssetUrl) {
+      pendingSegueRef.current = null;
+      onTransitionTrack(formatTrack(hydrated[0]));
+    }
   }
 
   function joinWithInviteCode(code, initialMessage = '') {
@@ -81,6 +87,50 @@ export default function LiveQueuePage({ track, onCurrentTrack, user, aiDjComment
       onError: (error) => setMessage(error?.message === 'AUTH_REQUIRED' ? 'Your session expired. Sign in again.' : error?.message ?? 'Could not connect to the Lounge service.'),
     });
   }
+
+  useEffect(() => {
+    const pending = pendingSegueRef.current;
+    if (pending && pending.trackId !== track?.trackId) {
+      socketRef.current?.socket.emit('lounge.playback.cancel', { trackId: pending.trackId });
+      pendingSegueRef.current = null;
+      segueAttemptRef.current = null;
+    }
+    if (status !== 'connected' || !queueState?.isHost || !activeLoungeId || !track?.trackId || queueState.nowPlaying?.trackId !== track.trackId || !duration || duration - currentTime > (queueState.segueOutroWindowSeconds ?? 12) || !queueState.nextUp?.length) return;
+    const attemptKey = `${track.trackId}:${queueState.nextUp.map((item) => item.trackId).join(',')}`;
+    if (segueAttemptRef.current === attemptKey) return;
+    segueAttemptRef.current = attemptKey;
+    socketRef.current?.socket.emit('lounge.ai.segue.trigger', { currentTs: currentTime }, (ack) => {
+      if (!ack?.ok) { setMessage(ack?.error?.message ?? 'The automatic segue could not be prepared.'); return; }
+      if (ack.noCompatibleCandidate || !ack.decision?.selectedTrackId) { setMessage('No compatible queued track is available for this segue.'); return; }
+      pendingSegueRef.current = { trackId: track.trackId, loungeId: activeLoungeId };
+    });
+  }, [activeLoungeId, currentTime, duration, queueState, status, track?.trackId]);
+
+  useEffect(() => {
+    const ended = (event) => {
+      const pending = pendingSegueRef.current;
+      if (!pending || pending.trackId !== event.detail?.trackId || pending.loungeId !== loungeIdRef.current) return;
+      socketRef.current?.socket.emit('lounge.playback.ended', { trackId: pending.trackId }, (ack) => {
+        if (!ack?.ok) { pendingSegueRef.current = null; setMessage(ack?.error?.message ?? 'The playback segue could not be completed.'); }
+      });
+    };
+    const paused = (event) => {
+      const pending = pendingSegueRef.current;
+      if (pending?.trackId !== event.detail?.trackId) return;
+      socketRef.current?.socket.emit('lounge.playback.cancel', { trackId: pending.trackId });
+      pendingSegueRef.current = null;
+      segueAttemptRef.current = null;
+    };
+    window.addEventListener('astradj:playback-ended', ended);
+    window.addEventListener('astradj:playback-paused', paused);
+    return () => {
+      window.removeEventListener('astradj:playback-ended', ended);
+      window.removeEventListener('astradj:playback-paused', paused);
+      const pending = pendingSegueRef.current;
+      if (pending) socketRef.current?.socket.emit('lounge.playback.cancel', { trackId: pending.trackId });
+      pendingSegueRef.current = null;
+    };
+  }, []);
 
   function connect(event) {
     event.preventDefault();

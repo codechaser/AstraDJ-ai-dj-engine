@@ -9,7 +9,7 @@ test('Home, artist and Playlist use catalog results and select real tracks in th
   const artistLink = page.getByRole('link', { name: /Kian Moretz/ });
   await expect(artistLink).toBeVisible();
   await artistLink.click();
-  await expect(page.getByRole('heading', { name: 'Kian Moretz' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Kian Moretz', exact: true })).toBeVisible();
   await expect(page.getByText('Thoughtness', { exact: true })).toBeVisible();
   await expect(page.getByText('1 track in the AstraDJ catalog')).toBeVisible();
   await expect(page.getByText('Album metadata is not available for this artist.')).toBeVisible();
@@ -20,7 +20,7 @@ test('Home, artist and Playlist use catalog results and select real tracks in th
 
   await page.getByRole('link', { name: 'Your Library' }).click();
   await expect(page.getByRole('heading', { name: 'All Tracks' })).toBeVisible();
-  await expect(page.getByText('4 tracks · 0h 11m')).toBeVisible();
+  await expect(page.getByText('7 tracks · 0h 18m')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Select first catalog track' })).toBeEnabled();
   await page.getByRole('button', { name: 'Select first catalog track' }).click();
   await expect(page.locator('.player-song b')).toHaveText('Afterglow Avenue');
@@ -29,6 +29,54 @@ test('Home, artist and Playlist use catalog results and select real tracks in th
   await expect(page.getByRole('heading', { name: /No album metadata/ })).toBeVisible();
   await expect(page.getByText(/does not include album names/)).toBeVisible();
   expect(pageErrors).toEqual([]);
+});
+
+test('CC0 catalog audio is served and decodes with browser playback progress', async ({ page }) => {
+  await page.goto('/playlist');
+  const selectTrack = page.getByRole('button', { name: 'Select Chill Beat' });
+  await expect(selectTrack).toBeVisible();
+  const assetResponse = page.waitForResponse((response) => response.url().endsWith('/audio/chill-beat.ogg'));
+  await selectTrack.click();
+  const response = await assetResponse;
+  expect([200, 206]).toContain(response.status());
+  expect(response.headers()['content-type']).toContain('audio/ogg');
+
+  const audio = page.locator('audio');
+  await expect.poll(() => audio.evaluate((element) => element.readyState)).toBeGreaterThanOrEqual(1);
+  const metadata = await audio.evaluate((element) => ({
+    src: element.currentSrc,
+    duration: element.duration,
+    error: element.error?.message ?? null,
+  }));
+  expect(metadata.src).toContain('/audio/chill-beat.ogg');
+  expect(metadata.duration).toBeGreaterThan(96);
+  expect(metadata.duration).toBeLessThan(97);
+  expect(metadata.error).toBeNull();
+
+  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await expect.poll(() => audio.evaluate((element) => element.currentTime), { timeout: 8000 }).toBeGreaterThan(0.3);
+  await page.getByRole('button', { name: 'Pause', exact: true }).click();
+  await expect.poll(() => audio.evaluate((element) => element.paused)).toBe(true);
+});
+
+test('source-backed compatible pair serves and plays both catalog assets', async ({ page }) => {
+  await page.goto('/playlist');
+  for (const [title, expectedDuration] of [['Ivory Atlas', 180], ['Faded Fortress', 120]]) {
+    const select = page.getByRole('button', { name: `Select ${title}` });
+    await expect(select).toBeVisible();
+    const assetResponse = page.waitForResponse((response) => response.url().includes(title === 'Ivory Atlas' ? '/audio/ivory-atlas.mp3' : '/audio/faded-fortress.mp3'));
+    await select.click();
+    const response = await assetResponse;
+    expect([200, 206]).toContain(response.status());
+    expect(response.headers()['content-type']).toContain('audio/mpeg');
+    const audio = page.locator('audio');
+    await expect.poll(() => audio.evaluate((element) => element.readyState)).toBeGreaterThanOrEqual(1);
+    await expect.poll(() => audio.evaluate((element, expected) => Math.abs(element.duration - expected), expectedDuration)).toBeLessThan(0.1);
+    await page.getByRole('button', { name: 'Play', exact: true }).click();
+    await expect.poll(() => audio.evaluate((element) => element.currentTime), { timeout: 10000 }).toBeGreaterThan(0.3);
+    await page.getByRole('button', { name: 'Pause', exact: true }).click();
+    await expect.poll(() => audio.evaluate((element) => element.paused)).toBe(true);
+  }
 });
 
 test('catalog pages show explicit loading, empty and API error states', async ({ page }) => {

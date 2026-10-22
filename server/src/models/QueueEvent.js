@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 const queueEventSchema = new mongoose.Schema({
   loungeId: { type: String, required: true, index: true },
   seq: { type: Number, required: true, min: 1 },
-  type: { type: String, enum: ['track.added', 'track.voted', 'soundclash.submitted', 'soundclash.opened', 'soundclash.voted', 'soundclash.tied', 'soundclash.resolved'], required: true },
+  type: { type: String, enum: ['track.added', 'track.voted', 'track.transitioned', 'soundclash.submitted', 'soundclash.opened', 'soundclash.voted', 'soundclash.tied', 'soundclash.resolved'], required: true },
   actorUserId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',

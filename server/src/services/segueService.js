@@ -15,7 +15,7 @@ export function createSegueService({ loungeModel = DJLounge, trackModel = Track,
       if (typeof publisher !== 'function') throw new TypeError('announcement publisher must be a function');
       announcementPublisher = publisher;
     },
-    async requestSegue({ loungeId, userId, input }) {
+    async requestSegue({ loungeId, userId, input, includeCommentary = true, announce = true }) {
       const lounge = await loungeModel.findOne({ loungeId, status: { $ne: 'ended' } }).lean();
       if (!lounge) throw new ApiError(404, 'LOUNGE_NOT_FOUND', 'Lounge not found or ended');
       if (!lounge.participantIds.some((participantId) => String(participantId) === String(userId))) {
@@ -57,6 +57,22 @@ export function createSegueService({ loungeModel = DJLounge, trackModel = Track,
           generatedAt,
           provider: transitionProvider.name,
           reason: 'NO_COMPATIBLE_CANDIDATE',
+        };
+      }
+
+      // Preference suppression happens before provider invocation, while the
+      // same acoustic selection and hard constraints still run normally.
+      if (!includeCommentary) {
+        return {
+          selectedTrackId: selected.track.trackId,
+          matchReason: {
+            bpmDeltaPct: selected.match.bpmDeltaPct, bpmRelation: selected.match.bpmRelation,
+            camelotRelation: selected.match.camelotRelation, energyFit: selected.match.energyFit,
+            harmonicCloseness: selected.match.harmonicCloseness, targetEnergy: selected.match.targetEnergy,
+            recencyScore: selected.match.recencyScore, score: selected.match.score,
+            selectionReason: selected.match.selectionReason,
+          },
+          transitionScript: null, sourceEvents: [], generatedAt, provider: 'disabled',
         };
       }
 
@@ -104,8 +120,10 @@ export function createSegueService({ loungeModel = DJLounge, trackModel = Track,
         generatedAt,
         provider: usedFallback ? fallbackProvider.name : (generated.provider ?? transitionProvider.name),
       };
-      try { announcementPublisher(loungeId, { text: response.transitionScript, relatedTrackId: response.selectedTrackId, sourceEvents: response.sourceEvents }); }
-      catch { /* Realtime fan-out must not invalidate an otherwise successful REST decision. */ }
+      if (announce) {
+        try { announcementPublisher(loungeId, { text: response.transitionScript, relatedTrackId: response.selectedTrackId, sourceEvents: response.sourceEvents }); }
+        catch { /* Realtime fan-out must not invalidate an otherwise successful REST decision. */ }
+      }
       return {
         ...response,
       };

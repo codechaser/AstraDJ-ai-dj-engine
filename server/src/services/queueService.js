@@ -1,4 +1,5 @@
 import { ApiError } from '../utils/ApiError.js';
+import { matchSegueCandidate } from './acousticMatcher.js';
 
 // Queue order and vote tallies live in memory. Compact append-only commands are
 // replayed after a process restart; no full queue snapshot is written per vote.
@@ -33,6 +34,7 @@ export function createQueueService(repository, { voteBatchSize = 20, voteFlushMs
         else item.votes.set(String(event.actorUserId), event.payload.value);
       }
     }
+    if (event.type === 'track.transitioned') state.currentTrackId = event.payload.trackId;
     if (event.type === 'soundclash.resolved') {
       const winningTrackId = event.payload.winningTrackId;
       const existingIndex = state.items.findIndex((item) => item.trackId === winningTrackId);
@@ -162,6 +164,24 @@ export function createQueueService(repository, { voteBatchSize = 20, voteFlushMs
         await repository.appendQueueEvents([event]);
         applyEvent(state, event);
         return publicState(lounge, state);
+      });
+    },
+    async transitionTo({ lounge, actor, trackId }) {
+      if (String(lounge.hostUserId) !== String(actor.id) || actor.role !== 'Host') throw new ApiError(403, 'LOUNGE_HOST_REQUIRED', 'Only the Lounge Host can advance a playback segue');
+      if (!await repository.getTrack(trackId)) throw new ApiError(404, 'TRACK_NOT_FOUND', 'The segue track does not exist');
+      return serialized(lounge.loungeId, async () => {
+        const state = await getState(lounge);
+        const candidate = state.items.find((item) => item.trackId === trackId);
+        if (!candidate || trackId === state.currentTrackId) throw new ApiError(409, 'TRACK_NOT_QUEUED', 'The segue target must be an upcoming queue item');
+        const [currentTrack, nextTrack] = await Promise.all([repository.getTrack(state.currentTrackId), repository.getTrack(trackId)]);
+        const match = matchSegueCandidate(currentTrack, nextTrack, { bpmTolerancePct: lounge.settings?.bpmTolerancePct ?? 8 });
+        if (!match.eligible) throw new ApiError(409, 'SEGUE_NO_LONGER_COMPATIBLE', 'The selected track no longer satisfies acoustic segue rules');
+        const event = { loungeId: lounge.loungeId, seq: state.seq + 1, type: 'track.transitioned', actorUserId: actor.id, payload: { trackId, fromTrackId: state.currentTrackId }, createdAt: new Date() };
+        await repository.appendQueueEvents([event]);
+        const updated = await repository.setCurrentTrack?.(lounge.loungeId, trackId);
+        if (repository.setCurrentTrack && !updated) throw new ApiError(409, 'LOUNGE_NOT_LIVE', 'The Lounge is no longer live');
+        applyEvent(state, event);
+        return publicState({ ...lounge, currentTrackId: trackId }, state);
       });
     },
     async addTrack({ lounge, actor, trackId }) {

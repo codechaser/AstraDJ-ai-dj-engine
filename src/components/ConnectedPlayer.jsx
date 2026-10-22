@@ -23,6 +23,13 @@ export default function ConnectedPlayer({ track, playing, onToggle, registerPlay
     else setAudioStatus('loading');
   }, [track?.trackId, track?.audioAssetUrl, available, setCurrentTime, setDuration, setAudioStatus]);
 
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!playing || !available || !audio) return undefined;
+    audio.play().then(() => onPlaybackChange(true)).catch(() => { setAudioStatus('error'); onPlaybackChange(false); });
+    return undefined;
+  }, [track?.trackId, playing, available, onPlaybackChange, setAudioStatus]);
+
   const toggleAudio = useCallback(() => {
     const audio = audioRef.current;
     const requestedTrackId = track?.trackId;
@@ -34,6 +41,7 @@ export default function ConnectedPlayer({ track, playing, onToggle, registerPlay
         if (audioRef.current === audio && trackIdRef.current === requestedTrackId) { setAudioStatus('error'); onPlaybackChange(false); }
       });
     } else {
+      window.dispatchEvent(new CustomEvent('astradj:playback-paused', { detail: { trackId: requestedTrackId } }));
       audio.pause(); onPlaybackChange(false);
     }
   }, [available, onPlaybackChange, setAudioStatus, track?.trackId]);
@@ -48,6 +56,7 @@ export default function ConnectedPlayer({ track, playing, onToggle, registerPlay
     if (!track?.trackId || completedRef.current === track.trackId) return;
     completedRef.current = track.trackId;
     onPlaybackChange(false);
+    window.dispatchEvent(new CustomEvent('astradj:playback-ended', { detail: { trackId: track.trackId } }));
     const interaction = buildCompletionInteraction(track, audio.duration, liked);
     if (!interaction) {
       setAudioStatus('duration_mismatch'); return;

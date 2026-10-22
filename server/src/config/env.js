@@ -5,6 +5,10 @@ if (!Number.isInteger(ttl) || ttl < 1 || ttl > 3600) {
   throw new Error('JWT_ACCESS_TTL_SECONDS must be an integer between 1 and 3600');
 }
 const clientOriginValue = process.env.CLIENT_ORIGIN?.trim() || null;
+const segueOutroWindowSeconds = Number.parseInt(process.env.AI_DJ_OUTRO_WINDOW_SECONDS ?? '12', 10);
+if (!Number.isInteger(segueOutroWindowSeconds) || segueOutroWindowSeconds < 3 || segueOutroWindowSeconds > 60) {
+  throw new Error('AI_DJ_OUTRO_WINDOW_SECONDS must be an integer between 3 and 60');
+}
 let clientOrigin = null;
 if (clientOriginValue) {
   let parsedOrigin;
@@ -23,6 +27,7 @@ export const config = {
   refreshTtlDays: Number.parseInt(process.env.JWT_REFRESH_TTL_DAYS ?? '7', 10),
   nodeEnv: process.env.NODE_ENV ?? 'development',
   clientOrigin,
+  segueOutroWindowSeconds,
   get cookieSecure() { return this.nodeEnv === 'production'; },
 };
 

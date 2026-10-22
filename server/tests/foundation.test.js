@@ -77,7 +77,7 @@ const Track = {
   findOne: jest.fn((filter) => new Query(() => {
     const track = [...tracks.values()].find((item) => item.trackId === filter.trackId);
     if (!track) return null;
-    return { trackId: track.trackId, title: track.title, artist: track.artist, acoustic: track.acoustic, timeline: track.timeline };
+    return { trackId: track.trackId, title: track.title, artist: track.artist, durationSeconds: track.durationSeconds, audioAssetUrl: track.audioAssetUrl, acoustic: track.acoustic, acousticEvidence: track.acousticEvidence, timeline: track.timeline };
   })),
   create: jest.fn(async (data) => {
     const track = { ...structuredClone(data), id: crypto.randomUUID() };
@@ -214,7 +214,7 @@ describe('track catalog and acoustic-profile HTTP contract', () => {
     const catalog = await request(app).get('/api/v1/tracks?limit=2&skip=0');
     expect(catalog.status).toBe(200);
     expect(catalog.body.items).toHaveLength(2);
-    expect(catalog.body.page).toEqual({ limit: 2, skip: 0, total: 4 });
+    expect(catalog.body.page).toEqual({ limit: 2, skip: 0, total: 7 });
     const demo = await request(app).get('/api/v1/tracks?q=Thoughtness');
     expect(demo.body.items).toContainEqual(expect.objectContaining({
       trackId: 't_cc0_thoughtness', title: 'Thoughtness', artist: 'Kian Moretz', durationSeconds: 46,
@@ -224,9 +224,24 @@ describe('track catalog and acoustic-profile HTTP contract', () => {
     expect(profile.status).toBe(200);
     expect(profile.body).toEqual({
       trackId: 't_2001', title: 'Night Drive', artist: 'Nova Circuit',
+      durationSeconds: 224,
       acoustic: { bpm: 124, camelotKey: '8A', energy: 0.78, valence: 0.65 },
       timeline: expect.arrayContaining([expect.objectContaining({ ts: 12, type: 'sample_credit' })]),
     });
+  });
+
+  test('exposes profile provenance for source-backed playable demo tracks', async () => {
+    for (const [trackId, url, bpm, title] of [
+      ['t_cc0_ivory_atlas', '/audio/ivory-atlas.mp3', 143, 'Ivory Atlas'],
+      ['t_cc0_faded_fortress', '/audio/faded-fortress.mp3', 142, 'Faded Fortress'],
+    ]) {
+      const catalog = await request(app).get(`/api/v1/tracks?q=${encodeURIComponent(title)}`);
+      const item = catalog.body.items.find((track) => track.trackId === trackId);
+      expect(item).toMatchObject({ audioAssetUrl: url, durationSeconds: title === 'Ivory Atlas' ? 180 : 120, acoustic: { bpm, camelotKey: '8A' } });
+      const profile = await request(app).get(`/api/v1/tracks/${trackId}/acoustic-profile`);
+      expect(profile.status).toBe(200);
+      expect(profile.body.acousticEvidence).toMatchObject({ license: 'CC0-1.0', sourceTrackId: expect.any(String), assetSha256: expect.any(String) });
+    }
   });
 
   test('rejects invalid pagination and profile IDs and returns 404 for an unknown track', async () => {
@@ -373,7 +388,7 @@ describe('authenticated interaction collection and private recommendations', () 
     const response = await request(app).get('/api/v1/recommendations?limit=2').set('Authorization', `Bearer ${tokenA}`);
     expect(response.status).toBe(200);
     expect(response.body.strategy).toBe('content_based');
-    expect(response.body.items).toHaveLength(1);
+    expect(response.body.items).toHaveLength(2);
     expect(JSON.stringify(response.body)).not.toContain(userA);
     expect(JSON.stringify(response.body)).not.toContain(userB);
     expect((await request(app).get(`/api/v1/recommendations?userId=${userB}`).set('Authorization', `Bearer ${tokenA}`)).status).toBe(400);

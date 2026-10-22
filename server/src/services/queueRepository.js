@@ -38,11 +38,14 @@ export const queueRepository = {
   async getTrack(trackId) {
     return Track.findOne({ trackId }).select('trackId title artist durationSeconds audioAssetUrl acoustic').lean();
   },
+  setCurrentTrack(loungeId, currentTrackId) {
+    return DJLounge.findOneAndUpdate({ loungeId, status: 'live' }, { $set: { currentTrackId } }, { new: true }).lean();
+  },
   async getTrackMetadata(trackId) {
     return Track.findOne({ trackId }).select('trackId title artist timeline').lean();
   },
   getUser(userId) {
-    return User.findById(userId).select('email displayName role').lean();
+    return User.findById(userId).select('email displayName role preferences.audio.aiDjCommentary').lean();
   },
   appendChatMessages(messages) {
     return ChatMessage.bulkWrite(messages.map((message) => ({

@@ -8,9 +8,9 @@ export async function requireAuth(req, _res, next) {
     const [scheme, token] = (req.get('authorization') ?? '').split(' ');
     if (scheme !== 'Bearer' || !token) throw new ApiError(401, 'AUTH_REQUIRED', 'A valid access token is required');
     const claims = jwt.verify(token, config.jwtAccessSecret, { algorithms: ['HS256'], issuer: 'astradj-api', audience: 'astradj-client' });
-    const user = await User.findById(claims.sub).select('email displayName role');
+    const user = await User.findById(claims.sub).select('email displayName role preferences.audio.aiDjCommentary');
     if (!user) throw new ApiError(401, 'AUTH_REQUIRED', 'The account for this token no longer exists');
-    req.user = { id: user.id, email: user.email, displayName: user.displayName, role: user.role };
+    req.user = { id: user.id, email: user.email, displayName: user.displayName, role: user.role, aiDjCommentary: user.preferences?.audio?.aiDjCommentary !== false };
     return next();
   } catch (err) {
     if (err instanceof ApiError) return next(err);

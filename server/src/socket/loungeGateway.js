@@ -8,6 +8,7 @@ import { createSoundclashService } from '../services/soundclashService.js';
 import { loungeLifecycleService as defaultLoungeLifecycleService } from '../services/loungeLifecycleService.js';
 import { loungeMetricEventService as defaultLoungeMetricEventService } from '../services/loungeMetricEventService.js';
 import { loungeCommandCoordinator } from '../services/loungeCommandCoordinator.js';
+import { segueService as defaultSegueService } from '../services/segueService.js';
 
 const ROOM_PREFIX = 'lounge:';
 const room = (loungeId) => `${ROOM_PREFIX}${loungeId}`;
@@ -17,11 +18,12 @@ export function publishLoungeEvent(io, event, loungeId, payload) {
 }
 const ackError = (error) => ({ ok: false, error: { code: error.code ?? 'INTERNAL_ERROR', message: error.status && error.status < 500 ? error.message : 'The request could not be completed' } });
 
-export function attachLoungeGateway(io, { repository = queueRepository, queueService = createQueueService(repository), secret = config.jwtAccessSecret, sentimentService = roomSentimentService, chatService = createChatService({ repository, sentimentService }), soundclashService = null, soundclashOptions = {}, loungeLifecycleService = defaultLoungeLifecycleService, loungeMetricEventService = defaultLoungeMetricEventService } = {}) {
+export function attachLoungeGateway(io, { repository = queueRepository, queueService = createQueueService(repository), secret = config.jwtAccessSecret, sentimentService = roomSentimentService, chatService = createChatService({ repository, sentimentService }), soundclashService = null, soundclashOptions = {}, loungeLifecycleService = defaultLoungeLifecycleService, loungeMetricEventService = defaultLoungeMetricEventService, segueService = defaultSegueService } = {}) {
   soundclashService ??= createSoundclashService({ repository, queueService, ...soundclashOptions, onEvent: (event, loungeId, payload) => publishLoungeEvent(io, event, loungeId, payload) });
   const loungeBySocket = new Map();
   const socketsByLounge = new Map();
   const joiningUsers = new Map();
+  const pendingSegueDecisions = new Map();
   const serializeLoungeCommand = (loungeId, operation) => loungeCommandCoordinator.run(loungeId, operation);
 
   io.use(async (socket, next) => {
@@ -52,7 +54,7 @@ export function attachLoungeGateway(io, { repository = queueRepository, queueSer
       if (!loungeId) throw Object.assign(new Error('Join a Lounge before sending this command'), { status: 403, code: 'LOUNGE_MEMBERSHIP_REQUIRED' });
       const user = await repository.getUser(socket.data.userId);
       if (!user) throw Object.assign(new Error('The account is no longer available'), { status: 401, code: 'AUTH_REQUIRED' });
-      return callback({ loungeId, user: { id: socket.data.userId, role: user.role, displayName: user.displayName } });
+      return callback({ loungeId, user: { id: socket.data.userId, role: user.role, displayName: user.displayName, aiDjCommentary: user.preferences?.audio?.aiDjCommentary !== false } });
     }
     async function authorizedLoungeAction(callback) {
       return authorizedAction(async ({ loungeId, user }) => {
@@ -117,7 +119,7 @@ export function attachLoungeGateway(io, { repository = queueRepository, queueSer
         state.hostDisconnected = !hasHost(loungeId, lounge.hostUserId);
         state.isHost = String(lounge.hostUserId) === socket.data.userId;
         if (isFirstSocket) await emitPresence(loungeId, socket.data.userId, 'joined', state.hostDisconnected);
-        return { loungeId, state: { ...initial, ...state } };
+        return { loungeId, state: { ...initial, ...state, segueOutroWindowSeconds: config.segueOutroWindowSeconds } };
       });
     });
 
@@ -143,6 +145,50 @@ export function attachLoungeGateway(io, { repository = queueRepository, queueSer
       return { state };
     })));
 
+    command('lounge.ai.segue.trigger', (payload) => authorizedLoungeAction(async ({ loungeId, user, lounge }) => {
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload) || Object.keys(payload).length !== 1 || !Number.isFinite(payload.currentTs) || payload.currentTs < 0) {
+        throw Object.assign(new Error('Payload must contain a non-negative currentTs'), { status: 400, code: 'VALIDATION_ERROR' });
+      }
+      if (user.role !== 'Host' || String(lounge.hostUserId) !== String(user.id)) throw Object.assign(new Error('Only the Lounge Host can trigger playback segues'), { status: 403, code: 'LOUNGE_HOST_REQUIRED' });
+      if (!hasHost(loungeId, lounge.hostUserId)) throw Object.assign(new Error('Queue mutations are frozen while the Host is disconnected'), { status: 409, code: 'HOST_DISCONNECTED' });
+      const state = await queueService.snapshot(lounge);
+      if (!state.nowPlaying || payload.currentTs < state.nowPlaying.durationSeconds - config.segueOutroWindowSeconds) {
+        throw Object.assign(new Error('Playback has not reached the configured outro window'), { status: 409, code: 'OUTRO_WINDOW_NOT_REACHED' });
+      }
+      const decision = await segueService.requestSegue({
+        loungeId, userId: user.id,
+        input: { currentTrackId: state.nowPlaying?.trackId, currentTs: payload.currentTs, candidateTrackIds: state.nextUp.map(({ trackId }) => trackId), currentSentimentScore: 0.5 },
+        includeCommentary: user.aiDjCommentary,
+        announce: false,
+      });
+      if (!decision.selectedTrackId) return { noCompatibleCandidate: true, decision };
+      pendingSegueDecisions.set(loungeId, { fromTrackId: state.nowPlaying.trackId, trackId: decision.selectedTrackId, decision, createdAt: Date.now() });
+      if (decision.transitionScript) publishLoungeEvent(io, 'lounge.ai.dj_announcement', loungeId, { text: decision.transitionScript, relatedTrackId: decision.selectedTrackId, sourceEvents: decision.sourceEvents });
+      return { decision, outroWindowSeconds: config.segueOutroWindowSeconds };
+    }));
+
+    command('lounge.playback.ended', (payload) => authorizedLoungeAction(async ({ loungeId, user, lounge }) => {
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload) || Object.keys(payload).length !== 1 || typeof payload.trackId !== 'string') throw Object.assign(new Error('Payload must contain only trackId'), { status: 400, code: 'VALIDATION_ERROR' });
+      if (user.role !== 'Host' || String(lounge.hostUserId) !== String(user.id)) throw Object.assign(new Error('Only the Lounge Host can advance playback'), { status: 403, code: 'LOUNGE_HOST_REQUIRED' });
+      const pending = pendingSegueDecisions.get(loungeId);
+      if (!pending || pending.fromTrackId !== payload.trackId || Date.now() - pending.createdAt > 5 * 60_000 || lounge.currentTrackId !== payload.trackId) {
+        pendingSegueDecisions.delete(loungeId);
+        throw Object.assign(new Error('There is no current playback segue to complete'), { status: 409, code: 'SEGUE_NOT_PENDING' });
+      }
+      const nextState = await queueService.transitionTo({ lounge, actor: user, trackId: pending.trackId });
+      pendingSegueDecisions.delete(loungeId);
+      const transition = { trackId: pending.trackId, matchReason: pending.decision.matchReason, transitionScript: pending.decision.transitionScript, sourceEvents: pending.decision.sourceEvents, provider: pending.decision.provider };
+      io.to(room(loungeId)).emit('lounge.queue.update', envelope('lounge.queue.update', loungeId, { queue: queueRows(nextState), reason: 'segue', transition }));
+      return { state: nextState, transition };
+    }));
+
+    command('lounge.playback.cancel', (payload) => authorizedLoungeAction(async ({ loungeId, user, lounge }) => {
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload) || Object.keys(payload).length !== 1 || typeof payload.trackId !== 'string') throw Object.assign(new Error('Payload must contain only trackId'), { status: 400, code: 'VALIDATION_ERROR' });
+      if (user.role !== 'Host' || String(lounge.hostUserId) !== String(user.id)) throw Object.assign(new Error('Only the Lounge Host can cancel a playback segue'), { status: 403, code: 'LOUNGE_HOST_REQUIRED' });
+      if (pendingSegueDecisions.get(loungeId)?.fromTrackId === payload.trackId) pendingSegueDecisions.delete(loungeId);
+      return {};
+    }));
+
     command('lounge.sync.request', () => authorizedAction(async ({ loungeId }) => {
       const joined = await repository.findLoungeById(loungeId);
       if (!joined) throw Object.assign(new Error('Lounge no longer exists'), { status: 404, code: 'LOUNGE_NOT_FOUND' });
@@ -167,6 +213,7 @@ export function attachLoungeGateway(io, { repository = queueRepository, queueSer
       await chatService.flush(loungeId);
       const result = await loungeLifecycleService.end({ loungeId, userId: user.id, userRole: user.role });
       if (!result.alreadyEnded) {
+        pendingSegueDecisions.delete(loungeId);
         const eventPayload = { endedAt: result.lounge.endedAt.toISOString(), summary: result.lounge.sessionSummary };
         io.to(room(loungeId)).emit('lounge.session.ended', envelope('lounge.session.ended', loungeId, eventPayload));
       }
@@ -237,6 +284,7 @@ export function attachLoungeGateway(io, { repository = queueRepository, queueSer
           if (entry.sockets.size === 0) {
             currentMembers.delete(socket.data.userId);
             const lounge = await repository.findLoungeById(loungeId);
+            if (String(lounge?.hostUserId) === socket.data.userId) pendingSegueDecisions.delete(loungeId);
             if (lounge?.status === 'live') await emitPresence(loungeId, socket.data.userId, 'left', !hasHost(loungeId, lounge.hostUserId));
           }
         });

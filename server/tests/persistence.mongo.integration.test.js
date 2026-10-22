@@ -51,11 +51,20 @@ liveTest('MongoDB persists auth, catalog, interactions, queue events, and author
 
     const demoSeed = seedTracks.find(({ trackId }) => trackId === 't_cc0_thoughtness');
     expect(demoSeed).toMatchObject({ durationSeconds: 46, audioAssetUrl: '/audio/thoughtness.ogg', acoustic: null });
+    const secondAudioSeed = seedTracks.find(({ trackId }) => trackId === 't_cc0_chill_beat');
+    expect(secondAudioSeed).toMatchObject({ audioAssetUrl: '/audio/chill-beat.ogg', acoustic: null });
     await Track.create(demoSeed);
+    await Track.create(secondAudioSeed);
     const catalogDemo = await request(app).get('/api/v1/tracks?q=Thoughtness');
     expect(catalogDemo.status).toBe(200);
     expect(catalogDemo.body.items).toContainEqual(expect.objectContaining({
       trackId: 't_cc0_thoughtness', audioAssetUrl: '/audio/thoughtness.ogg', durationSeconds: 46, acoustic: null,
+    }));
+    const catalogSecondAudio = await request(app).get('/api/v1/tracks?q=Chill%20Beat');
+    expect(catalogSecondAudio.status).toBe(200);
+    expect(catalogSecondAudio.body.items).toContainEqual(expect.objectContaining({
+      trackId: 't_cc0_chill_beat', title: 'Chill Beat', artist: 'Maddy',
+      audioAssetUrl: '/audio/chill-beat.ogg', durationSeconds: 96.180612244898, acoustic: null,
     }));
     const profileUnavailable = await request(app).get('/api/v1/tracks/t_cc0_thoughtness/acoustic-profile');
     expect(profileUnavailable.status).toBe(409);

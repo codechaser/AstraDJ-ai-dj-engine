@@ -138,6 +138,26 @@ try {
   if (!demoTrack || demoTrack.audioAssetUrl !== '/audio/thoughtness.ogg' || demoTrack.durationSeconds !== 46 || demoTrack.acoustic !== null) {
     throw new Error('Seeded catalog did not return the expected demo track metadata');
   }
+  const secondAudioResponse = await fetch(`${frontendOrigin}/api/v1/tracks?q=Chill%20Beat`);
+  if (!secondAudioResponse.ok) throw new Error(`Frontend API proxy returned ${secondAudioResponse.status} for the second audio fixture`);
+  const secondAudioCatalog = await secondAudioResponse.json();
+  const secondAudioTrack = secondAudioCatalog.items?.find((track) => track.trackId === 't_cc0_chill_beat');
+  if (!secondAudioTrack || secondAudioTrack.audioAssetUrl !== '/audio/chill-beat.ogg' || secondAudioTrack.durationSeconds !== 96.180612244898 || secondAudioTrack.acoustic !== null) {
+    throw new Error('Seeded catalog did not return the expected second audio fixture metadata');
+  }
+  for (const [trackId, assetUrl, bpm] of [
+    ['t_cc0_ivory_atlas', '/audio/ivory-atlas.mp3', 143],
+    ['t_cc0_faded_fortress', '/audio/faded-fortress.mp3', 142],
+  ]) {
+    const profileResponse = await fetch(`${frontendOrigin}/api/v1/tracks/${trackId}/acoustic-profile`);
+    if (!profileResponse.ok) throw new Error(`Catalog acoustic profile for ${trackId} returned ${profileResponse.status}`);
+    const profile = await profileResponse.json();
+    if (profile.audioAssetUrl !== assetUrl || profile.acoustic?.bpm !== bpm || profile.acoustic.camelotKey !== '8A' || !profile.acousticEvidence?.assetSha256) {
+      throw new Error(`Catalog profile/provenance did not match the verified fixture for ${trackId}`);
+    }
+    const assetResponse = await fetch(`${frontendOrigin}${assetUrl}`, { method: 'HEAD' });
+    if (!assetResponse.ok || !assetResponse.headers.get('content-type')?.includes('audio/mpeg')) throw new Error(`Playable MP3 fixture ${trackId} was not served as audio/mpeg`);
+  }
 
   const playwrightCli = join(root, 'node_modules/@playwright/test/cli.js');
   const config = loungeMode ? 'playwright.lounge-e2e.config.js' : settingsMode ? 'playwright.settings-e2e.config.js' : adminAcousticMode ? 'playwright.admin-acoustic-e2e.config.js' : catalogMode ? 'playwright.catalog-e2e.config.js' : 'playwright.audio-e2e.config.js';

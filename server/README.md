@@ -55,7 +55,7 @@ Lounge session analytics use persisted start/end timestamps, distinct Soundclash
 - `GET /api/v1/auth/me` — authenticated account profile.
 - `GET /api/v1/auth/me/preferences` and `PATCH /api/v1/auth/me/preferences` — authenticated, validated audio preferences for the current account.
 - `GET /api/v1/tracks` — validated paginated catalog (`q`, `limit`, `skip`).
-- `GET /api/v1/tracks/:trackId/acoustic-profile` — PRD-shaped track vector and metadata timeline.
+- `GET /api/v1/tracks/:trackId/acoustic-profile` — track/player fields, acoustic vector, optional provenance and metadata timeline.
 - `POST /api/v1/tracks` — Admin-only validated acoustic-profile management endpoint.
 - `POST /api/v1/lounges` — Host-only lounge creation using the PRD request and response contract.
 - `POST /api/v1/lounges/:id/ai/segue` — authenticated Lounge-member acoustic selection and grounded deterministic transition fallback.
@@ -66,6 +66,8 @@ Lounge session analytics use persisted start/end timestamps, distinct Soundclash
 - `GET /api/v1/dashboard/lounge-history?limit=50` — authenticated list of ended Lounge summaries where the caller is Host or a persisted participant.
 - `GET /api/v1/dashboard/lounges/:id/analytics` — Lounge-member analytics from persisted queue events and chat messages; unavailable metrics remain `null`.
 - `GET /health` and `GET /api/v1/health` — API and database state.
+
+The Queue page's automatic outro lifecycle uses Host-only Socket.io commands `lounge.ai.segue.trigger`, `lounge.playback.ended`, and `lounge.playback.cancel`. Set `AI_DJ_OUTRO_WINDOW_SECONDS` to an integer from 3 to 60 (default 12). Pending decisions are process-local and commentary follows the Host's saved preference; `track.transitioned` is persisted only after the player reports its natural `ended` event.
 
 ## Socket.io DJ Lounge queue
 
@@ -103,7 +105,7 @@ Live join, shared queue add/vote ordering, presence, sync/reconnect, queue recov
 
 ## Audio assets
 
-`Track.audioAssetUrl` is optional. The API accepts local `/audio/<filename>.<ext>` assets that live under the frontend's `public/audio/` directory, or exact-host HTTPS sources listed in `AUDIO_ASSET_ALLOWED_HOSTS` (comma-separated, no wildcards/ports). Plain HTTP, local filesystem URLs, traversal paths, and unlisted media hosts are rejected. Add only assets the project is authorized to serve and record their provenance/license in `public/audio/NOTICE.md`. The CC0 demo file `public/audio/thoughtness.ogg` is seeded as catalog track `t_cc0_thoughtness`; Playlist/Search load it from `GET /api/v1/tracks`. Its acoustic profile is null until verified analysis exists and it is therefore ineligible for acoustic matching. The Ogg stream duration is 46.132 seconds, represented as 46 seconds in the catalog. Playback history is reported only after the browser audio element's `ended` event with duration within one second, and remains labeled `self_reported`. `npm run test:e2e:audio` verifies Ogg response/metadata, actual progress, pause/resume, natural completion, owner-scoped history, and no history for a paused incomplete play in installed Chrome using an isolated local MongoDB database. This does not attest playback independently of the client.
+`Track.audioAssetUrl` is optional. The API accepts local `/audio/<filename>.<ext>` assets that live under the frontend's `public/audio/` directory, or exact-host HTTPS sources listed in `AUDIO_ASSET_ALLOWED_HOSTS` (comma-separated, no wildcards/ports). Plain HTTP, local filesystem URLs, traversal paths, and unlisted media hosts are rejected. Add only assets the project is authorized to serve and record their provenance/license in `public/audio/NOTICE.md`. Thoughtness and Chill Beat remain unprofiled. Ivory Atlas and Faded Fortress are CC0 MP3s with source/analysis evidence in `Track.acousticEvidence`; they form an 8A, 143/142 BPM compatible fixture. `npm run test:e2e:catalog` verifies both MP3 responses, browser metadata, decode, progress and pause. `npm run test:e2e:lounge` verifies the outro decision and queue advance from the actual natural `ended` event with 10× accelerated playback. `npm run test:e2e:audio` verifies Thoughtness completion history, account isolation, and incomplete-play handling. Interaction history remains client-reported and labeled `self_reported`, not independent playback attestation.
 
 ## Dashboard history and Lounge analytics
 

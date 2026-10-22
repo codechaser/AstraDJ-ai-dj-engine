@@ -137,3 +137,54 @@ test('Host creates a Lounge from the catalog and another authenticated listener 
   await listenerContext.close();
   await hostContext.close();
 });
+
+test('real accelerated media playback triggers a grounded Lounge segue and advances on its natural ended event', async ({ page }) => {
+  test.setTimeout(45_000);
+  await signInHost(page);
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await page.getByRole('link', { name: 'Live', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Starting track' }).selectOption('t_cc0_ivory_atlas');
+  await page.getByRole('button', { name: 'Create Lounge' }).click();
+  await expect(page.getByText('Live', { exact: true })).toBeVisible();
+  const addTrack = page.getByRole('combobox', { name: 'Choose a catalog track to add' });
+  await addTrack.selectOption('t_cc0_faded_fortress');
+  await page.getByRole('button', { name: 'Add to queue' }).click();
+  await expect(page.getByRole('main').getByText('Faded Fortress', { exact: true })).toBeVisible();
+
+  const audio = page.locator('audio');
+  await expect.poll(() => audio.evaluate((element) => element.readyState)).toBeGreaterThanOrEqual(1);
+  await audio.evaluate((element) => {
+    element.playbackRate = 10; // Accelerates real media time; does not dispatch or synthesize media events.
+    window.__outroBoundaryAt = null;
+    window.__endedFromRealMedia = false;
+    element.addEventListener('loadedmetadata', () => { window.__outroBoundaryAt = null; });
+    element.addEventListener('timeupdate', () => {
+      if (window.__outroBoundaryAt === null && element.duration - element.currentTime <= 12) window.__outroBoundaryAt = performance.now();
+    });
+    element.addEventListener('ended', () => { window.__endedFromRealMedia = true; }, { once: true });
+  });
+  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  const announcement = page.locator('.ai-grounded-result').getByText(/AstraDJ transition/);
+  await expect(announcement).toBeVisible({ timeout: 30_000 });
+  const triggerToDecisionMs = await page.evaluate(() => performance.now() - window.__outroBoundaryAt);
+  expect(triggerToDecisionMs).toBeLessThan(3000);
+  console.log(`[segue-e2e] browser trigger-to-announcement ${triggerToDecisionMs.toFixed(1)} ms; playbackRate=10x; sample=1`);
+  await expect.poll(() => page.evaluate(() => window.__endedFromRealMedia), { timeout: 30_000 }).toBe(true);
+  await expect.poll(() => audio.evaluate((element) => element.currentSrc), { timeout: 10_000 }).toContain('/audio/faded-fortress.mp3');
+  await expect.poll(() => audio.evaluate((element) => !element.paused && element.currentTime > 0.2), { timeout: 10_000 }).toBe(true);
+  const { loungeId } = await page.evaluate(() => JSON.parse(sessionStorage.getItem('astradj.activeLounge')));
+  const mongoose = (await import('../../server/node_modules/mongoose/index.js')).default;
+  const [{ DJLounge }, { QueueEvent }] = await Promise.all([
+    import('../../server/src/models/DJLounge.js'), import('../../server/src/models/QueueEvent.js'),
+  ]);
+  await mongoose.connect(process.env.MONGODB_URI, { serverSelectionTimeoutMS: 5000 });
+  try {
+    const persisted = await DJLounge.findOne({ loungeId }).lean();
+    const transitions = await QueueEvent.find({ loungeId, type: 'track.transitioned' }).lean();
+    expect(persisted.currentTrackId).toBe('t_cc0_faded_fortress');
+    expect(transitions).toHaveLength(1);
+    expect(transitions[0].payload).toMatchObject({ fromTrackId: 't_cc0_ivory_atlas', trackId: 't_cc0_faded_fortress' });
+  } finally {
+    await mongoose.disconnect();
+  }
+});

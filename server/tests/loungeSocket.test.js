@@ -24,8 +24,8 @@ const users = new Map([
   [uidAdmin, { _id: uidAdmin, displayName: 'Admin', role: 'Admin' }],
 ]);
 const trackData = new Map([
-  ['t_2001', { trackId: 't_2001', title: 'Night Drive', artist: 'Nova Circuit', durationSeconds: 220 }],
-  ['t_2002', { trackId: 't_2002', title: 'Neon Tide', artist: 'Nova Circuit', durationSeconds: 210 }],
+  ['t_2001', { trackId: 't_2001', title: 'Night Drive', artist: 'Nova Circuit', durationSeconds: 220, acoustic: { bpm: 120, camelotKey: '8A', energy: 0.7, valence: 0.6 } }],
+  ['t_2002', { trackId: 't_2002', title: 'Neon Tide', artist: 'Nova Circuit', durationSeconds: 210, acoustic: { bpm: 121, camelotKey: '8A', energy: 0.68, valence: 0.6 } }],
   ['t_2003', { trackId: 't_2003', title: 'Afterglow', artist: 'Mira Vale', durationSeconds: 205 }],
   ['t_2004', { trackId: 't_2004', title: 'Blue Hour', artist: 'Mira Vale', durationSeconds: 208 }],
   ['t_2005', { trackId: 't_2005', title: 'Slow Lights', artist: 'June North', durationSeconds: 215 }],
@@ -54,6 +54,7 @@ function makeRepository() {
     async listQueueEvents(loungeId) { return events.filter((event) => event.loungeId === loungeId).sort((a, b) => a.seq - b.seq); },
     async appendQueueEvents(batch) { if (this.failQueueAppend) throw new Error('simulated persistence failure'); events.push(...structuredClone(batch)); },
     async getTrack(trackId) { return trackData.get(trackId) ?? null; },
+    async setCurrentTrack(loungeId, currentTrackId) { const lounge = lounges.get(loungeId); if (lounge?.status !== 'live') return null; lounge.currentTrackId = currentTrackId; return lounge; },
     async getTrackMetadata(trackId) { const track = trackData.get(trackId); return track ? { ...track, timeline: [{ ts: 12, type: 'trivia', text: `${track.title} is from the sample catalog.` }] } : null; },
     async getUser(id) { return users.get(String(id)) ?? null; },
     async appendChatMessages(batch) { this.chatMessages ??= []; this.chatMessages.push(...structuredClone(batch)); },
@@ -132,9 +133,10 @@ beforeEach(async () => {
   queueService = createQueueService(repository, { voteFlushMs: 30_000 });
   sentimentService = createRoomSentimentService();
   loungeMetricEventService = { events: [], async recordPresence(event) { this.events.push(structuredClone(event)); } };
+  const segueService = { async requestSegue({ input }) { return { selectedTrackId: input.candidateTrackIds[0], matchReason: { bpmRelation: 'direct', bpmDeltaPct: 0.83, camelotRelation: 'same', score: 0.99 }, transitionScript: 'Night Drive flows into Neon Tide.', sourceEvents: ['track:t_2001:metadata', 'track:t_2002:metadata'], provider: 'deterministic-template' }; } };
   server = createServer();
   ioServer = new Server(server, { transports: ['websocket'] });
-  ({ chatService, soundclashService, publishAnnouncement } = attachLoungeGateway(ioServer, { repository, queueService, secret, sentimentService, loungeLifecycleService, loungeMetricEventService, soundclashOptions: { voteDurationMs: 160 } }));
+  ({ chatService, soundclashService, publishAnnouncement } = attachLoungeGateway(ioServer, { repository, queueService, secret, sentimentService, loungeLifecycleService, loungeMetricEventService, segueService, soundclashOptions: { voteDurationMs: 160 } }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   port = server.address().port;
   sockets = [];
@@ -154,6 +156,31 @@ test('authenticated Host and Listener join the invite-authorized Lounge', async 
   expect(h.ok).toBe(true); expect(l.ok).toBe(true);
   expect(l.state.nowPlaying.trackId).toBe('t_2001');
   expect(l.state.hostDisconnected).toBe(false);
+});
+
+test('outro segue is selected in the configured playback window and queue advances only after actual ended signal', async () => {
+  const host = client(uidHost); const listener = client(uidListener); const coDj = client(uidCoDj); const admin = client(uidAdmin);
+  repository.lounges.get('lg_123456789abc').settings.maxParticipants = 5;
+  await Promise.all([join(host), join(listener), join(coDj), join(admin)]);
+  expect((await command(host, 'lounge.queue.add', { trackId: 't_2002' })).ok).toBe(true);
+  const unauthorized = await command(listener, 'lounge.ai.segue.trigger', { currentTs: 209 });
+  expect(unauthorized.error.code).toBe('LOUNGE_HOST_REQUIRED');
+  expect((await command(coDj, 'lounge.ai.segue.trigger', { currentTs: 209 })).error.code).toBe('LOUNGE_HOST_REQUIRED');
+  expect((await command(admin, 'lounge.ai.segue.trigger', { currentTs: 209 })).error.code).toBe('LOUNGE_HOST_REQUIRED');
+  expect((await command(host, 'lounge.ai.segue.trigger', { currentTs: 100 })).error.code).toBe('OUTRO_WINDOW_NOT_REACHED');
+  const ready = await command(host, 'lounge.ai.segue.trigger', { currentTs: 209 });
+  expect(ready).toMatchObject({ ok: true, decision: { selectedTrackId: 't_2002' }, outroWindowSeconds: 12 });
+  expect(repository.lounges.get('lg_123456789abc').currentTrackId).toBe('t_2001');
+  const hostUpdate = waitForMatch(host, 'lounge.queue.update', (event) => event.payload?.reason === 'segue');
+  const listenerUpdate = waitForMatch(listener, 'lounge.queue.update', (event) => event.payload?.reason === 'segue');
+  const ended = await command(host, 'lounge.playback.ended', { trackId: 't_2001' });
+  expect(ended.ok).toBe(true);
+  const [hostEvent, listenerEvent] = await Promise.all([hostUpdate, listenerUpdate]);
+  expect(hostEvent).toEqual(listenerEvent);
+  expect(hostEvent.payload.transition.trackId).toBe('t_2002');
+  expect(repository.lounges.get('lg_123456789abc').currentTrackId).toBe('t_2002');
+  expect(repository.events.at(-1)).toMatchObject({ type: 'track.transitioned', payload: { fromTrackId: 't_2001', trackId: 't_2002' } });
+  expect((await command(host, 'lounge.playback.ended', { trackId: 't_2001' })).error.code).toBe('SEGUE_NOT_PENDING');
 });
 
 test('rejoining the same socket does not persist a duplicate participant join event', async () => {

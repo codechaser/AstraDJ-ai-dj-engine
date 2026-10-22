@@ -22,6 +22,9 @@ const trackSchema = new mongoose.Schema({
   // Some licensed demo recordings have no verified acoustic analysis yet.
   // Match/recommendation services already reject missing profiles explicitly.
   acoustic: { type: acousticProfile, default: null },
+  // Provenance accompanies curated demo profiles. It is optional for existing
+  // catalog documents and never used as a substitute for acoustic validation.
+  acousticEvidence: { type: mongoose.Schema.Types.Mixed, default: null },
   timeline: { type: [timelineEntry], default: [] },
 }, { timestamps: true });
 trackSchema.index({ 'acoustic.bpm': 1, 'acoustic.camelotKey': 1 });

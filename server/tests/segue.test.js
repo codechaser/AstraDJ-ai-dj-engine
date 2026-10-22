@@ -228,6 +228,18 @@ test('successful segue REST request publishes the exact Lounge-scoped PRD announ
   segueService.setAnnouncementPublisher(() => {});
 });
 
+test('disabled AI commentary keeps acoustic selection but suppresses script generation and announcement output', async () => {
+  users.get(memberId).preferences = { audio: { aiDjCommentary: false } };
+  const publisher = jest.fn();
+  segueService.setAnnouncementPublisher(publisher);
+  const response = await request(app).post(`/api/v1/lounges/${loungeId}/ai/segue`)
+    .set('Authorization', `Bearer ${accessToken(memberId)}`).send(input());
+  expect(response.status).toBe(200);
+  expect(response.body).toMatchObject({ selectedTrackId: 't_2002', transitionScript: null, sourceEvents: [], provider: 'disabled' });
+  expect(publisher).not.toHaveBeenCalled();
+  segueService.setAnnouncementPublisher(() => {});
+});
+
 test('track Q&A REST contract authenticates, enforces Lounge membership, validates input, and grounds answers', async () => {
   const url = `/api/v1/lounges/${loungeId}/ai/ask`;
   expect((await request(app).post(url).send({ question: 'What is the BPM?' })).status).toBe(401);
