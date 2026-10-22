@@ -33,3 +33,12 @@ export function normalizeRecommendations(payload) {
 export function displayAnalyticsMetric(value) {
   return value == null ? 'Unavailable' : value;
 }
+
+export function segueCommentaryText(segue, enabled) {
+  if (!segue?.selectedTrackId) return null;
+  return shouldShowAiDjCommentary(enabled) ? segue.transitionScript : 'DJ commentary is disabled in your audio settings.';
+}
+
+export function shouldShowAiDjCommentary(enabled) {
+  return enabled === true;
+}

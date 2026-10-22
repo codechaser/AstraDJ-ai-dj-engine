@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { getActiveLounge, getLoungeAnalytics, saveActiveLounge } from '../api/client.js';
 import { subscribeToLoungeEvents } from '../api/loungeEvents.js';
-import { applySoundclashEvent, displayAnalyticsMetric, tiedCandidateIds, uniqueChatMessages } from '../api/uiData.js';
+import { applySoundclashEvent, displayAnalyticsMetric, shouldShowAiDjCommentary, tiedCandidateIds, uniqueChatMessages } from '../api/uiData.js';
 
 const errorMessage = (ack) => ack?.error?.message || 'The Lounge rejected that action.';
 
-export default function LoungeCollaborationPanel({ socket, loungeId, status, user, catalog, initialBattle }) {
+export default function LoungeCollaborationPanel({ socket, loungeId, status, user, catalog, initialBattle, aiDjCommentary = false }) {
   const [messages, setMessages] = useState([]);
   const [sentiment, setSentiment] = useState(null);
   const [body, setBody] = useState('');
@@ -29,6 +29,8 @@ export default function LoungeCollaborationPanel({ socket, loungeId, status, use
 
   useEffect(() => { setBattle(initialBattle ?? null); }, [initialBattle]);
 
+  useEffect(() => { if (!shouldShowAiDjCommentary(aiDjCommentary)) setAnnouncement(null); }, [aiDjCommentary]);
+
   useEffect(() => {
     if (!socket || !loungeId) return undefined;
     return subscribeToLoungeEvents(socket, loungeId, (eventName, envelope) => {
@@ -40,9 +42,9 @@ export default function LoungeCollaborationPanel({ socket, loungeId, status, use
         if (saved?.loungeId === loungeId) saveActiveLounge({ ...saved, sentiment: payload });
       }
       if (eventName.startsWith('lounge.soundclash.')) setBattle((current) => applySoundclashEvent(current, eventName, payload));
-      if (eventName === 'lounge.ai.dj_announcement') setAnnouncement(payload);
+      if (eventName === 'lounge.ai.dj_announcement' && shouldShowAiDjCommentary(aiDjCommentary)) setAnnouncement(payload);
     });
-  }, [socket, loungeId]);
+  }, [socket, loungeId, aiDjCommentary]);
 
   useEffect(() => {
     if (!socket || !loungeId || status !== 'connected') return;

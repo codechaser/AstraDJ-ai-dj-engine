@@ -23,21 +23,24 @@ test('audio preferences persist through reload and login and remain isolated per
 
   const quality = page.getByRole('combobox', { name: 'Streaming Quality' });
   const crossfade = page.getByRole('combobox', { name: 'Crossfade Songs' });
-  const autoplay = page.getByRole('switch', { name: 'Auto Play' });
+  const commentary = page.getByRole('switch', { name: 'Enable AI DJ Commentary' });
   await expect(quality).toHaveValue('High (320 kbps)');
-  await quality.selectOption('Normal (160 kbps)');
-  await expect(page.getByRole('status')).toHaveText('Saved to your account');
-  await crossfade.selectOption('12');
-  await expect(page.getByRole('status')).toHaveText('Saved to your account');
-  await autoplay.click();
-  await expect(autoplay).toHaveAttribute('aria-checked', 'false');
+  await expect(quality).toBeDisabled();
+  await expect(crossfade).toHaveValue('6');
+  await expect(crossfade).toBeDisabled();
+  for (const label of ['Normalize Volume', 'Show Lyrics', 'Download Quality', 'Auto Play']) {
+    const control = label.includes('Quality') ? page.getByRole('combobox', { name: label }) : page.getByRole('switch', { name: label });
+    await expect(control).toBeDisabled();
+  }
+  await commentary.click();
+  await expect(commentary).toHaveAttribute('aria-checked', 'false');
   await expect(page.getByRole('status')).toHaveText('Saved to your account');
 
   await page.reload();
   await expect(page.getByRole('status')).toHaveText('Settings loaded from your account');
-  await expect(quality).toHaveValue('Normal (160 kbps)');
-  await expect(crossfade).toHaveValue('12');
-  await expect(autoplay).toHaveAttribute('aria-checked', 'false');
+  await expect(quality).toHaveValue('High (320 kbps)');
+  await expect(crossfade).toHaveValue('6');
+  await expect(commentary).toHaveAttribute('aria-checked', 'false');
 
   await page.goto('/profile');
   await page.getByRole('button', { name: 'Sign Out' }).click();
@@ -47,9 +50,9 @@ test('audio preferences persist through reload and login and remain isolated per
   await page.getByRole('button', { name: 'Sign In' }).click();
   await expect(page.getByRole('heading', { name: 'Settings Listener A' })).toBeVisible();
   await page.goto('/settings');
-  await expect(page.getByRole('combobox', { name: 'Streaming Quality' })).toHaveValue('Normal (160 kbps)');
-  await expect(page.getByRole('combobox', { name: 'Crossfade Songs' })).toHaveValue('12');
-  await expect(page.getByRole('switch', { name: 'Auto Play' })).toHaveAttribute('aria-checked', 'false');
+  await expect(page.getByRole('combobox', { name: 'Streaming Quality' })).toHaveValue('High (320 kbps)');
+  await expect(page.getByRole('combobox', { name: 'Crossfade Songs' })).toHaveValue('6');
+  await expect(page.getByRole('switch', { name: 'Enable AI DJ Commentary' })).toHaveAttribute('aria-checked', 'false');
 
   await page.goto('/profile');
   await page.getByRole('button', { name: 'Sign Out' }).click();
@@ -57,7 +60,7 @@ test('audio preferences persist through reload and login and remain isolated per
   await createAccount(page, { email: secondEmail, password, displayName: 'Settings Listener B' });
   await expect(page.getByRole('combobox', { name: 'Streaming Quality' })).toHaveValue('High (320 kbps)');
   await expect(page.getByRole('combobox', { name: 'Crossfade Songs' })).toHaveValue('6');
-  await expect(page.getByRole('switch', { name: 'Auto Play' })).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByRole('switch', { name: 'Enable AI DJ Commentary' })).toHaveAttribute('aria-checked', 'true');
 });
 
 test('a failed preference update is shown as an error and does not report success', async ({ page }) => {
@@ -70,8 +73,8 @@ test('a failed preference update is shown as an error and does not report succes
     }
     await route.continue();
   });
-  const autoplay = page.getByRole('switch', { name: 'Auto Play' });
-  await autoplay.click();
+  const commentary = page.getByRole('switch', { name: 'Enable AI DJ Commentary' });
+  await commentary.click();
   await expect(page.getByRole('status')).toHaveText('Service temporarily unavailable');
-  await expect(autoplay).toHaveAttribute('aria-checked', 'true');
+  await expect(commentary).toHaveAttribute('aria-checked', 'true');
 });

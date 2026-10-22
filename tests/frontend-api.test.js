@@ -4,7 +4,7 @@ import { apiRequest, askTrackQuestion, clearAccessToken, createLounge, getLounge
 import { buildCompletionInteraction } from '../src/api/playbackEvents.js';
 import { connectToLounge } from '../src/api/loungeConnection.js';
 import { subscribeToLoungeEvents } from '../src/api/loungeEvents.js';
-import { applySoundclashEvent, displayAnalyticsMetric, normalizeRecommendations, tiedCandidateIds, uniqueChatMessages } from '../src/api/uiData.js';
+import { applySoundclashEvent, displayAnalyticsMetric, normalizeRecommendations, segueCommentaryText, shouldShowAiDjCommentary, tiedCandidateIds, uniqueChatMessages } from '../src/api/uiData.js';
 
 const originalFetch = globalThis.fetch;
 afterEach(() => { globalThis.fetch = originalFetch; clearAccessToken(); });
@@ -244,4 +244,15 @@ test('recommendation and analytics render helpers preserve empty and unavailable
   assert.deepEqual(normalizeRecommendations({ items: [{ trackId: 't_1', title: 'A', artist: 'B' }, { title: 'missing id' }] }), [{ trackId: 't_1', title: 'A', artist: 'B' }]);
   assert.equal(displayAnalyticsMetric(null), 'Unavailable');
   assert.equal(displayAnalyticsMetric(0), 0);
+});
+
+test('AI DJ commentary preference hides only segue text and preserves selection state', () => {
+  const result = { selectedTrackId: 't_2002', transitionScript: 'A grounded transition.', matchReason: { selectionReason: 'Adjacent Camelot key' } };
+  assert.equal(segueCommentaryText(result, true), 'A grounded transition.');
+  assert.equal(segueCommentaryText(result, false), 'DJ commentary is disabled in your audio settings.');
+  assert.equal(segueCommentaryText({ transitionScript: 'orphaned text' }, false), null);
+  assert.equal(shouldShowAiDjCommentary(true), true);
+  assert.equal(shouldShowAiDjCommentary(false), false);
+  assert.equal(result.selectedTrackId, 't_2002');
+  assert.equal(result.matchReason.selectionReason, 'Adjacent Camelot key');
 });

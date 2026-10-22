@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Send } from 'lucide-react';
 import { askTrackQuestion, getActiveLounge, requestSegue } from '../api/client.js';
+import { segueCommentaryText } from '../api/uiData.js';
 
-export default function AiActions({ user, trackId, currentTime = 0, embedded = false }) {
+export default function AiActions({ user, trackId, currentTime = 0, embedded = false, aiDjCommentary = true }) {
   const [context, setContext] = useState(null);
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState(null);
@@ -61,7 +62,7 @@ export default function AiActions({ user, trackId, currentTime = 0, embedded = f
     {error && <p className="integration-error" role="alert">{error}</p>}
     {answer && <div className="ai-grounded-result" role="status"><b>Grounded answer · {answer.provider}</b><p>{answer.answer}</p><small>{answer.grounded ? `Sources: ${answer.sourceEvents.join(', ')}` : 'No supporting track metadata was found.'}</small></div>}
     {segue && <div className="ai-grounded-result" role="status">
-      {segue.selectedTrackId ? <><b>Segue suggestion · {segue.provider}</b><p>{segue.transitionScript}</p><small>{segue.matchReason?.selectionReason ?? 'Acoustic match accepted'} · {segue.sourceEvents?.length ? `Sources: ${segue.sourceEvents.join(', ')}` : 'No metadata references returned.'}</small></> : <><b>No compatible segue</b><p>No candidate met the acoustic matching rules.</p></>}
+      {segue.selectedTrackId ? <><b>Segue suggestion · {segue.provider}</b><p>{segueCommentaryText(segue, aiDjCommentary)}</p><small>{segue.matchReason?.selectionReason ?? 'Acoustic match accepted'} · {segue.sourceEvents?.length ? `Sources: ${segue.sourceEvents.join(', ')}` : 'No metadata references returned.'}</small></> : <><b>No compatible segue</b><p>No candidate met the acoustic matching rules.</p></>}
     </div>}
     <small className="ai-provider-note">Answers and transition text use deterministic metadata retrieval/templates; no external LLM is connected. The segue request's compatibility field defaults to neutral here; server room sentiment remains authoritative.</small>
   </div>;

@@ -8,7 +8,7 @@ function formatTrack(track) {
   return { ...track, img: 'photo-1514525253161-7a46d19cd819', time: `${Math.floor((track.durationSeconds ?? 0) / 60)}:${String(Math.floor((track.durationSeconds ?? 0) % 60)).padStart(2, '0')}` };
 }
 
-export default function LiveQueuePage({ track, onCurrentTrack, user }) {
+export default function LiveQueuePage({ track, onCurrentTrack, user, aiDjCommentary = false }) {
   const socketRef = useRef(null);
   const loungeIdRef = useRef(null);
   const [inviteCode, setInviteCode] = useState('');
@@ -177,7 +177,7 @@ export default function LiveQueuePage({ track, onCurrentTrack, user }) {
     {status === 'connected' && queueState?.nextUp?.length ? <div className="queue-list">{queueState.nextUp.map((item, index) => <div className="queue-item" key={item.trackId}><span className="rank">{index + 1}</span><div className="catalog-cover"/><div><b>{item.title ?? item.trackId}</b><small>{item.artist ?? 'Catalog details unavailable'} · {item.votes ?? 0} votes</small></div><button aria-label={`Vote for ${item.title ?? item.trackId}`} onClick={() => command('lounge.queue.vote', { trackId: item.trackId, value: 1 })}><ThumbsUp size={14}/></button><button aria-label={`Downvote ${item.title ?? item.trackId}`} onClick={() => command('lounge.queue.vote', { trackId: item.trackId, value: -1 })}><ThumbsDown size={14}/></button><Grip size={17} className="grip"/></div>)}</div> : <div className="panel integration-status">{status === 'connected' ? 'Nothing is up next yet.' : 'Join a Lounge to see its shared queue.'}</div>}
     {status === 'connected' && queueState?.isHost && <button className="btn-outline lounge-end" onClick={endSession}><Power size={14}/> End Lounge</button>}
     {status === 'connected' && <button className="btn-outline sync-button" onClick={() => command('lounge.sync.request', {})}>Refresh shared state</button>}
-    {activeLoungeId && status === 'connected' && <LoungeCollaborationPanel socket={socketRef.current?.socket} loungeId={activeLoungeId} status={status} user={user} catalog={catalog} initialBattle={queueState?.soundclash}/>}
+    {activeLoungeId && status === 'connected' && <LoungeCollaborationPanel socket={socketRef.current?.socket} loungeId={activeLoungeId} status={status} user={user} catalog={catalog} initialBattle={queueState?.soundclash} aiDjCommentary={aiDjCommentary}/>}
   </div>;
 }
 
