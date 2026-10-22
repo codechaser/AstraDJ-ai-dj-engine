@@ -1,10 +1,12 @@
 import { bucketSentiment, createRoomSentimentService } from '../src/services/roomSentimentService.js';
 import { sentimentLabeledDataset } from './fixtures/sentimentLabeledDataset.js';
+import { baselineLexiconClassifier } from '../scripts/sentimentEvaluation.js';
+import { evaluateClassifier } from '../scripts/sentimentEvaluation.js';
 
 test('frozen synthetic sentiment diagnostic reports its confusion matrix', () => {
   const labels = ['positive', 'neutral', 'negative'];
   const confusion = Object.fromEntries(labels.map((actual) => [actual, Object.fromEntries(labels.map((predicted) => [predicted, 0]))]));
-  for (const { label, text } of sentimentLabeledDataset) confusion[label][bucketSentiment(text)] += 1;
+  for (const { label, text } of sentimentLabeledDataset) confusion[label][baselineLexiconClassifier(text)] += 1;
   const correct = labels.reduce((sum, label) => sum + confusion[label][label], 0);
   expect(sentimentLabeledDataset).toHaveLength(40);
   expect(confusion).toEqual({
@@ -13,6 +15,33 @@ test('frozen synthetic sentiment diagnostic reports its confusion matrix', () =>
     negative: { positive: 1, neutral: 3, negative: 9 },
   });
   expect(correct / sentimentLabeledDataset.length).toBe(0.8);
+});
+
+test('context rules handle negation, common music slang, and explicit mixed polarity deterministically', () => {
+  expect(bucketSentiment('Not bad at all')).toBe('positive');
+  expect(bucketSentiment('I am not happy with this')).toBe('negative');
+  expect(bucketSentiment('This is not terrible')).toBe('positive');
+  expect(bucketSentiment('This track is sick')).toBe('positive');
+  expect(bucketSentiment('That beat slaps')).toBe('positive');
+  expect(bucketSentiment('This track kills the mood')).toBe('negative');
+  expect(bucketSentiment('The old song was dull, but this one is amazing')).toBe('positive');
+  expect(bucketSentiment('The last song was brilliant, but this one is awful')).toBe('negative');
+  expect(bucketSentiment('Nothing special either way')).toBe('neutral');
+});
+
+test('sentiment metric helper uses actual rows, predicted columns, and zero-safe class metrics', () => {
+  const result = evaluateClassifier([
+    { label: 'positive', text: 'a' },
+    { label: 'neutral', text: 'b' },
+    { label: 'negative', text: 'c' },
+  ], (text) => ({ a: 'positive', b: 'positive', c: 'negative' })[text]);
+  expect(result.confusionMatrix).toEqual({
+    positive: { positive: 1, neutral: 0, negative: 0 },
+    neutral: { positive: 1, neutral: 0, negative: 0 },
+    negative: { positive: 0, neutral: 0, negative: 1 },
+  });
+  expect(result.accuracy).toBeCloseTo(2 / 3);
+  expect(result.perClass.neutral).toMatchObject({ precision: 0, recall: 0, f1: 0, support: 1 });
 });
 
 test('deterministic lexicon assigns positive, neutral, and negative buckets', () => {

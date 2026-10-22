@@ -6,6 +6,8 @@ import { io as createClient } from 'socket.io-client';
 import { rankSegueCandidates } from '../src/services/acousticMatcher.js';
 import { bucketSentiment } from '../src/services/roomSentimentService.js';
 import { sentimentLabeledDataset } from '../tests/fixtures/sentimentLabeledDataset.js';
+import { sentimentHeldoutDataset } from '../tests/fixtures/sentimentHeldoutDataset.js';
+import { baselineLexiconClassifier, evaluateClassifier } from './sentimentEvaluation.js';
 import { runMultiProfileRecommendationEvaluation } from '../src/services/recommendationEvaluation.js';
 import { createSegueService } from '../src/services/segueService.js';
 import { createQueueService } from '../src/services/queueService.js';
@@ -45,10 +47,32 @@ function evaluateAcousticDecisions() {
 }
 
 function evaluateSentiment() {
-  const confusion = Object.fromEntries(labels.map((actual) => [actual, Object.fromEntries(labels.map((predicted) => [predicted, 0]))]));
-  for (const { label, text } of sentimentLabeledDataset) confusion[label][bucketSentiment(text)] += 1;
-  const correct = labels.reduce((sum, label) => sum + confusion[label][label], 0);
-  return { datasetSize: sentimentLabeledDataset.length, language: 'English', source: 'synthetic, manually labeled, frozen test fixture', confusionMatrix: confusion, accuracy: correct / sentimentLabeledDataset.length, targetPercent: 85, meetsTarget: correct / sentimentLabeledDataset.length >= 0.85 };
+  const countByLabel = (dataset) => Object.fromEntries(labels.map((label) => [label, dataset.filter((entry) => entry.label === label).length]));
+  const legacyBaseline = evaluateClassifier(sentimentLabeledDataset, baselineLexiconClassifier);
+  const legacyCurrent = evaluateClassifier(sentimentLabeledDataset, bucketSentiment);
+  const heldoutBaseline = evaluateClassifier(sentimentHeldoutDataset, baselineLexiconClassifier);
+  const heldoutFinal = evaluateClassifier(sentimentHeldoutDataset, bucketSentiment);
+  return {
+    language: 'English',
+    PRDTargetPercent: 85,
+    legacyLexiconAwareDiagnostic: {
+      datasetSize: sentimentLabeledDataset.length,
+      classBalance: countByLabel(sentimentLabeledDataset),
+      origin: 'synthetic and manually labeled after reviewing the original lexicon; diagnostic/regression fixture, not independent validation',
+      originalBaseline: legacyBaseline,
+      currentClassifier: legacyCurrent,
+    },
+    separatelyAuthoredEvaluation: {
+      datasetSize: sentimentHeldoutDataset.length,
+      classBalance: countByLabel(sentimentHeldoutDataset),
+      origin: 'developer-authored synthetic English examples labeled before scoring; one-shot held-out evaluation, not real-user data',
+      labelingGuide: 'docs/sentiment-evaluation.md',
+      baselineBeforeRuleChanges: heldoutBaseline,
+      frozenClassifier: heldoutFinal,
+      meetsTarget: heldoutFinal.accuracy >= 0.85,
+      limitation: 'Small synthetic evaluation set; accuracy does not establish production or real-user performance.',
+    },
+  };
 }
 
 class Query {
