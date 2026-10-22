@@ -3,6 +3,7 @@ import { Track } from '../models/Track.js';
 import { ApiError } from '../utils/ApiError.js';
 import { acousticProfileErrors, rankSegueCandidates } from './acousticMatcher.js';
 import { deterministicTransitionProvider } from './transitionProvider.js';
+import { buildTrackDocuments } from './metadataRetrievalService.js';
 import { roomSentimentService } from './roomSentimentService.js';
 
 const trackFields = 'trackId title artist durationSeconds acoustic timeline';
@@ -70,7 +71,16 @@ export function createSegueService({ loungeModel = DJLounge, trackModel = Track,
       let usedFallback = transitionProvider === fallbackProvider;
       try {
         generated = await transitionProvider.generate(providerInput);
-        if (!generated || typeof generated.transitionScript !== 'string' || !Array.isArray(generated.sourceEvents)) throw new Error('Transition provider returned an invalid response');
+        const validReferences = new Set([
+          ...buildTrackDocuments(currentTrack),
+          ...buildTrackDocuments(selected.track),
+        ].map((document) => document.reference));
+        const hasResolvedSources = Array.isArray(generated?.sourceEvents)
+          && generated.sourceEvents.length > 0
+          && generated.sourceEvents.every((reference) => validReferences.has(reference));
+        if (!generated || typeof generated.transitionScript !== 'string' || !generated.transitionScript.trim() || !hasResolvedSources) {
+          throw new Error('Transition provider returned an ungrounded response');
+        }
       } catch {
         if (transitionProvider === fallbackProvider) throw new ApiError(503, 'TRANSITION_UNAVAILABLE', 'The transition could not be generated');
         generated = await fallbackProvider.generate(providerInput);

@@ -127,7 +127,7 @@ test('uses an injected transition provider without changing the matching decisio
     name: 'test-provider',
     generate: jest.fn(async ({ selectedTrack, currentTrack }) => ({
       transitionScript: `Provider used only supplied metadata: ${currentTrack.title} to ${selectedTrack.title}.`,
-      sourceEvents: ['provider-source'],
+      sourceEvents: [`${currentTrack.trackId}#title`, `${selectedTrack.trackId}#title`],
       provider: 'test-provider',
     })),
   };
@@ -135,6 +135,35 @@ test('uses an injected transition provider without changing the matching decisio
   expect(provider.generate).toHaveBeenCalledWith(expect.objectContaining({ currentTrack: expect.objectContaining({ trackId: 't_2001' }), selectedTrack: expect.objectContaining({ trackId: 't_2002' }) }));
   expect(result.selectedTrackId).toBe('t_2002');
   expect(result.provider).toBe('test-provider');
+});
+
+test('rejects transition provider references that do not resolve to either source track and uses grounded fallback', async () => {
+  const provider = {
+    name: 'test-provider',
+    generate: jest.fn(async () => ({ transitionScript: 'Unsupported claim with no source.', sourceEvents: ['t_missing#timeline[88]'] })),
+  };
+  const result = await makeService({ provider }).requestSegue({ loungeId, userId: memberId, input: input() });
+  expect(result.provider).toBe('deterministic_fallback');
+  expect(result.transitionScript).toContain('AstraDJ deterministic fallback');
+  expect(result.transitionScript).toContain('The chorus uses a hand-played kalimba phrase.');
+  expect(result.sourceEvents).not.toContain('t_missing#timeline[88]');
+});
+
+test('deterministic segue citations resolve to metadata on the current or selected track', async () => {
+  const result = await makeService().requestSegue({ loungeId, userId: memberId, input: input() });
+  const sourceTracks = new Map([[currentTrack.trackId, currentTrack], [selectedTrack.trackId, selectedTrack]]);
+  expect(result.sourceEvents.length).toBeGreaterThan(0);
+  for (const reference of result.sourceEvents) {
+    const [trackId, pointer] = reference.split('#');
+    const sourceTrack = sourceTracks.get(trackId);
+    expect(sourceTrack).toBeDefined();
+    const exists = pointer === 'title' || pointer === 'artist'
+      ? Boolean(sourceTrack[pointer])
+      : pointer.startsWith('acoustic.')
+        ? Number.isFinite(sourceTrack.acoustic?.[pointer.slice('acoustic.'.length)]) || typeof sourceTrack.acoustic?.[pointer.slice('acoustic.'.length)] === 'string'
+        : Boolean(sourceTrack.timeline[Number(pointer.match(/^timeline\[(\d+)\]$/)?.[1])]);
+    expect(exists).toBe(true);
+  }
 });
 
 test('uses deterministic grounded banter when an injected transition provider fails and publishes the PRD announcement payload', async () => {

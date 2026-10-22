@@ -57,6 +57,12 @@ export function retrieveTrackMetadata(track, question, limit = 3) {
 
 function structuredAnswer(track, question) {
   const q = question.toLowerCase();
+  // A field keyword alone does not mean the catalog can answer the attribute
+  // being asked for (for example, returning an artist name for an age query).
+  // Let the normal retrieval path decline those questions unless a matching
+  // authored timeline entry actually supports them.
+  const unsupportedArtistAttributes = /\b(age|old|young|country|nationality|birth|born|genre|biography|location|from|popular|famous|produced|producer)\b/;
+  if (/\b(artist|singer|band)\b/.test(q) && unsupportedArtistAttributes.test(q)) return null;
   const candidates = [
     { pattern: /\b(bpm|tempo|beats per minute)\b/, field: 'bpm', label: 'BPM', format: (value) => `${value} BPM` },
     { pattern: /\b(camelot|musical key|harmonic key|key)\b/, field: 'camelotKey', label: 'Camelot key', format: (value) => String(value) },
@@ -67,6 +73,7 @@ function structuredAnswer(track, question) {
   ];
   const candidate = candidates.find(({ pattern }) => pattern.test(q));
   if (!candidate) return null;
+  if (candidate.field === 'artist' && !/\bwho\b|\b(?:artist|singer|band)\s+name\b|\b(?:name|identify)\b.{0,20}\b(?:artist|singer|band)\b/.test(q)) return null;
   const value = candidate.field === 'artist' || candidate.field === 'title' ? track[candidate.field] : track.acoustic?.[candidate.field];
   if (value === undefined || value === null || value === '' || !Number.isFinite(value) && typeof value !== 'string') return null;
   const document = buildTrackDocuments(track).find((item) => item.reference === `${track.trackId}#${candidate.field === 'artist' || candidate.field === 'title' ? candidate.field : `acoustic.${candidate.field}`}`);

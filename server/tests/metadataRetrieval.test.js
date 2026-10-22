@@ -42,6 +42,34 @@ test('answers sample questions only by quoting retrieved source text and citing 
   expect(result.grounded).toBe(true);
 });
 
+test('every grounded Q&A reference resolves to an entry on the current track', async () => {
+  const cases = [
+    ['What is the BPM?', 't_4101#acoustic.bpm'],
+    ['Who is the artist?', 't_4101#artist'],
+    ['Where does the sample come from?', 't_4101#timeline[1]'],
+  ];
+  for (const [question, expectedReference] of cases) {
+    const result = await service().answerQuestion({ loungeId: lounge.loungeId, userId: 'member-1', question });
+    expect(result.sourceEvents).toEqual([expectedReference]);
+    const [trackId, pointer] = expectedReference.split('#');
+    expect(trackId).toBe(currentTrack.trackId);
+    const exists = pointer === 'title' || pointer === 'artist'
+      ? Boolean(currentTrack[pointer])
+      : pointer.startsWith('acoustic.')
+        ? currentTrack.acoustic?.[pointer.slice('acoustic.'.length)] !== undefined
+        : Boolean(currentTrack.timeline[Number(pointer.match(/^timeline\[(\d+)\]$/)?.[1])]);
+    expect(exists).toBe(true);
+  }
+});
+
+test('declines unsupported artist attributes instead of treating an artist name as the answer', async () => {
+  const result = await service().answerQuestion({ loungeId: lounge.loungeId, userId: 'member-1', question: 'What is the artist age?' });
+  expect(result).toMatchObject({
+    answer: 'I do not have supporting metadata for that question about this track.',
+    sourceEvents: [], grounded: false,
+  });
+});
+
 test('declines unsupported questions without sources rather than inventing lyrics or biography', async () => {
   const result = await service().answerQuestion({ loungeId: lounge.loungeId, userId: 'member-1', question: 'What are the lyrics about?' });
   expect(result).toMatchObject({
@@ -60,6 +88,14 @@ test('omits malformed profile and timeline entries from retrieval and response s
   expect(results).toEqual([]);
   const answer = await service({ track: malformed }).answerQuestion({ loungeId: lounge.loungeId, userId: 'member-1', question: 'What is the BPM?' });
   expect(answer).toMatchObject({ grounded: false, sourceEvents: [] });
+});
+
+test('identical supported questions produce stable answers and source references', async () => {
+  const retrieval = service();
+  const request = { loungeId: lounge.loungeId, userId: 'member-1', question: 'Where does the sample come from?' };
+  const first = await retrieval.answerQuestion(request);
+  const second = await retrieval.answerQuestion(request);
+  expect(second).toEqual(first);
 });
 
 test('requires active Lounge membership and a current track before retrieval', async () => {
