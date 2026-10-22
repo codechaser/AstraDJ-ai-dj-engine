@@ -115,6 +115,8 @@ Offline evaluation is a deterministic synthetic fixture, not production user his
 
 `POST /api/v1/lounges/:id/ai/segue` requires a Bearer access token and membership in the active Lounge. It verifies that the body `currentTrackId` is the Lounge's current track and that `currentTs` does not exceed its duration.
 
+This is currently a manually invoked REST decision, not a playback-driven transition lifecycle. There is no configured outro window or scheduler, and a successful decision emits the Lounge announcement but does not mutate/advance the shared queue. The catalog currently has only one playable audio asset, `t_cc0_thoughtness`; its acoustic profile is null. Seed tracks `t_2001`–`t_2003` have authored acoustic metadata but no `audioAssetUrl`. Consequently, actual playback cannot yet reach a valid, acoustically eligible next playable track, and the PRD's trigger-to-client P95 latency cannot be measured. Do not interpret the standalone audio playback/history E2E or service-only benchmark as transition E2E evidence.
+
 Required request fields follow PRD §7.3.3; `recentTrackIds` is an optional addition because the current Lounge model has no playback-history field. The caller supplies most-recent-first track IDs when available:
 
 ```json
