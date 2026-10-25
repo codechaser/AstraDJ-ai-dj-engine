@@ -1,7 +1,11 @@
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { bucketSentiment, createRoomSentimentService } from '../src/services/roomSentimentService.js';
 import { sentimentLabeledDataset } from './fixtures/sentimentLabeledDataset.js';
-import { baselineLexiconClassifier } from '../scripts/sentimentEvaluation.js';
+import { baselineLexiconClassifier, frozenCurrentSentimentClassifier } from '../scripts/sentimentEvaluation.js';
 import { evaluateClassifier } from '../scripts/sentimentEvaluation.js';
+import { sentimentDevelopmentDataset } from './fixtures/sentimentDevelopmentDataset.js';
+import { sentimentIndependentHeldoutDataset } from './fixtures/sentimentIndependentHeldoutDataset.js';
 
 test('frozen synthetic sentiment diagnostic reports its confusion matrix', () => {
   const labels = ['positive', 'neutral', 'negative'];
@@ -48,6 +52,30 @@ test('deterministic lexicon assigns positive, neutral, and negative buckets', ()
   expect(bucketSentiment('This is amazing, love the vibe!')).toBe('positive');
   expect(bucketSentiment('The set is awful and boring')).toBe('negative');
   expect(bucketSentiment('🎧 123 ???')).toBe('neutral');
+});
+
+test('development examples cover Hinglish, slang, negation, contrast, short text, and spelling noise', () => {
+  expect(sentimentDevelopmentDataset).toHaveLength(36);
+  expect(sentimentDevelopmentDataset.every(({ source }) => source === 'developer_authored_synthetic')).toBe(true);
+  expect(evaluateClassifier(sentimentDevelopmentDataset, bucketSentiment).accuracy).toBeGreaterThanOrEqual(0.85);
+  expect(bucketSentiment('Yeh gaana mast hai')).toBe('positive');
+  expect(bucketSentiment('Is gaane mein maza nahi')).toBe('negative');
+  expect(bucketSentiment('luv this beattt')).toBe('positive');
+  expect(bucketSentiment('Skip this')).toBe('negative');
+  expect(bucketSentiment('mid tempo session')).toBe('neutral');
+  expect(bucketSentiment('hmm 🤔')).toBe('neutral');
+});
+
+test('the independent evaluation fixture is balanced, sourced, and frozen before scoring', () => {
+  expect(sentimentIndependentHeldoutDataset).toHaveLength(90);
+  expect(sentimentIndependentHeldoutDataset.every(({ source }) => source === 'developer_authored_synthetic')).toBe(true);
+  expect(sentimentIndependentHeldoutDataset.filter(({ label }) => label === 'positive')).toHaveLength(30);
+  expect(sentimentIndependentHeldoutDataset.filter(({ label }) => label === 'neutral')).toHaveLength(30);
+  expect(sentimentIndependentHeldoutDataset.filter(({ label }) => label === 'negative')).toHaveLength(30);
+  const fixture = readFileSync(new URL('./fixtures/sentimentIndependentHeldoutDataset.js', import.meta.url));
+  expect(createHash('sha256').update(fixture).digest('hex')).toBe('832b0f5ca1fbd62e67b293ddb09ecb33646c97b18cbc86201ec85f7a52519fcb');
+  expect(evaluateClassifier(sentimentIndependentHeldoutDataset, frozenCurrentSentimentClassifier).correct).toBe(48);
+  expect(evaluateClassifier(sentimentIndependentHeldoutDataset, bucketSentiment).correct).toBe(69);
 });
 
 test('empty rooms use the neutral aggregation fallback and Lounge state is isolated', () => {

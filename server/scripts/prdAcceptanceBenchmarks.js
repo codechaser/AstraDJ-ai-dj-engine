@@ -1,4 +1,6 @@
 import { performance } from 'node:perf_hooks';
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import jwt from 'jsonwebtoken';
 import { Server } from 'socket.io';
@@ -7,7 +9,9 @@ import { rankSegueCandidates } from '../src/services/acousticMatcher.js';
 import { bucketSentiment } from '../src/services/roomSentimentService.js';
 import { sentimentLabeledDataset } from '../tests/fixtures/sentimentLabeledDataset.js';
 import { sentimentHeldoutDataset } from '../tests/fixtures/sentimentHeldoutDataset.js';
-import { baselineLexiconClassifier, evaluateClassifier } from './sentimentEvaluation.js';
+import { baselineLexiconClassifier, evaluateClassifier, frozenCurrentSentimentClassifier } from './sentimentEvaluation.js';
+import { sentimentDevelopmentDataset } from '../tests/fixtures/sentimentDevelopmentDataset.js';
+import { sentimentIndependentHeldoutDataset } from '../tests/fixtures/sentimentIndependentHeldoutDataset.js';
 import { runMultiProfileRecommendationEvaluation } from '../src/services/recommendationEvaluation.js';
 import { createSegueService } from '../src/services/segueService.js';
 import { createQueueService } from '../src/services/queueService.js';
@@ -53,7 +57,7 @@ function evaluateSentiment() {
   const heldoutBaseline = evaluateClassifier(sentimentHeldoutDataset, baselineLexiconClassifier);
   const heldoutFinal = evaluateClassifier(sentimentHeldoutDataset, bucketSentiment);
   return {
-    language: 'English',
+    language: 'English and Hinglish transliteration',
     PRDTargetPercent: 85,
     legacyLexiconAwareDiagnostic: {
       datasetSize: sentimentLabeledDataset.length,
@@ -71,6 +75,20 @@ function evaluateSentiment() {
       frozenClassifier: heldoutFinal,
       meetsTarget: heldoutFinal.accuracy >= 0.85,
       limitation: 'Small synthetic evaluation set; accuracy does not establish production or real-user performance.',
+    },
+    independent2026Evaluation: {
+      datasetSize: sentimentIndependentHeldoutDataset.length,
+      classBalance: countByLabel(sentimentIndependentHeldoutDataset),
+      fixtureSha256: createHash('sha256').update(readFileSync(new URL('../tests/fixtures/sentimentIndependentHeldoutDataset.js', import.meta.url))).digest('hex'),
+      origin: 'developer-authored synthetic English/Hinglish examples, manually labeled before classifier changes; not real-user data',
+      labelingGuide: 'docs/sentiment-evaluation.md',
+      developmentSetSize: sentimentDevelopmentDataset.length,
+      developmentBaseline: evaluateClassifier(sentimentDevelopmentDataset, frozenCurrentSentimentClassifier),
+      developmentUpdated: evaluateClassifier(sentimentDevelopmentDataset, bucketSentiment),
+      preChangeFrozenClassifier: evaluateClassifier(sentimentIndependentHeldoutDataset, frozenCurrentSentimentClassifier),
+      updatedClassifier: evaluateClassifier(sentimentIndependentHeldoutDataset, bucketSentiment),
+      meetsTarget: evaluateClassifier(sentimentIndependentHeldoutDataset, bucketSentiment).accuracy >= 0.85,
+      limitation: 'One small synthetic one-author holdout; useful for regression discovery, not representative production accuracy evidence.',
     },
   };
 }

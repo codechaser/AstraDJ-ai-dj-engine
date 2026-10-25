@@ -1,12 +1,13 @@
 const clamp = (value) => Math.min(1, Math.max(0, value));
 
 // Deterministic, context-aware lexicon scorer; this is not an ML model.
-const positiveWords = new Set('amazing awesome beautiful best brilliant dance enjoy excellent excited fun good great happy love lovely nice perfect positive vibe wonderful yes sick fire slaps banger lit'.split(' '));
-const negativeWords = new Set('awful bad boring dislike exhausted frustrated hate horrible low sad tired terrible worst negative dull annoying unhappy gloomy lifeless painful disappointing'.split(' '));
-const normalizeText = (text) => text.toLocaleLowerCase('en').normalize('NFKC').match(/[\p{L}\p{N}']+/gu) ?? [];
+const positiveWords = new Set('amazing awesome beautiful best brilliant dance enjoy excellent excited fun good great happy love lovely nice perfect positive vibe wonderful yes sick fire slaps banger lit mast maza wah badiya badhiya zabardast khush sahi accha kamaal smooth nailed warm catchy chills obsessed seamless alive singing repeat'.split(' '));
+const negativeWords = new Set('awful bad boring dislike exhausted frustrated hate horrible low sad tired terrible worst negative dull annoying unhappy gloomy lifeless painful disappointing bekaar bakwaas kharab ghatiya cringe muddy abrupt jarring flat tiring tireing repetitive sleepy harsh sickening'.split(' '));
+const normalizeText = (text) => (text.toLocaleLowerCase('en').normalize('NFKC').match(/[\p{L}\p{N}']+/gu) ?? [])
+  .map((word) => word.replace(/([\p{L}\p{N}])\1{2,}/gu, '$1').replace(/^luv$/, 'love').replace(/^bakwas$/, 'bakwaas'));
 const negations = new Set(['not', 'no', 'never', "n't"]);
-const positivePhrases = ['kills the dance floor', 'killing it', 'on fire', 'fire track', 'slaps hard'];
-const negativePhrases = ['kills the mood', 'kills the vibe', 'killing the vibe', 'not feeling it', 'not feeling this', 'not feeling that'];
+const positivePhrases = ['kills the dance floor', 'killing it', 'on fire', 'fire track', 'slaps hard', 'maza aa gaya', 'dil khush', 'dil se pasand', 'run it back'];
+const negativePhrases = ['kills the mood', 'kills the vibe', 'killing the vibe', 'not feeling it', 'not feeling this', 'not feeling that', 'maza nahi', 'mood off', 'skip this', 'skip pls', 'change it'];
 
 function hasPhrase(words, phrase) {
   const phraseWords = phrase.split(' ');
