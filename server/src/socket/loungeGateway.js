@@ -152,27 +152,74 @@ export function attachLoungeGateway(io, { repository = queueRepository, queueSer
       if (user.role !== 'Host' || String(lounge.hostUserId) !== String(user.id)) throw Object.assign(new Error('Only the Lounge Host can trigger playback segues'), { status: 403, code: 'LOUNGE_HOST_REQUIRED' });
       if (!hasHost(loungeId, lounge.hostUserId)) throw Object.assign(new Error('Queue mutations are frozen while the Host is disconnected'), { status: 409, code: 'HOST_DISCONNECTED' });
       const state = await queueService.snapshot(lounge);
-      if (!state.nowPlaying || payload.currentTs < state.nowPlaying.durationSeconds - config.segueOutroWindowSeconds) {
+      const duration = state.nowPlaying?.durationSeconds;
+      if (!Number.isFinite(duration) || duration <= 0) throw Object.assign(new Error('Current track duration is unavailable'), { status: 409, code: 'TRACK_DURATION_UNAVAILABLE' });
+      if (payload.currentTs > duration) throw Object.assign(new Error('currentTs cannot exceed the current track duration'), { status: 400, code: 'VALIDATION_ERROR' });
+      if (!state.nowPlaying || payload.currentTs < duration - config.segueOutroWindowSeconds) {
         throw Object.assign(new Error('Playback has not reached the configured outro window'), { status: 409, code: 'OUTRO_WINDOW_NOT_REACHED' });
+      }
+      const candidates = state.nextUp.map(({ trackId }) => trackId);
+      const currentPending = pendingSegueDecisions.get(loungeId);
+      if (currentPending?.fromTrackId === state.nowPlaying.trackId && candidates.includes(currentPending.trackId) && Date.now() - currentPending.createdAt <= 5 * 60_000) {
+        return { decision: currentPending.decision, outroWindowSeconds: config.segueOutroWindowSeconds, duplicate: true };
+      }
+      if (currentPending) pendingSegueDecisions.delete(loungeId);
+      let recovered = false;
+      const savedPending = lounge.pendingSegue;
+      let candidateTrackIds = candidates;
+      if (savedPending?.fromTrackId === state.nowPlaying.trackId && candidates.includes(savedPending.trackId) && Date.now() - new Date(savedPending.createdAt).getTime() <= 5 * 60_000) {
+        candidateTrackIds = [savedPending.trackId];
+        recovered = true;
+      } else if (savedPending?.fromTrackId) {
+        await repository.clearPendingSegue?.(loungeId, savedPending.fromTrackId);
       }
       const decision = await segueService.requestSegue({
         loungeId, userId: user.id,
-        input: { currentTrackId: state.nowPlaying?.trackId, currentTs: payload.currentTs, candidateTrackIds: state.nextUp.map(({ trackId }) => trackId), currentSentimentScore: 0.5 },
+        input: { currentTrackId: state.nowPlaying.trackId, currentTs: payload.currentTs, candidateTrackIds, currentSentimentScore: 0.5 },
         includeCommentary: user.aiDjCommentary,
         announce: false,
       });
-      if (!decision.selectedTrackId) return { noCompatibleCandidate: true, decision };
-      pendingSegueDecisions.set(loungeId, { fromTrackId: state.nowPlaying.trackId, trackId: decision.selectedTrackId, decision, createdAt: Date.now() });
-      if (decision.transitionScript) publishLoungeEvent(io, 'lounge.ai.dj_announcement', loungeId, { text: decision.transitionScript, relatedTrackId: decision.selectedTrackId, sourceEvents: decision.sourceEvents });
-      return { decision, outroWindowSeconds: config.segueOutroWindowSeconds };
+      if (!decision.selectedTrackId) {
+        if (recovered) await repository.clearPendingSegue?.(loungeId, savedPending.fromTrackId);
+        return { noCompatibleCandidate: true, decision };
+      }
+      if (recovered && decision.selectedTrackId !== savedPending.trackId) {
+        await repository.clearPendingSegue?.(loungeId, savedPending.fromTrackId);
+        throw Object.assign(new Error('The saved segue decision is no longer eligible'), { status: 409, code: 'SEGUE_STALE' });
+      }
+      const createdAt = recovered ? new Date(savedPending.createdAt).getTime() : Date.now();
+      if (!recovered) {
+        const persisted = await repository.setPendingSegue?.(loungeId, state.nowPlaying.trackId, { fromTrackId: state.nowPlaying.trackId, trackId: decision.selectedTrackId, createdAt: new Date(createdAt) });
+        if (repository.setPendingSegue && !persisted) throw Object.assign(new Error('The Lounge track changed before the segue could be scheduled'), { status: 409, code: 'SEGUE_STALE' });
+      }
+      pendingSegueDecisions.set(loungeId, { fromTrackId: state.nowPlaying.trackId, trackId: decision.selectedTrackId, decision, createdAt });
+      if (!recovered && decision.transitionScript) publishLoungeEvent(io, 'lounge.ai.dj_announcement', loungeId, { text: decision.transitionScript, relatedTrackId: decision.selectedTrackId, sourceEvents: decision.sourceEvents });
+      return { decision, outroWindowSeconds: config.segueOutroWindowSeconds, recovered };
     }));
 
     command('lounge.playback.ended', (payload) => authorizedLoungeAction(async ({ loungeId, user, lounge }) => {
       if (!payload || typeof payload !== 'object' || Array.isArray(payload) || Object.keys(payload).length !== 1 || typeof payload.trackId !== 'string') throw Object.assign(new Error('Payload must contain only trackId'), { status: 400, code: 'VALIDATION_ERROR' });
       if (user.role !== 'Host' || String(lounge.hostUserId) !== String(user.id)) throw Object.assign(new Error('Only the Lounge Host can advance playback'), { status: 403, code: 'LOUNGE_HOST_REQUIRED' });
-      const pending = pendingSegueDecisions.get(loungeId);
+      let pending = pendingSegueDecisions.get(loungeId);
+      const savedPending = lounge.pendingSegue;
+      if (!pending && savedPending?.fromTrackId === payload.trackId && savedPending.trackId && Date.now() - new Date(savedPending.createdAt).getTime() <= 5 * 60_000) {
+        const state = await queueService.snapshot(lounge);
+        if (state.nowPlaying?.trackId === payload.trackId && state.nextUp.some((item) => item.trackId === savedPending.trackId)) {
+          const decision = await segueService.requestSegue({
+            loungeId, userId: user.id,
+            input: { currentTrackId: payload.trackId, currentTs: state.nowPlaying.durationSeconds, candidateTrackIds: [savedPending.trackId], currentSentimentScore: 0.5 },
+            includeCommentary: user.aiDjCommentary,
+            announce: false,
+          });
+          if (decision.selectedTrackId === savedPending.trackId) {
+            pending = { fromTrackId: payload.trackId, trackId: savedPending.trackId, decision, createdAt: new Date(savedPending.createdAt).getTime() };
+            pendingSegueDecisions.set(loungeId, pending);
+          }
+        }
+      }
       if (!pending || pending.fromTrackId !== payload.trackId || Date.now() - pending.createdAt > 5 * 60_000 || lounge.currentTrackId !== payload.trackId) {
         pendingSegueDecisions.delete(loungeId);
+        if (savedPending?.fromTrackId === payload.trackId) await repository.clearPendingSegue?.(loungeId, payload.trackId);
         throw Object.assign(new Error('There is no current playback segue to complete'), { status: 409, code: 'SEGUE_NOT_PENDING' });
       }
       const nextState = await queueService.transitionTo({ lounge, actor: user, trackId: pending.trackId });
@@ -185,7 +232,10 @@ export function attachLoungeGateway(io, { repository = queueRepository, queueSer
     command('lounge.playback.cancel', (payload) => authorizedLoungeAction(async ({ loungeId, user, lounge }) => {
       if (!payload || typeof payload !== 'object' || Array.isArray(payload) || Object.keys(payload).length !== 1 || typeof payload.trackId !== 'string') throw Object.assign(new Error('Payload must contain only trackId'), { status: 400, code: 'VALIDATION_ERROR' });
       if (user.role !== 'Host' || String(lounge.hostUserId) !== String(user.id)) throw Object.assign(new Error('Only the Lounge Host can cancel a playback segue'), { status: 403, code: 'LOUNGE_HOST_REQUIRED' });
-      if (pendingSegueDecisions.get(loungeId)?.fromTrackId === payload.trackId) pendingSegueDecisions.delete(loungeId);
+      if (pendingSegueDecisions.get(loungeId)?.fromTrackId === payload.trackId || lounge.pendingSegue?.fromTrackId === payload.trackId) {
+        pendingSegueDecisions.delete(loungeId);
+        await repository.clearPendingSegue?.(loungeId, payload.trackId);
+      }
       return {};
     }));
 
@@ -214,6 +264,7 @@ export function attachLoungeGateway(io, { repository = queueRepository, queueSer
       const result = await loungeLifecycleService.end({ loungeId, userId: user.id, userRole: user.role });
       if (!result.alreadyEnded) {
         pendingSegueDecisions.delete(loungeId);
+        await repository.clearPendingSegue?.(loungeId, currentLounge.currentTrackId);
         const eventPayload = { endedAt: result.lounge.endedAt.toISOString(), summary: result.lounge.sessionSummary };
         io.to(room(loungeId)).emit('lounge.session.ended', envelope('lounge.session.ended', loungeId, eventPayload));
       }
@@ -284,7 +335,10 @@ export function attachLoungeGateway(io, { repository = queueRepository, queueSer
           if (entry.sockets.size === 0) {
             currentMembers.delete(socket.data.userId);
             const lounge = await repository.findLoungeById(loungeId);
-            if (String(lounge?.hostUserId) === socket.data.userId) pendingSegueDecisions.delete(loungeId);
+            if (String(lounge?.hostUserId) === socket.data.userId) {
+              pendingSegueDecisions.delete(loungeId);
+              if (lounge?.pendingSegue?.fromTrackId) await repository.clearPendingSegue?.(loungeId, lounge.pendingSegue.fromTrackId);
+            }
             if (lounge?.status === 'live') await emitPresence(loungeId, socket.data.userId, 'left', !hasHost(loungeId, lounge.hostUserId));
           }
         });

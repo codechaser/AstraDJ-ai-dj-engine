@@ -7,6 +7,7 @@ import { attachLoungeGateway } from '../src/socket/loungeGateway.js';
 import { createQueueService } from '../src/services/queueService.js';
 import { createRoomSentimentService } from '../src/services/roomSentimentService.js';
 import { createSoundclashService } from '../src/services/soundclashService.js';
+import { rankSegueCandidates } from '../src/services/acousticMatcher.js';
 
 const secret = 'test-secret-astradj-only-32-characters';
 const uidHost = '507f1f77bcf86cd799439011';
@@ -54,7 +55,9 @@ function makeRepository() {
     async listQueueEvents(loungeId) { return events.filter((event) => event.loungeId === loungeId).sort((a, b) => a.seq - b.seq); },
     async appendQueueEvents(batch) { if (this.failQueueAppend) throw new Error('simulated persistence failure'); events.push(...structuredClone(batch)); },
     async getTrack(trackId) { return trackData.get(trackId) ?? null; },
-    async setCurrentTrack(loungeId, currentTrackId) { const lounge = lounges.get(loungeId); if (lounge?.status !== 'live') return null; lounge.currentTrackId = currentTrackId; return lounge; },
+    async setCurrentTrack(loungeId, currentTrackId) { const lounge = lounges.get(loungeId); if (lounge?.status !== 'live') return null; lounge.currentTrackId = currentTrackId; delete lounge.pendingSegue; return lounge; },
+    async setPendingSegue(loungeId, fromTrackId, pendingSegue) { const lounge = lounges.get(loungeId); if (lounge?.status !== 'live' || lounge.currentTrackId !== fromTrackId) return null; lounge.pendingSegue = structuredClone(pendingSegue); return lounge; },
+    async clearPendingSegue(loungeId, fromTrackId) { const lounge = lounges.get(loungeId); if (lounge?.pendingSegue?.fromTrackId === fromTrackId) delete lounge.pendingSegue; return lounge; },
     async getTrackMetadata(trackId) { const track = trackData.get(trackId); return track ? { ...track, timeline: [{ ts: 12, type: 'trivia', text: `${track.title} is from the sample catalog.` }] } : null; },
     async getUser(id) { return users.get(String(id)) ?? null; },
     async appendChatMessages(batch) { this.chatMessages ??= []; this.chatMessages.push(...structuredClone(batch)); },
@@ -117,6 +120,7 @@ let publishAnnouncement;
 let loungeLifecycleService;
 let loungeMetricEventService;
 let sockets;
+let segueRequests;
 
 beforeEach(async () => {
   repository = makeRepository();
@@ -132,8 +136,15 @@ beforeEach(async () => {
   };
   queueService = createQueueService(repository, { voteFlushMs: 30_000 });
   sentimentService = createRoomSentimentService();
+  segueRequests = 0;
   loungeMetricEventService = { events: [], async recordPresence(event) { this.events.push(structuredClone(event)); } };
-  const segueService = { async requestSegue({ input }) { return { selectedTrackId: input.candidateTrackIds[0], matchReason: { bpmRelation: 'direct', bpmDeltaPct: 0.83, camelotRelation: 'same', score: 0.99 }, transitionScript: 'Night Drive flows into Neon Tide.', sourceEvents: ['track:t_2001:metadata', 'track:t_2002:metadata'], provider: 'deterministic-template' }; } };
+  const segueService = { async requestSegue({ input }) {
+    segueRequests += 1;
+    const currentTrack = trackData.get(input.currentTrackId);
+    const ranked = rankSegueCandidates(currentTrack, input.candidateTrackIds.map((trackId) => trackData.get(trackId)).filter(Boolean));
+    const selected = ranked.eligible[0];
+    return { selectedTrackId: selected?.track.trackId ?? null, matchReason: selected?.match ?? null, transitionScript: selected ? `${currentTrack.title} flows into ${selected.track.title}.` : null, sourceEvents: selected ? [`track:${currentTrack.trackId}:metadata`, `track:${selected.track.trackId}:metadata`] : [], provider: 'deterministic-template' };
+  } };
   server = createServer();
   ioServer = new Server(server, { transports: ['websocket'] });
   ({ chatService, soundclashService, publishAnnouncement } = attachLoungeGateway(ioServer, { repository, queueService, secret, sentimentService, loungeLifecycleService, loungeMetricEventService, segueService, soundclashOptions: { voteDurationMs: 160 } }));
@@ -168,8 +179,16 @@ test('outro segue is selected in the configured playback window and queue advanc
   expect((await command(coDj, 'lounge.ai.segue.trigger', { currentTs: 209 })).error.code).toBe('LOUNGE_HOST_REQUIRED');
   expect((await command(admin, 'lounge.ai.segue.trigger', { currentTs: 209 })).error.code).toBe('LOUNGE_HOST_REQUIRED');
   expect((await command(host, 'lounge.ai.segue.trigger', { currentTs: 100 })).error.code).toBe('OUTRO_WINDOW_NOT_REACHED');
-  const ready = await command(host, 'lounge.ai.segue.trigger', { currentTs: 209 });
+  expect((await command(host, 'lounge.ai.segue.trigger', { currentTs: 220.1 })).error.code).toBe('VALIDATION_ERROR');
+  expect((await command(host, 'lounge.ai.segue.trigger', { currentTs: 207.99 })).error.code).toBe('OUTRO_WINDOW_NOT_REACHED');
+  const [ready, duplicate] = await Promise.all([
+    command(host, 'lounge.ai.segue.trigger', { currentTs: 208 }),
+    command(host, 'lounge.ai.segue.trigger', { currentTs: 209 }),
+  ]);
   expect(ready).toMatchObject({ ok: true, decision: { selectedTrackId: 't_2002' }, outroWindowSeconds: 12 });
+  expect(repository.lounges.get('lg_123456789abc').pendingSegue).toMatchObject({ fromTrackId: 't_2001', trackId: 't_2002' });
+  expect(duplicate).toMatchObject({ ok: true, duplicate: true, decision: { selectedTrackId: 't_2002' } });
+  expect(segueRequests).toBe(1);
   expect(repository.lounges.get('lg_123456789abc').currentTrackId).toBe('t_2001');
   const hostUpdate = waitForMatch(host, 'lounge.queue.update', (event) => event.payload?.reason === 'segue');
   const listenerUpdate = waitForMatch(listener, 'lounge.queue.update', (event) => event.payload?.reason === 'segue');
@@ -181,6 +200,56 @@ test('outro segue is selected in the configured playback window and queue advanc
   expect(repository.lounges.get('lg_123456789abc').currentTrackId).toBe('t_2002');
   expect(repository.events.at(-1)).toMatchObject({ type: 'track.transitioned', payload: { fromTrackId: 't_2001', trackId: 't_2002' } });
   expect((await command(host, 'lounge.playback.ended', { trackId: 't_2001' })).error.code).toBe('SEGUE_NOT_PENDING');
+});
+
+test('outro preparation rejects unknown duration and an empty upcoming queue', async () => {
+  const host = client(uidHost);
+  await join(host);
+  trackData.get('t_2001').durationSeconds = Number.NaN;
+  expect((await command(host, 'lounge.ai.segue.trigger', { currentTs: 209 })).error.code).toBe('TRACK_DURATION_UNAVAILABLE');
+  trackData.get('t_2001').durationSeconds = 220;
+  expect(await command(host, 'lounge.ai.segue.trigger', { currentTs: 208 })).toMatchObject({ ok: true, noCompatibleCandidate: true });
+  expect(repository.lounges.get('lg_123456789abc').pendingSegue).toBeUndefined();
+});
+
+test('outro preparation does not schedule a queued track with an unavailable acoustic profile', async () => {
+  const host = client(uidHost);
+  await join(host);
+  await command(host, 'lounge.queue.add', { trackId: 't_2003' });
+  const result = await command(host, 'lounge.ai.segue.trigger', { currentTs: 208 });
+  expect(result).toMatchObject({ ok: true, noCompatibleCandidate: true });
+  expect(repository.lounges.get('lg_123456789abc').pendingSegue).toBeUndefined();
+  expect(segueRequests).toBe(1);
+});
+
+test('only the Host can cancel a persisted segue preparation', async () => {
+  const host = client(uidHost); const listener = client(uidListener);
+  await Promise.all([join(host), join(listener)]);
+  await command(host, 'lounge.queue.add', { trackId: 't_2002' });
+  expect((await command(host, 'lounge.ai.segue.trigger', { currentTs: 208 })).ok).toBe(true);
+  expect((await command(listener, 'lounge.playback.cancel', { trackId: 't_2001' })).error.code).toBe('LOUNGE_HOST_REQUIRED');
+  expect(repository.lounges.get('lg_123456789abc').pendingSegue.trackId).toBe('t_2002');
+  expect((await command(host, 'lounge.playback.cancel', { trackId: 't_2001' })).ok).toBe(true);
+  expect(repository.lounges.get('lg_123456789abc').pendingSegue).toBeUndefined();
+  expect((await command(host, 'lounge.playback.ended', { trackId: 't_2001' })).error.code).toBe('SEGUE_NOT_PENDING');
+});
+
+test('Host disconnect clears an obsolete prepared decision and reconnect can schedule a fresh one', async () => {
+  const host = client(uidHost);
+  await join(host);
+  await command(host, 'lounge.queue.add', { trackId: 't_2002' });
+  const prepared = await command(host, 'lounge.ai.segue.trigger', { currentTs: 208 });
+  expect(prepared.ok).toBe(true);
+  const savedDecision = repository.lounges.get('lg_123456789abc').pendingSegue;
+  host.disconnect();
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  expect(repository.lounges.get('lg_123456789abc').pendingSegue).toBeUndefined();
+  const reconnectedHost = client(uidHost);
+  await join(reconnectedHost);
+  const restored = await command(reconnectedHost, 'lounge.ai.segue.trigger', { currentTs: 209 });
+  expect(restored).toMatchObject({ ok: true, decision: { selectedTrackId: 't_2002' }, recovered: false });
+  expect(segueRequests).toBe(2);
+  expect(savedDecision.trackId).toBe('t_2002');
 });
 
 test('rejoining the same socket does not persist a duplicate participant join event', async () => {

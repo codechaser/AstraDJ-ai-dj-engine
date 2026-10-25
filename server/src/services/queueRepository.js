@@ -39,7 +39,19 @@ export const queueRepository = {
     return Track.findOne({ trackId }).select('trackId title artist durationSeconds audioAssetUrl acoustic').lean();
   },
   setCurrentTrack(loungeId, currentTrackId) {
-    return DJLounge.findOneAndUpdate({ loungeId, status: 'live' }, { $set: { currentTrackId } }, { new: true }).lean();
+    return DJLounge.findOneAndUpdate({ loungeId, status: 'live' }, { $set: { currentTrackId }, $unset: { pendingSegue: 1 } }, { new: true }).lean();
+  },
+  setPendingSegue(loungeId, fromTrackId, pendingSegue) {
+    return DJLounge.findOneAndUpdate(
+      { loungeId, status: 'live', currentTrackId: fromTrackId, $or: [{ 'pendingSegue.fromTrackId': { $exists: false } }, { 'pendingSegue.fromTrackId': null }, { 'pendingSegue.fromTrackId': fromTrackId }] },
+      { $set: { pendingSegue } }, { new: true },
+    ).lean();
+  },
+  clearPendingSegue(loungeId, fromTrackId) {
+    return DJLounge.findOneAndUpdate(
+      { loungeId, 'pendingSegue.fromTrackId': fromTrackId },
+      { $unset: { pendingSegue: 1 } }, { new: true },
+    ).lean();
   },
   async getTrackMetadata(trackId) {
     return Track.findOne({ trackId }).select('trackId title artist timeline').lean();

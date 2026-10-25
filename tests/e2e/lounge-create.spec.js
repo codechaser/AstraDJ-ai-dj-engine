@@ -157,11 +157,12 @@ test('real accelerated media playback triggers a grounded Lounge segue and advan
     element.playbackRate = 10; // Accelerates real media time; does not dispatch or synthesize media events.
     window.__outroBoundaryAt = null;
     window.__endedFromRealMedia = false;
+    window.__naturalEndedAt = null;
     element.addEventListener('loadedmetadata', () => { window.__outroBoundaryAt = null; });
     element.addEventListener('timeupdate', () => {
       if (window.__outroBoundaryAt === null && element.duration - element.currentTime <= 12) window.__outroBoundaryAt = performance.now();
     });
-    element.addEventListener('ended', () => { window.__endedFromRealMedia = true; }, { once: true });
+    element.addEventListener('ended', () => { window.__endedFromRealMedia = true; window.__naturalEndedAt = { currentTime: element.currentTime, duration: element.duration }; }, { once: true });
   });
   await page.getByRole('button', { name: 'Play', exact: true }).click();
   const announcement = page.locator('.ai-grounded-result').getByText(/AstraDJ transition/);
@@ -169,9 +170,12 @@ test('real accelerated media playback triggers a grounded Lounge segue and advan
   const triggerToDecisionMs = await page.evaluate(() => performance.now() - window.__outroBoundaryAt);
   expect(triggerToDecisionMs).toBeLessThan(3000);
   console.log(`[segue-e2e] browser trigger-to-announcement ${triggerToDecisionMs.toFixed(1)} ms; playbackRate=10x; sample=1`);
-  await expect.poll(() => page.evaluate(() => window.__endedFromRealMedia), { timeout: 30_000 }).toBe(true);
-  await expect.poll(() => audio.evaluate((element) => element.currentSrc), { timeout: 10_000 }).toContain('/audio/faded-fortress.mp3');
-  await expect.poll(() => audio.evaluate((element) => !element.paused && element.currentTime > 0.2), { timeout: 10_000 }).toBe(true);
+  const preparedPlayback = await audio.evaluate((element) => ({ currentSrc: element.currentSrc, currentTime: element.currentTime, duration: element.duration, paused: element.paused }));
+  expect(preparedPlayback.currentSrc).toContain('/audio/ivory-atlas.mp3');
+  expect(preparedPlayback.duration - preparedPlayback.currentTime).toBeLessThanOrEqual(12);
+  expect(preparedPlayback.paused).toBe(false);
+  await expect.poll(() => page.evaluate(() => window.__endedFromRealMedia)).toBe(false);
+
   const { loungeId } = await page.evaluate(() => JSON.parse(sessionStorage.getItem('astradj.activeLounge')));
   const mongoose = (await import('../../server/node_modules/mongoose/index.js')).default;
   const [{ DJLounge }, { QueueEvent }] = await Promise.all([
@@ -179,9 +183,18 @@ test('real accelerated media playback triggers a grounded Lounge segue and advan
   ]);
   await mongoose.connect(process.env.MONGODB_URI, { serverSelectionTimeoutMS: 5000 });
   try {
+    const preparedLounge = await DJLounge.findOne({ loungeId }).lean();
+    expect(preparedLounge.currentTrackId).toBe('t_cc0_ivory_atlas');
+    expect(preparedLounge.pendingSegue).toMatchObject({ fromTrackId: 't_cc0_ivory_atlas', trackId: 't_cc0_faded_fortress' });
+    await expect.poll(() => page.evaluate(() => window.__endedFromRealMedia), { timeout: 30_000 }).toBe(true);
+    const naturalBoundary = await page.evaluate(() => window.__naturalEndedAt);
+    expect(naturalBoundary.duration - naturalBoundary.currentTime).toBeLessThanOrEqual(0.1);
+    await expect.poll(() => audio.evaluate((element) => element.currentSrc), { timeout: 10_000 }).toContain('/audio/faded-fortress.mp3');
+    await expect.poll(() => audio.evaluate((element) => !element.paused && element.currentTime > 0.2), { timeout: 10_000 }).toBe(true);
     const persisted = await DJLounge.findOne({ loungeId }).lean();
     const transitions = await QueueEvent.find({ loungeId, type: 'track.transitioned' }).lean();
     expect(persisted.currentTrackId).toBe('t_cc0_faded_fortress');
+    expect(persisted.pendingSegue).toBeUndefined();
     expect(transitions).toHaveLength(1);
     expect(transitions[0].payload).toMatchObject({ fromTrackId: 't_cc0_ivory_atlas', trackId: 't_cc0_faded_fortress' });
   } finally {

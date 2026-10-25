@@ -7,6 +7,11 @@ const loungeSchema = new mongoose.Schema({
   vibeProfile: { type: String, required: true, trim: true, maxlength: 100 },
   queue: { type: [String], default: [] },
   currentTrackId: { type: String, default: null },
+  pendingSegue: {
+    fromTrackId: { type: String, default: null },
+    trackId: { type: String, default: null },
+    createdAt: { type: Date, default: null },
+  },
   soundclash: {
     active: { type: Boolean, default: false },
     candidates: { type: [String], default: [] },
