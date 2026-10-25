@@ -133,7 +133,12 @@ test('Host creates a Lounge from the catalog and another authenticated listener 
   await outsiderPage.getByLabel('Display name').fill('Unrelated Account');
   await outsiderPage.getByLabel('Email').fill(`outsider-${randomUUID()}@example.invalid`);
   await outsiderPage.getByLabel('Password').fill(`Outsider!${randomUUID()}123`);
+  const registrationResponse = outsiderPage.waitForResponse((response) => response.url().endsWith('/api/v1/auth/register') && response.request().method() === 'POST');
   await outsiderPage.getByRole('button', { name: 'Create Account' }).click();
+  const registered = await registrationResponse;
+  const registrationResult = await registered.json().catch(() => ({}));
+  console.info(`[auth-e2e] outsider registration status=${registered.status()} displayName=${registrationResult.user?.displayName ?? 'none'} error=${registrationResult.error?.code ?? 'none'}`);
+  expect(registered.status()).toBe(201);
   await expect(outsiderPage.getByRole('heading', { name: 'Unrelated Account' })).toBeVisible();
   await outsiderPage.goto('/');
   await outsiderPage.getByRole('link', { name: 'Live', exact: true }).click();
@@ -161,31 +166,6 @@ test('real accelerated media playback triggers a grounded Lounge segue and advan
   await page.getByRole('button', { name: 'Add to queue' }).click();
   await expect(page.getByRole('main').getByText('Faded Fortress', { exact: true })).toBeVisible();
 
-  const audio = page.locator('audio');
-  await expect.poll(() => audio.evaluate((element) => element.readyState)).toBeGreaterThanOrEqual(1);
-  await audio.evaluate((element) => {
-    element.playbackRate = 10; // Accelerates real media time; does not dispatch or synthesize media events.
-    window.__outroBoundaryAt = null;
-    window.__endedFromRealMedia = false;
-    window.__naturalEndedAt = null;
-    element.addEventListener('loadedmetadata', () => { window.__outroBoundaryAt = null; });
-    element.addEventListener('timeupdate', () => {
-      if (window.__outroBoundaryAt === null && element.duration - element.currentTime <= 12) window.__outroBoundaryAt = performance.now();
-    });
-    element.addEventListener('ended', () => { window.__endedFromRealMedia = true; window.__naturalEndedAt = { currentTime: element.currentTime, duration: element.duration }; }, { once: true });
-  });
-  await page.getByRole('button', { name: 'Play', exact: true }).click();
-  const announcement = page.locator('.ai-grounded-result').getByText(/AstraDJ transition/);
-  await expect(announcement).toBeVisible({ timeout: 30_000 });
-  const triggerToDecisionMs = await page.evaluate(() => performance.now() - window.__outroBoundaryAt);
-  expect(triggerToDecisionMs).toBeLessThan(3000);
-  console.log(`[segue-e2e] browser trigger-to-announcement ${triggerToDecisionMs.toFixed(1)} ms; playbackRate=10x; sample=1`);
-  const preparedPlayback = await audio.evaluate((element) => ({ currentSrc: element.currentSrc, currentTime: element.currentTime, duration: element.duration, paused: element.paused }));
-  expect(preparedPlayback.currentSrc).toContain('/audio/ivory-atlas.mp3');
-  expect(preparedPlayback.duration - preparedPlayback.currentTime).toBeLessThanOrEqual(12);
-  expect(preparedPlayback.paused).toBe(false);
-  await expect.poll(() => page.evaluate(() => window.__endedFromRealMedia)).toBe(false);
-
   const { loungeId } = await page.evaluate(() => JSON.parse(sessionStorage.getItem('astradj.activeLounge')));
   const mongoose = (await import('../../server/node_modules/mongoose/index.js')).default;
   const [{ DJLounge }, { QueueEvent }] = await Promise.all([
@@ -193,9 +173,42 @@ test('real accelerated media playback triggers a grounded Lounge segue and advan
   ]);
   await mongoose.connect(process.env.MONGODB_URI, { serverSelectionTimeoutMS: 5000 });
   try {
+    // Open Mongo before accelerated playback so the test observes the persisted
+    // preparation during the short real-media outro window, not after the track ends.
+    const audio = page.locator('audio');
+    await expect.poll(() => audio.evaluate((element) => element.readyState)).toBeGreaterThanOrEqual(1);
+    await audio.evaluate((element) => {
+      element.playbackRate = 10; // Accelerates real media time; does not dispatch or synthesize media events.
+      window.__outroBoundaryAt = null;
+      window.__endedFromRealMedia = false;
+      window.__naturalEndedAt = null;
+      element.addEventListener('loadedmetadata', () => { window.__outroBoundaryAt = null; });
+      element.addEventListener('timeupdate', () => {
+        if (window.__outroBoundaryAt === null && element.duration - element.currentTime <= 12) window.__outroBoundaryAt = performance.now();
+      });
+      element.addEventListener('ended', () => { window.__endedFromRealMedia = true; window.__naturalEndedAt = { currentTime: element.currentTime, duration: element.duration }; }, { once: true });
+    });
+    await page.getByRole('button', { name: 'Play', exact: true }).click();
+    const announcement = page.locator('.ai-grounded-result').getByText(/AstraDJ transition/);
+    await expect(announcement).toBeVisible({ timeout: 30_000 });
+    const triggerToDecisionMs = await page.evaluate(() => performance.now() - window.__outroBoundaryAt);
+    expect(triggerToDecisionMs).toBeLessThan(3000);
+    console.log(`[segue-e2e] browser trigger-to-announcement ${triggerToDecisionMs.toFixed(1)} ms; playbackRate=10x; sample=1`);
+    const preparedPlayback = await audio.evaluate((element) => ({ currentSrc: element.currentSrc, currentTime: element.currentTime, duration: element.duration, paused: element.paused }));
+    expect(preparedPlayback.currentSrc).toContain('/audio/ivory-atlas.mp3');
+    expect(preparedPlayback.duration - preparedPlayback.currentTime).toBeLessThanOrEqual(12);
+    expect(preparedPlayback.paused).toBe(false);
+
+    await expect.poll(async () => {
+      const lounge = await DJLounge.findOne({ loungeId }).lean();
+      return lounge?.pendingSegue?.fromTrackId === 't_cc0_ivory_atlas'
+        && lounge?.pendingSegue?.trackId === 't_cc0_faded_fortress'
+        && lounge?.currentTrackId === 't_cc0_ivory_atlas';
+    }, { timeout: 3000, intervals: [25, 50, 100] }).toBe(true);
+    expect(await page.evaluate(() => window.__endedFromRealMedia)).toBe(false);
     const preparedLounge = await DJLounge.findOne({ loungeId }).lean();
-    expect(preparedLounge.currentTrackId).toBe('t_cc0_ivory_atlas');
     expect(preparedLounge.pendingSegue).toMatchObject({ fromTrackId: 't_cc0_ivory_atlas', trackId: 't_cc0_faded_fortress' });
+
     await expect.poll(() => page.evaluate(() => window.__endedFromRealMedia), { timeout: 30_000 }).toBe(true);
     const naturalBoundary = await page.evaluate(() => window.__naturalEndedAt);
     expect(naturalBoundary.duration - naturalBoundary.currentTime).toBeLessThanOrEqual(0.1);

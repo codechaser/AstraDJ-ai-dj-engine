@@ -16,6 +16,14 @@ const loungeMode = process.argv.includes('--lounge');
 const settingsMode = process.argv.includes('--settings');
 const catalogMode = process.argv.includes('--catalog');
 const adminAcousticMode = process.argv.includes('--admin-acoustic');
+const playwrightFilterArgs = [];
+for (let index = 2; index < process.argv.length; index += 1) {
+  const argument = process.argv[index];
+  if (['--grep', '--grep-invert'].includes(argument) && process.argv[index + 1]) {
+    playwrightFilterArgs.push(argument, process.argv[index + 1]);
+    index += 1;
+  } else if (argument.startsWith('--grep=')) playwrightFilterArgs.push(argument);
+}
 
 function parseEnvFile(path) {
   const values = {};
@@ -161,7 +169,7 @@ try {
 
   const playwrightCli = join(root, 'node_modules/@playwright/test/cli.js');
   const config = loungeMode ? 'playwright.lounge-e2e.config.js' : settingsMode ? 'playwright.settings-e2e.config.js' : adminAcousticMode ? 'playwright.admin-acoustic-e2e.config.js' : catalogMode ? 'playwright.catalog-e2e.config.js' : 'playwright.audio-e2e.config.js';
-  run(process.execPath, [playwrightCli, 'test', `--config=${config}`], { cwd: root, env: runtimeEnv });
+  run(process.execPath, [playwrightCli, 'test', `--config=${config}`, ...playwrightFilterArgs], { cwd: root, env: runtimeEnv });
   exitCode = 0;
 } catch (error) {
   console.error(error.message);
