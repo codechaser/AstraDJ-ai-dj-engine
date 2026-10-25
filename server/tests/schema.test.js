@@ -59,9 +59,13 @@ test('QueueEvent stores compact typed append-only commands with a per-Lounge seq
   const tie = new QueueEvent({ loungeId: 'lg_123456789abc', seq: 2, type: 'soundclash.tied', actorUserId: null, payload: { battleId: 'battle', voteCounts: {} } });
   const automaticWinner = new QueueEvent({ loungeId: 'lg_123456789abc', seq: 3, type: 'soundclash.resolved', actorUserId: null, payload: { battleId: 'battle', winningTrackId: 't_2001', autoResolved: true } });
   const invalidManualWinner = new QueueEvent({ loungeId: 'lg_123456789abc', seq: 4, type: 'soundclash.resolved', actorUserId: null, payload: { battleId: 'battle', winningTrackId: 't_2001', autoResolved: false } });
+  const automaticOpen = new QueueEvent({ loungeId: 'lg_123456789abc', seq: 5, type: 'soundclash.opened', actorUserId: null, payload: { battleId: 'battle', openedBy: 'ai_dj', candidateTrackIds: ['t_2001', 't_2002'], closesAt: Date.now() + 1000 } });
+  const invalidUnattributedOpen = new QueueEvent({ loungeId: 'lg_123456789abc', seq: 6, type: 'soundclash.opened', actorUserId: null, payload: { battleId: 'battle', openedBy: 'host', candidateTrackIds: ['t_2001', 't_2002'], closesAt: Date.now() + 1000 } });
   expect(tie.validateSync()).toBeUndefined();
   expect(automaticWinner.validateSync()).toBeUndefined();
+  expect(automaticOpen.validateSync()).toBeUndefined();
   expect(invalidManualWinner.validateSync().errors.actorUserId).toBeDefined();
+  expect(invalidUnattributedOpen.validateSync().errors.actorUserId).toBeDefined();
 });
 
 test('ChatMessage validates sanitized bounded text, sentiment bucket, and message identity', () => {

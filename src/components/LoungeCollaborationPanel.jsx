@@ -134,6 +134,7 @@ export default function LoungeCollaborationPanel({ socket, loungeId, status, use
     <section className="panel soundclash-panel">
       <div className="section-title"><h2>Soundclash</h2><span className="muted">{battle?.status ?? 'idle'}</span></div>
       {!battle || battle.status === 'idle' ? <p className="integration-status">No Soundclash entries yet. A Listener can submit an unqueued catalog track.</p> : <>
+        {battle.status === 'collecting' && <p className="sentiment-status">The AI DJ opens a timed vote automatically when the second Listener entry arrives.</p>}
         {battle.status === 'open' && <p className="sentiment-status">Voting closes in {remaining ?? '—'}s. The server decides the result.</p>}
         {battle.status === 'tied' && <p className="sentiment-status">The server reported a tie. Host or Co-DJ can resolve one of the tied entries.</p>}
         {(battle.candidateTrackIds ?? []).map((trackId) => <div className="soundclash-candidate" key={trackId}><span>{nameFor(trackId)}</span><span>{voteCounts[trackId] ?? 0} votes</span>
@@ -143,7 +144,6 @@ export default function LoungeCollaborationPanel({ socket, loungeId, status, use
         </div>)}
       </>}
       {isListener && <div className="soundclash-actions"><select aria-label="Choose a track to submit to Soundclash" value={battleTrackId} onChange={(event) => setBattleTrackId(event.target.value)} disabled={battleBusy}><option value="">Choose a catalog track…</option>{catalog.map((track) => <option key={track.trackId} value={track.trackId}>{track.title} · {track.artist}</option>)}</select><button className="btn-outline" disabled={!battleTrackId || battleBusy} onClick={() => sendBattleCommand('lounge.soundclash.submit', { trackId: battleTrackId })}>Submit track</button></div>}
-      {canHost && battle?.status === 'collecting' && <button className="btn-outline" disabled={battleBusy || (battle.candidateTrackIds?.length ?? 0) < 2} onClick={() => sendBattleCommand('lounge.soundclash.open', {})}>Open timed vote</button>}
       {battleError && <p className="integration-error" role="alert">{battleError}</p>}
       {announcement && <div className="ai-grounded-result"><b>AstraDJ transition · deterministic metadata fallback</b><p>{announcement.text}</p><small>Related track: {nameFor(announcement.relatedTrackId)} · Sources: {(announcement.sourceEvents ?? []).join(', ') || 'none returned'}</small></div>}
     </section>

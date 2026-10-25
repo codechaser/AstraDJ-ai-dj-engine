@@ -6,7 +6,7 @@ import { deterministicTransitionProvider } from './transitionProvider.js';
 
 const DEFAULT_VOTE_DURATION_MS = 30_000;
 const trackIdPattern = /^t_[A-Za-z0-9_-]{1,64}$/;
-const initialState = () => ({ battleId: null, status: 'idle', submissions: [], candidateTrackIds: [], votes: {}, closesAt: null, winningTrackId: null });
+const initialState = () => ({ battleId: null, status: 'idle', submissions: [], candidateTrackIds: [], votes: {}, closesAt: null, openedBy: null, winningTrackId: null });
 
 function countsFor(state) {
   const counts = Object.fromEntries(state.candidateTrackIds.map((trackId) => [trackId, 0]));
@@ -28,6 +28,7 @@ function applyHistoryEvent(state, event) {
     state.candidateTrackIds = [...payload.candidateTrackIds];
     state.status = 'open';
     state.closesAt = payload.closesAt;
+    state.openedBy = payload.openedBy ?? (event.actorUserId ? 'host' : 'ai_dj');
   }
   if (event.type === 'soundclash.voted' && state.battleId === payload.battleId && state.status === 'open') {
     state.votes[String(event.actorUserId)] = payload.trackId;
@@ -114,6 +115,7 @@ export function createSoundclashService({
       candidateTrackIds: [...state.candidateTrackIds],
       voteCounts: countsFor(state),
       closesAt: state.closesAt,
+      openedBy: state.openedBy,
       winningTrackId: state.winningTrackId,
     };
   }
@@ -122,8 +124,29 @@ export function createSoundclashService({
     if (lounge.settings?.soundclashEnabled === false) throw new ApiError(409, 'SOUNDCLASH_DISABLED', 'Soundclash is disabled for this Lounge');
   }
 
-  async function record(lounge, actor, type, payload, buffered = false) {
-    await queueService.recordLoungeEvent({ lounge, actor, type, payload, buffered });
+  async function record(lounge, actor, type, payload) {
+    await queueService.recordLoungeEvent({ lounge, actor, type, payload });
+  }
+
+  async function openLocked(lounge, state, actor, openedBy) {
+    ensureEnabled(lounge);
+    if (state.status === 'open') return { state: publicState(state) };
+    if (state.status !== 'collecting') throw new ApiError(409, 'SOUNDCLASH_NOT_COLLECTING', 'Soundclash submissions are not ready to open');
+    if (state.candidateTrackIds.length < 2 || state.candidateTrackIds.length > 4) throw new ApiError(400, 'SOUNDCLASH_REQUIRES_2_TO_4_CANDIDATES', 'A Soundclash requires two to four submitted tracks');
+    const closesAt = now() + voteDurationMs;
+    await record(lounge, actor, 'soundclash.opened', { battleId: state.battleId, candidateTrackIds: [...state.candidateTrackIds], closesAt, openedBy });
+    state.status = 'open';
+    state.closesAt = closesAt;
+    state.openedBy = openedBy;
+    state.votes = {};
+    const payload = { battleId: state.battleId, candidateTrackIds: [...state.candidateTrackIds], closesAt };
+    emit('lounge.soundclash.open', lounge.loungeId, payload);
+    scheduleDeadline(lounge, state);
+    return { state: publicState(state) };
+  }
+
+  async function recoverAutomaticOpen(lounge, state) {
+    if (state.status === 'collecting' && state.candidateTrackIds.length >= 2) await openLocked(lounge, state, null, 'ai_dj');
   }
 
   async function finalize(lounge, state, winningTrackId, actor, autoResolved) {
@@ -170,7 +193,11 @@ export function createSoundclashService({
 
   return {
     async snapshot(lounge) {
-      return serialized(lounge.loungeId, async () => publicState(await loadState(lounge)));
+      return serialized(lounge.loungeId, async () => {
+        const state = await loadState(lounge);
+        await recoverAutomaticOpen(lounge, state);
+        return publicState(state);
+      });
     },
 
     async submit({ lounge, actor, trackId }) {
@@ -178,6 +205,7 @@ export function createSoundclashService({
         if (actor.role !== 'Listener') throw new ApiError(403, 'FORBIDDEN', 'Only Lounge Listeners may submit Soundclash tracks');
         ensureEnabled(lounge);
         const state = await loadState(lounge);
+        if (state.submissions.some((submission) => submission.submittedByUserId === String(actor.id))) throw new ApiError(409, 'SOUNDCLASH_ALREADY_SUBMITTED', 'Each Listener may submit one track per Soundclash');
         if (state.status === 'open' || state.status === 'tied') throw new ApiError(409, 'SOUNDCLASH_ALREADY_ACTIVE', 'A Soundclash is already underway');
         if (typeof trackId !== 'string' || !trackIdPattern.test(trackId)) throw new ApiError(400, 'VALIDATION_ERROR', 'trackId is invalid');
         const queue = await queueService.snapshot(lounge);
@@ -196,6 +224,7 @@ export function createSoundclashService({
         state.submissions.push({ trackId, submittedByUserId: String(actor.id) });
         const submission = { battleId: state.battleId, trackId, submittedByUserId: String(actor.id), candidateCount: state.candidateTrackIds.length };
         emit('lounge.soundclash.submission', lounge.loungeId, submission);
+        if (state.candidateTrackIds.length >= 2) await openLocked(lounge, state, null, 'ai_dj');
         return { state: publicState(state), submission };
       });
     },
@@ -203,19 +232,8 @@ export function createSoundclashService({
     async open({ lounge, actor }) {
       return serialized(lounge.loungeId, async () => {
         if (actor.role !== 'Host') throw new ApiError(403, 'FORBIDDEN', 'Only the Lounge Host may open a Soundclash');
-        ensureEnabled(lounge);
         const state = await loadState(lounge);
-        if (state.status !== 'collecting') throw new ApiError(409, 'SOUNDCLASH_NOT_COLLECTING', 'Soundclash submissions are not ready to open');
-        if (state.candidateTrackIds.length < 2 || state.candidateTrackIds.length > 4) throw new ApiError(400, 'SOUNDCLASH_REQUIRES_2_TO_4_CANDIDATES', 'A Soundclash requires two to four submitted tracks');
-        const closesAt = now() + voteDurationMs;
-        await record(lounge, actor, 'soundclash.opened', { battleId: state.battleId, candidateTrackIds: [...state.candidateTrackIds], closesAt });
-        state.status = 'open';
-        state.closesAt = closesAt;
-        state.votes = {};
-        const payload = { battleId: state.battleId, candidateTrackIds: [...state.candidateTrackIds], closesAt };
-        emit('lounge.soundclash.open', lounge.loungeId, payload);
-        scheduleDeadline(lounge, state);
-        return { state: publicState(state) };
+        return openLocked(lounge, state, actor, 'host');
       });
     },
 
@@ -232,7 +250,10 @@ export function createSoundclashService({
         if (state.status !== 'open') throw new ApiError(409, 'SOUNDCLASH_NOT_ACTIVE', 'There is no active Soundclash vote');
         if (typeof trackId !== 'string' || !state.candidateTrackIds.includes(trackId)) throw new ApiError(400, 'VALIDATION_ERROR', 'trackId must identify a Soundclash candidate');
         if (Object.hasOwn(state.votes, String(actor.id))) throw new ApiError(409, 'SOUNDCLASH_DUPLICATE_VOTE', 'Each Listener may vote once per Soundclash');
-        await record(lounge, actor, 'soundclash.voted', { battleId, trackId }, true);
+        // Acknowledged votes must be durable before the state is exposed or
+        // broadcast. Unlike the general queue's batched upvotes, Soundclash
+        // vote totals determine the battle outcome and must survive a crash.
+        await record(lounge, actor, 'soundclash.voted', { battleId, trackId });
         state.votes[String(actor.id)] = trackId;
         const voteCounts = countsFor(state);
         const payload = { battleId, voteCounts, closesAt: state.closesAt };

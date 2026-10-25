@@ -10,6 +10,7 @@ import { createSoundclashService } from '../src/services/soundclashService.js';
 import { rankSegueCandidates } from '../src/services/acousticMatcher.js';
 
 const secret = 'test-secret-astradj-only-32-characters';
+const soundclashTestVoteDurationMs = 1_000;
 const uidHost = '507f1f77bcf86cd799439011';
 const uidListener = '507f1f77bcf86cd799439012';
 const uidListener2 = '507f1f77bcf86cd799439013';
@@ -147,7 +148,7 @@ beforeEach(async () => {
   } };
   server = createServer();
   ioServer = new Server(server, { transports: ['websocket'] });
-  ({ chatService, soundclashService, publishAnnouncement } = attachLoungeGateway(ioServer, { repository, queueService, secret, sentimentService, loungeLifecycleService, loungeMetricEventService, segueService, soundclashOptions: { voteDurationMs: 160 } }));
+  ({ chatService, soundclashService, publishAnnouncement } = attachLoungeGateway(ioServer, { repository, queueService, secret, sentimentService, loungeLifecycleService, loungeMetricEventService, segueService, soundclashOptions: { voteDurationMs: soundclashTestVoteDurationMs } }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   port = server.address().port;
   sockets = [];
@@ -512,13 +513,15 @@ test('Soundclash collects Listener submissions, opens with the exact PRD envelop
   const { host, a, b } = await setupSoundclash();
   expect((await command(host, 'lounge.soundclash.submit', { trackId: 't_2004' })).error.code).toBe('FORBIDDEN');
   const subA = await command(a, 'lounge.soundclash.submit', { trackId: 't_2003' });
+  const open = waitFor(host, 'lounge.soundclash.open');
   const subB = await command(b, 'lounge.soundclash.submit', { trackId: 't_2004' });
   expect(subA.ok && subB.ok).toBe(true);
+  expect(subB.state).toMatchObject({ status: 'open', openedBy: 'ai_dj', candidateTrackIds: ['t_2003', 't_2004'] });
   expect((await command(a, 'lounge.soundclash.submit', { trackId: 't_2005' })).error.code).toBe('SOUNDCLASH_ALREADY_SUBMITTED');
-  const open = waitFor(host, 'lounge.soundclash.open');
   const opened = await command(host, 'lounge.soundclash.open', {});
   const openEvent = await open;
   expect(opened.ok).toBe(true);
+  expect(opened.state).toMatchObject({ status: 'open', openedBy: 'ai_dj' });
   expect(openEvent).toMatchObject({ event: 'lounge.soundclash.open', loungeId: 'lg_123456789abc', payload: { battleId: subA.state.battleId, candidateTrackIds: ['t_2003', 't_2004'], closesAt: expect.any(Number) }, ts: expect.any(Number) });
   expect(Object.keys(openEvent.payload).sort()).toEqual(['battleId', 'candidateTrackIds', 'closesAt']);
   const queueUpdate = waitFor(host, 'lounge.queue.update');
@@ -528,6 +531,7 @@ test('Soundclash collects Listener submissions, opens with the exact PRD envelop
   const resolutionB = waitFor(b, 'lounge.soundclash.resolved');
   expect((await command(a, 'lounge.soundclash.vote', { battleId: subA.state.battleId, trackId: 't_2003' })).ok).toBe(true);
   expect((await command(b, 'lounge.soundclash.vote', { battleId: subA.state.battleId, trackId: 't_2003' })).ok).toBe(true);
+  expect(repository.events.filter((event) => event.type === 'soundclash.voted')).toHaveLength(2);
   const resolutionEvents = await Promise.all([resolution, resolutionA, resolutionB]);
   const resolvedEvent = resolutionEvents[0];
   expect(resolvedEvent).toMatchObject({ event: 'lounge.soundclash.resolved', loungeId: 'lg_123456789abc', payload: { battleId: subA.state.battleId, winningTrackId: 't_2003' }, ts: expect.any(Number) });
@@ -579,8 +583,8 @@ test('Soundclash validates membership, command payloads, candidate count, duplic
   await command(host, 'lounge.queue.add', { trackId: 't_2002' });
   expect((await command(host, 'lounge.soundclash.open', {})).error.code).toBe('SOUNDCLASH_NOT_COLLECTING');
   const first = await command(a, 'lounge.soundclash.submit', { trackId: 't_2003' });
-  await command(b, 'lounge.soundclash.submit', { trackId: 't_2004' });
   const foreignEvent = new Promise((resolve) => otherRoom.once('lounge.soundclash.open', resolve));
+  await command(b, 'lounge.soundclash.submit', { trackId: 't_2004' });
   await command(host, 'lounge.soundclash.open', {});
   // The event is only delivered to the authorized Lounge room.
   await expect(Promise.race([foreignEvent, new Promise((resolve) => setTimeout(() => resolve('timeout'), 50))])).resolves.toBe('timeout');
@@ -595,13 +599,36 @@ test('Soundclash restores an open battle and its server timer resolves after vot
   await command(host, 'lounge.soundclash.open', {});
   await command(a, 'lounge.soundclash.vote', { battleId: first.state.battleId, trackId: 't_2003' });
   await queueService.flush('lg_123456789abc');
+  const openedEvent = repository.events.find((event) => event.type === 'soundclash.opened');
+  openedEvent.payload.closesAt = Date.now() + 40;
   soundclashService.close();
-  soundclashService = createSoundclashService({ repository, queueService, voteDurationMs: 40, onEvent: (event, loungeId, payload) => ioServer.to(`lounge:${loungeId}`).emit(event, { event, loungeId, payload, ts: Date.now() }) });
+  soundclashService = createSoundclashService({ repository, queueService, onEvent: (event, loungeId, payload) => ioServer.to(`lounge:${loungeId}`).emit(event, { event, loungeId, payload, ts: Date.now() }) });
   const lounge = await repository.findLoungeById('lg_123456789abc');
   expect(await soundclashService.snapshot(lounge)).toMatchObject({ status: 'open', candidateTrackIds: ['t_2003', 't_2004'], voteCounts: { t_2003: 1, t_2004: 0 } });
   a.disconnect(); b.disconnect();
   await new Promise((resolve) => setTimeout(resolve, 240));
   expect(await soundclashService.snapshot(lounge)).toMatchObject({ status: 'resolved', winningTrackId: 't_2003' });
+});
+
+test('Soundclash snapshot recovers an interrupted AI auto-open once and idempotent open retries do not duplicate it', async () => {
+  const { host, a, b } = await setupSoundclash();
+  const first = await command(a, 'lounge.soundclash.submit', { trackId: 't_2003' });
+  await command(b, 'lounge.soundclash.submit', { trackId: 't_2004' });
+  const lounge = await repository.findLoungeById('lg_123456789abc');
+  const submitEvents = repository.events.filter((event) => event.type === 'soundclash.submitted');
+  expect(submitEvents).toHaveLength(2);
+  for (let index = repository.events.length - 1; index >= 0; index -= 1) {
+    if (repository.events[index].type === 'soundclash.opened') repository.events.splice(index, 1);
+  }
+  soundclashService.close();
+  soundclashService = createSoundclashService({ repository, queueService, voteDurationMs: 1000 });
+  expect(await soundclashService.snapshot(lounge)).toMatchObject({ status: 'open', openedBy: 'ai_dj', candidateTrackIds: ['t_2003', 't_2004'] });
+  const openedEvents = repository.events.filter((event) => event.type === 'soundclash.opened' && event.payload.battleId === first.state.battleId);
+  expect(openedEvents).toHaveLength(1);
+  expect(openedEvents[0]).toMatchObject({ actorUserId: null, payload: { openedBy: 'ai_dj' } });
+  await soundclashService.open({ lounge, actor: { id: uidHost, role: 'Host' } });
+  expect(repository.events.filter((event) => event.type === 'soundclash.opened' && event.payload.battleId === first.state.battleId)).toHaveLength(1);
+  expect(host.connected).toBe(true);
 });
 
 test('Soundclash persistence failure does not publish or expose an uncommitted battle', async () => {
@@ -614,4 +641,24 @@ test('Soundclash persistence failure does not publish or expose an uncommitted b
   expect((await command(a, 'lounge.sync.request', {})).state.soundclash).toMatchObject({ status: 'idle', battleId: null, candidateTrackIds: [] });
   await expect(Promise.race([event, new Promise((resolve) => setTimeout(() => resolve('timeout'), 50))])).resolves.toBe('timeout');
   repository.failQueueAppend = false;
+});
+
+test('Soundclash vote is durable before broadcast and an ambiguous write retry cannot double-count', async () => {
+  const { a, b } = await setupSoundclash();
+  const first = await command(a, 'lounge.soundclash.submit', { trackId: 't_2003' });
+  await command(b, 'lounge.soundclash.submit', { trackId: 't_2004' });
+  const originalAppend = repository.appendQueueEvents.bind(repository);
+  let loseFirstAck = true;
+  repository.appendQueueEvents = async (batch) => {
+    await originalAppend(batch);
+    if (loseFirstAck) { loseFirstAck = false; throw new Error('simulated response loss after durable insert'); }
+  };
+  const voteEvent = waitFor(a, 'lounge.soundclash.vote');
+  const vote = await command(a, 'lounge.soundclash.vote', { battleId: first.state.battleId, trackId: 't_2003' });
+  expect(vote.ok).toBe(true);
+  expect(await voteEvent).toMatchObject({ payload: { battleId: first.state.battleId, voteCounts: { t_2003: 1, t_2004: 0 } } });
+  expect(repository.events.filter((event) => event.type === 'soundclash.voted' && String(event.actorUserId) === uidListener)).toHaveLength(1);
+  expect((await command(b, 'lounge.soundclash.vote', { battleId: first.state.battleId, trackId: 't_2004' })).ok).toBe(true);
+  expect((await command(b, 'lounge.soundclash.vote', { battleId: first.state.battleId, trackId: 't_2003' })).error.code).toBe('SOUNDCLASH_DUPLICATE_VOTE');
+  expect(repository.events.filter((event) => event.type === 'soundclash.voted')).toHaveLength(2);
 });

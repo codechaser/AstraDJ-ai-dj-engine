@@ -9,6 +9,16 @@ async function signInHost(page) {
   await expect(page.getByRole('heading', { name: 'AstraDJ E2E Host' })).toBeVisible();
 }
 
+async function registerListener(page, displayName) {
+  await page.goto('/profile', { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Create account' }).click();
+  await page.getByLabel('Display name').fill(displayName);
+  await page.getByLabel('Email').fill(`listener-${randomUUID()}@example.invalid`);
+  await page.getByLabel('Password').fill(`Listener!${randomUUID()}123`);
+  await page.getByRole('button', { name: 'Create Account' }).click();
+  await expect(page.getByRole('heading', { name: displayName })).toBeVisible();
+}
+
 test('Host creates a Lounge from the catalog and another authenticated listener joins by invite', async ({ browser }) => {
   const hostContext = await browser.newContext();
   const hostPage = await hostContext.newPage();
@@ -199,5 +209,61 @@ test('real accelerated media playback triggers a grounded Lounge segue and advan
     expect(transitions[0].payload).toMatchObject({ fromTrackId: 't_cc0_ivory_atlas', trackId: 't_cc0_faded_fortress' });
   } finally {
     await mongoose.disconnect();
+  }
+});
+
+test('two Listener submissions automatically open a persisted Soundclash and live vote totals match Mongo', async ({ browser, page }) => {
+  test.setTimeout(60_000);
+  await signInHost(page);
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await page.getByRole('link', { name: 'Live', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Starting track' }).selectOption('t_2001');
+  await page.getByLabel('Enable Soundclash').check();
+  await page.getByRole('button', { name: 'Create Lounge' }).click();
+  await expect(page.getByText('Live', { exact: true })).toBeVisible();
+  await page.getByRole('combobox', { name: 'Choose a catalog track to add' }).selectOption('t_2002');
+  await page.getByRole('button', { name: 'Add to queue' }).click();
+  await expect(page.getByRole('main').getByText('Blue Horizon', { exact: true })).toBeVisible();
+  const { loungeId, inviteCode } = await page.evaluate(() => JSON.parse(sessionStorage.getItem('astradj.activeLounge')));
+
+  const listenerContexts = [await browser.newContext(), await browser.newContext()];
+  const listeners = await Promise.all(listenerContexts.map((context, index) => context.newPage()));
+  await registerListener(listeners[0], 'Soundclash Listener One');
+  await registerListener(listeners[1], 'Soundclash Listener Two');
+  for (const listenerPage of listeners) {
+    await listenerPage.goto('/', { waitUntil: 'domcontentloaded' });
+    await listenerPage.getByRole('link', { name: 'Live', exact: true }).click();
+    await listenerPage.getByRole('textbox', { name: 'Lounge invite code' }).fill(inviteCode);
+    await listenerPage.getByRole('button', { name: 'Join Lounge' }).click();
+    await expect(listenerPage.getByText('Live', { exact: true })).toBeVisible();
+  }
+  await listeners[0].getByRole('combobox', { name: 'Choose a track to submit to Soundclash' }).selectOption('t_cc0_thoughtness');
+  await listeners[0].getByRole('button', { name: 'Submit track' }).click();
+  await expect(page.getByText('The AI DJ opens a timed vote automatically when the second Listener entry arrives.')).toBeVisible();
+  await listeners[1].getByRole('combobox', { name: 'Choose a track to submit to Soundclash' }).selectOption('t_cc0_chill_beat');
+  await listeners[1].getByRole('button', { name: 'Submit track' }).click();
+
+  await expect(page.locator('.soundclash-panel .muted')).toHaveText('open');
+  await expect(page.getByText(/Voting closes in/)).toBeVisible();
+  await expect(listeners[0].locator('.soundclash-candidate')).toHaveCount(2);
+  const thoughtnessCandidate = listeners[0].locator('.soundclash-candidate').filter({ hasText: 'Thoughtness' });
+  await thoughtnessCandidate.getByRole('button', { name: 'Vote' }).click();
+  await expect(thoughtnessCandidate).toContainText('1 votes');
+  await expect(listeners[1].locator('.soundclash-candidate').filter({ hasText: 'Thoughtness' })).toContainText('1 votes');
+
+  const mongoose = (await import('../../server/node_modules/mongoose/index.js')).default;
+  const { QueueEvent } = await import('../../server/src/models/QueueEvent.js');
+  await mongoose.connect(process.env.MONGODB_URI, { serverSelectionTimeoutMS: 5000 });
+  try {
+    const events = await QueueEvent.find({ loungeId }).sort({ seq: 1 }).lean();
+    expect(events.map(({ type }) => type)).toEqual(expect.arrayContaining(['soundclash.submitted', 'soundclash.opened', 'soundclash.voted']));
+    expect(events.filter(({ type }) => type === 'soundclash.submitted')).toHaveLength(2);
+    const opened = events.find(({ type }) => type === 'soundclash.opened');
+    expect(opened).toMatchObject({ actorUserId: null, payload: { openedBy: 'ai_dj', candidateTrackIds: ['t_cc0_thoughtness', 't_cc0_chill_beat'] } });
+    const vote = events.find(({ type }) => type === 'soundclash.voted');
+    expect(vote).toMatchObject({ payload: { battleId: opened.payload.battleId, trackId: 't_cc0_thoughtness' } });
+  } finally {
+    await mongoose.disconnect();
+    await Promise.all(listenerContexts.map((context) => context.close()));
   }
 });

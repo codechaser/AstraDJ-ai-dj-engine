@@ -7,7 +7,11 @@ const queueEventSchema = new mongoose.Schema({
   actorUserId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required() { return !(this.type === 'soundclash.tied' || (this.type === 'soundclash.resolved' && this.payload?.autoResolved === true)); },
+    required() {
+      return !(this.type === 'soundclash.tied'
+        || (this.type === 'soundclash.opened' && this.payload?.openedBy === 'ai_dj')
+        || (this.type === 'soundclash.resolved' && this.payload?.autoResolved === true));
+    },
     default: null,
   },
   payload: { type: mongoose.Schema.Types.Mixed, required: true },

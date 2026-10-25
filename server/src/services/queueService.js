@@ -83,6 +83,26 @@ export function createQueueService(repository, { voteBatchSize = 20, voteFlushMs
     state.pendingEvents.splice(0, batch.length);
   }
 
+  async function appendCommitted(state, event) {
+    try {
+      await repository.appendQueueEvents([event]);
+    } catch (error) {
+      // Mongo can commit a write while the client receives a network error.
+      // Verify the unique sequence before deciding whether the command failed;
+      // never acknowledge a different event occupying that sequence.
+      let events;
+      try { events = await repository.listQueueEvents(state.loungeId); }
+      catch { throw error; }
+      const stored = events.find((candidate) => candidate.seq === event.seq);
+      const sameActor = String(stored?.actorUserId ?? '') === String(event.actorUserId ?? '');
+      if (!stored || stored.type !== event.type || !sameActor || JSON.stringify(stored.payload) !== JSON.stringify(event.payload)) throw error;
+      applyEvent(state, stored);
+      return stored;
+    }
+    applyEvent(state, event);
+    return event;
+  }
+
   function scheduleFlush(state) {
     if (state.flushTimer || state.pendingEvents.length === 0) return;
     state.flushTimer = setTimeout(() => {
@@ -142,8 +162,7 @@ export function createQueueService(repository, { voteBatchSize = 20, voteFlushMs
             try { await flushPending(state); } catch { scheduleFlush(state); }
           } else scheduleFlush(state);
         } else {
-          await repository.appendQueueEvents([event]);
-          applyEvent(state, event);
+          await appendCommitted(state, event);
         }
         return event;
       });
@@ -161,8 +180,7 @@ export function createQueueService(repository, { voteBatchSize = 20, voteFlushMs
           payload: { battleId, winningTrackId, autoResolved },
           createdAt: new Date(),
         };
-        await repository.appendQueueEvents([event]);
-        applyEvent(state, event);
+        await appendCommitted(state, event);
         return publicState(lounge, state);
       });
     },
