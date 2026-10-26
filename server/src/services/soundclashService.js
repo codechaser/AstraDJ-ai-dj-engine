@@ -97,9 +97,9 @@ export function createSoundclashService({
   }
 
   async function loadState(lounge) {
-    let state = states.get(lounge.loungeId);
-    if (state) return state;
-    state = initialState();
+    // Process-local state is a cache only. Reload the durable event projection
+    // before every command/snapshot so another application instance is visible.
+    const state = initialState();
     const events = await queueService.listEvents(lounge.loungeId);
     for (const event of events) applyHistoryEvent(state, event);
     states.set(lounge.loungeId, state);
@@ -125,7 +125,8 @@ export function createSoundclashService({
   }
 
   async function record(lounge, actor, type, payload) {
-    await queueService.recordLoungeEvent({ lounge, actor, type, payload });
+    const committed = await queueService.recordLoungeEvent({ lounge, actor, type, payload });
+    return committed?.events?.at(-1) ?? committed;
   }
 
   async function openLocked(lounge, state, actor, openedBy) {
@@ -135,10 +136,7 @@ export function createSoundclashService({
     if (state.candidateTrackIds.length < 2 || state.candidateTrackIds.length > 4) throw new ApiError(400, 'SOUNDCLASH_REQUIRES_2_TO_4_CANDIDATES', 'A Soundclash requires two to four submitted tracks');
     const closesAt = now() + voteDurationMs;
     await record(lounge, actor, 'soundclash.opened', { battleId: state.battleId, candidateTrackIds: [...state.candidateTrackIds], closesAt, openedBy });
-    state.status = 'open';
-    state.closesAt = closesAt;
-    state.openedBy = openedBy;
-    state.votes = {};
+    Object.assign(state, await loadState(lounge));
     const payload = { battleId: state.battleId, candidateTrackIds: [...state.candidateTrackIds], closesAt };
     emit('lounge.soundclash.open', lounge.loungeId, payload);
     scheduleDeadline(lounge, state);
@@ -184,7 +182,7 @@ export function createSoundclashService({
     if (leaders.length === 1) return finalize(lounge, state, leaders[0], null, true);
     if (state.status !== 'tied') {
       await record(lounge, null, 'soundclash.tied', { battleId: state.battleId, voteCounts: counts });
-      state.status = 'tied';
+      Object.assign(state, await loadState(lounge));
       cancelTimer(lounge.loungeId);
       emit('lounge.soundclash.vote', lounge.loungeId, { battleId: state.battleId, voteCounts: counts, closesAt: state.closesAt, status: 'tied' });
     }
@@ -218,10 +216,9 @@ export function createSoundclashService({
         if (targetState.candidateTrackIds.includes(trackId)) throw new ApiError(409, 'TRACK_ALREADY_SUBMITTED', 'This track is already submitted');
         if (targetState.candidateTrackIds.length >= 4) throw new ApiError(409, 'SOUNDCLASH_CANDIDATE_LIMIT', 'A Soundclash accepts at most four tracks');
 
-        await record(lounge, actor, 'soundclash.submitted', { battleId: targetState.battleId, trackId });
-        if (startsNewBattle) Object.assign(state, targetState);
-        state.candidateTrackIds.push(trackId);
-        state.submissions.push({ trackId, submittedByUserId: String(actor.id) });
+        const submissionEvent = await record(lounge, actor, 'soundclash.submitted', { battleId: targetState.battleId, trackId });
+        if (submissionEvent?.payload?.battleId) targetState.battleId = submissionEvent.payload.battleId;
+        Object.assign(state, await loadState(lounge));
         const submission = { battleId: state.battleId, trackId, submittedByUserId: String(actor.id), candidateCount: state.candidateTrackIds.length };
         emit('lounge.soundclash.submission', lounge.loungeId, submission);
         if (state.candidateTrackIds.length >= 2) await openLocked(lounge, state, null, 'ai_dj');
@@ -254,7 +251,7 @@ export function createSoundclashService({
         // broadcast. Unlike the general queue's batched upvotes, Soundclash
         // vote totals determine the battle outcome and must survive a crash.
         await record(lounge, actor, 'soundclash.voted', { battleId, trackId });
-        state.votes[String(actor.id)] = trackId;
+        Object.assign(state, await loadState(lounge));
         const voteCounts = countsFor(state);
         const payload = { battleId, voteCounts, closesAt: state.closesAt };
         emit('lounge.soundclash.vote', lounge.loungeId, payload);
@@ -268,6 +265,10 @@ export function createSoundclashService({
         ensureEnabled(lounge);
         const state = await loadState(lounge);
         if (state.battleId !== battleId) throw new ApiError(404, 'SOUNDCLASH_NOT_FOUND', 'Soundclash battle not found');
+        if (state.status === 'resolved') {
+          if (state.winningTrackId !== winningTrackId) throw new ApiError(409, 'SOUNDCLASH_ALREADY_RESOLVED', 'Soundclash was resolved to another track');
+          return { state: publicState(state), queue: await queueService.snapshot(lounge), duplicate: true };
+        }
         if (state.status === 'open' && state.closesAt <= now()) await closeVoting(lounge, state);
         if (state.status !== 'tied') throw new ApiError(409, 'SOUNDCLASH_NOT_TIED', 'Only a closed tied Soundclash can be force-resolved');
         const counts = countsFor(state);

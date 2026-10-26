@@ -3,12 +3,14 @@ import mongoose from 'mongoose';
 const queueEventSchema = new mongoose.Schema({
   loungeId: { type: String, required: true, index: true },
   seq: { type: Number, required: true, min: 1 },
-  type: { type: String, enum: ['track.added', 'track.voted', 'track.transitioned', 'soundclash.submitted', 'soundclash.opened', 'soundclash.voted', 'soundclash.tied', 'soundclash.resolved'], required: true },
+  type: { type: String, enum: ['track.added', 'track.voted', 'track.transitioned', 'segue.prepared', 'segue.cancelled', 'soundclash.submitted', 'soundclash.opened', 'soundclash.voted', 'soundclash.tied', 'soundclash.resolved'], required: true },
   actorUserId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required() {
       return !(this.type === 'soundclash.tied'
+        || this.type === 'segue.prepared'
+        || this.type === 'segue.cancelled'
         || (this.type === 'soundclash.opened' && this.payload?.openedBy === 'ai_dj')
         || (this.type === 'soundclash.resolved' && this.payload?.autoResolved === true));
     },

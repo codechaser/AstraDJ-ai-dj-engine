@@ -1,9 +1,154 @@
 import { ApiError } from '../utils/ApiError.js';
 import { matchSegueCandidate } from './acousticMatcher.js';
+import { applyCoordinationEvent, deserializeCoordinationState, serializeCoordinationState } from './coordinationState.js';
 
-// Queue order and vote tallies live in memory. Compact append-only commands are
-// replayed after a process restart; no full queue snapshot is written per vote.
+function createCoordinatedQueueService(repository) {
+  const MAX_RETRIES = 12;
+
+  async function getState(loungeId) {
+    const loaded = await repository.getCoordination(loungeId);
+    if (!loaded) throw new ApiError(404, 'LOUNGE_NOT_FOUND', 'The Lounge no longer exists');
+    return { lounge: loaded.lounge, coordination: loaded.coordination, state: deserializeCoordinationState(loaded.coordination.state) };
+  }
+
+  async function publicState(lounge, state, presence = []) {
+    const ordered = state.items.map((item, index) => ({ trackId: item.trackId, votes: Object.values(item.votes).reduce((sum, value) => sum + value, 0), _index: index }))
+      .filter((item) => item.trackId !== state.currentTrackId)
+      .sort((a, b) => (a.trackId === state.battlePriorityTrackId ? -1 : b.trackId === state.battlePriorityTrackId ? 1 : b.votes - a.votes || a._index - b._index));
+    const ids = [state.currentTrackId, ...ordered.map(({ trackId }) => trackId)].filter(Boolean);
+    const tracks = await Promise.all(ids.map((id) => repository.getTrack(id)));
+    const byId = new Map(tracks.filter(Boolean).map((track) => [track.trackId, track]));
+    return {
+      loungeId: lounge.loungeId,
+      revision: state.revision,
+      nowPlaying: state.currentTrackId ? (byId.get(state.currentTrackId) ?? { trackId: state.currentTrackId }) : null,
+      nextUp: ordered.map(({ trackId, votes }) => ({ ...(byId.get(trackId) ?? { trackId }), votes })),
+      presence,
+      hostDisconnected: !presence.some((participant) => participant.userId === String(lounge.hostUserId) && participant.connected),
+      syncedAt: Date.now(),
+    };
+  }
+
+  async function mutate(loungeId, build) {
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt += 1) {
+      const loaded = await getState(loungeId);
+      const result = await build(loaded);
+      if (result.noChange) return { ...result, state: await publicState(loaded.lounge, loaded.state) };
+      const nextState = structuredClone(loaded.state);
+      const drafts = result.events;
+      const committedEvents = drafts.map((draft, index) => ({
+        loungeId,
+        seq: loaded.state.revision + index + 1,
+        type: draft.type,
+        actorUserId: draft.actorUserId ?? null,
+        payload: draft.payload,
+        createdAt: draft.createdAt ?? new Date(),
+      }));
+      for (const event of committedEvents) applyCoordinationEvent(nextState, event);
+      const commit = await repository.commitCoordination({ loungeId, expectedRevision: loaded.state.revision, state: nextState, events: committedEvents });
+      if (!commit.committed) {
+        if (commit.reason === 'missing') throw new ApiError(404, 'LOUNGE_NOT_FOUND', 'The Lounge no longer exists');
+        if (commit.reason === 'outbox_full') throw new ApiError(503, 'LOUNGE_EVENT_BACKPRESSURE', 'Lounge updates are temporarily delayed; retry shortly');
+        if (commit.reason === 'state_too_large') throw new ApiError(413, 'LOUNGE_STATE_LIMIT_REACHED', 'The Lounge state reached its safe storage limit');
+        continue;
+      }
+      return { ...result, state: await publicState({ ...loaded.lounge, currentTrackId: nextState.currentTrackId }, nextState), events: commit.events };
+    }
+    throw new ApiError(409, 'LOUNGE_STATE_CONFLICT', 'The Lounge changed concurrently; retry the command');
+  }
+
+  return {
+    async join({ inviteCode, userId }) {
+      const lounge = await repository.findLoungeByInvite(inviteCode);
+      if (!lounge) throw new ApiError(404, 'LOUNGE_NOT_FOUND', 'The Lounge invite code is invalid or expired');
+      const joined = await repository.joinLounge(lounge, userId);
+      if (!joined) throw new ApiError(409, 'LOUNGE_FULL', 'The Lounge has reached its participant limit');
+      const loaded = await getState(joined.loungeId);
+      return { lounge: joined, state: await publicState(joined, loaded.state) };
+    },
+    async snapshot(lounge) {
+      const loaded = await getState(lounge.loungeId);
+      return publicState(loaded.lounge, loaded.state);
+    },
+    async listEvents(loungeId) { return repository.listQueueEvents(loungeId); },
+    async addTrack({ lounge, actor, trackId }) {
+      if (!['Host', 'Co-DJ'].includes(actor.role)) throw new ApiError(403, 'FORBIDDEN', 'Only a Host or Co-DJ can add tracks to the shared queue');
+      if (!await repository.getTrack(trackId)) throw new ApiError(404, 'TRACK_NOT_FOUND', 'The track does not exist');
+      return (await mutate(lounge.loungeId, ({ state }) => {
+        if (state.items.some((item) => item.trackId === trackId)) throw new ApiError(409, 'TRACK_ALREADY_QUEUED', 'The track is already in this queue');
+        return { events: [{ type: 'track.added', actorUserId: actor.id, payload: { trackId } }] };
+      })).state;
+    },
+    async vote({ lounge, actor, trackId, value }) {
+      if (![-1, 0, 1].includes(value)) throw new ApiError(400, 'INVALID_VOTE', 'Vote value must be -1, 0, or 1');
+      return (await mutate(lounge.loungeId, ({ state }) => {
+        const item = state.items.find((entry) => entry.trackId === trackId);
+        if (!item || trackId === state.currentTrackId) throw new ApiError(404, 'TRACK_NOT_QUEUED', 'Only an upcoming track can be voted on');
+        if ((item.votes[String(actor.id)] ?? 0) === value) return { noChange: true };
+        return { events: [{ type: 'track.voted', actorUserId: actor.id, payload: { trackId, value } }] };
+      })).state;
+    },
+    async recordLoungeEvent({ lounge, actor, type, payload }) {
+      return mutate(lounge.loungeId, ({ state }) => {
+        let eventPayload = payload;
+        if (type === 'soundclash.submitted') {
+          const battle = state.soundclash;
+          if (battle.status === 'open' || battle.status === 'tied') throw new ApiError(409, 'SOUNDCLASH_STATE_CONFLICT', 'A Soundclash changed concurrently; refresh and retry');
+          if (battle.status === 'collecting' && battle.battleId !== payload.battleId) eventPayload = { ...payload, battleId: battle.battleId };
+          if (battle.submissions.some((entry) => entry.submittedByUserId === String(actor?.id))) throw new ApiError(409, 'SOUNDCLASH_ALREADY_SUBMITTED', 'Each Listener may submit one track per Soundclash');
+          if (battle.candidateTrackIds.includes(eventPayload.trackId)) throw new ApiError(409, 'TRACK_ALREADY_SUBMITTED', 'This track is already submitted');
+        }
+        if (type === 'soundclash.opened' && (state.soundclash.battleId !== payload.battleId || state.soundclash.status !== 'collecting')) {
+          if (state.soundclash.battleId === payload.battleId && state.soundclash.status === 'open') return { noChange: true };
+          throw new ApiError(409, 'SOUNDCLASH_STATE_CONFLICT', 'Soundclash state changed before opening');
+        }
+        if (type === 'soundclash.tied' && state.soundclash.battleId === payload.battleId && state.soundclash.status === 'tied') return { noChange: true };
+        if (type === 'soundclash.voted') {
+          if (state.soundclash.battleId !== payload.battleId || state.soundclash.status !== 'open') throw new ApiError(409, 'SOUNDCLASH_NOT_ACTIVE', 'There is no active Soundclash vote');
+          if (Object.hasOwn(state.soundclash.votes, String(actor?.id))) throw new ApiError(409, 'SOUNDCLASH_DUPLICATE_VOTE', 'Each Listener may vote once per Soundclash');
+        }
+        if (type === 'soundclash.resolved' && state.soundclash.status === 'resolved' && state.soundclash.battleId === payload.battleId) return { noChange: true };
+        return { events: [{ type, actorUserId: actor?.id ?? null, payload: eventPayload }] };
+      });
+    },
+    async spliceNextUp({ lounge, actor, battleId, winningTrackId, autoResolved = false }) {
+      if (!await repository.getTrack(winningTrackId)) throw new ApiError(404, 'TRACK_NOT_FOUND', 'The Soundclash winner no longer exists');
+      const result = await mutate(lounge.loungeId, ({ state }) => {
+        if (state.soundclash.battleId !== battleId) throw new ApiError(404, 'SOUNDCLASH_NOT_FOUND', 'Soundclash battle not found');
+        if (state.soundclash.status === 'resolved') {
+          if (state.soundclash.winningTrackId === winningTrackId) return { noChange: true };
+          throw new ApiError(409, 'SOUNDCLASH_ALREADY_RESOLVED', 'Soundclash was resolved to another track');
+        }
+        if (!['tied', 'open'].includes(state.soundclash.status)) throw new ApiError(409, 'SOUNDCLASH_NOT_ACTIVE', 'Soundclash is not ready to resolve');
+        return { events: [{ type: 'soundclash.resolved', actorUserId: actor?.id ?? null, payload: { battleId, winningTrackId, autoResolved } }] };
+      });
+      return result.state;
+    },
+    async transitionTo({ lounge, actor, trackId, transition = null }) {
+      if (String(lounge.hostUserId) !== String(actor.id) || actor.role !== 'Host') throw new ApiError(403, 'LOUNGE_HOST_REQUIRED', 'Only the Lounge Host can advance a playback segue');
+      if (!await repository.getTrack(trackId)) throw new ApiError(404, 'TRACK_NOT_FOUND', 'The segue track does not exist');
+      return (await mutate(lounge.loungeId, async ({ state, lounge: currentLounge }) => {
+        if (state.pendingSegue?.fromTrackId !== state.currentTrackId || state.pendingSegue?.trackId !== trackId) {
+          throw new ApiError(409, 'SEGUE_NOT_PENDING', 'There is no matching durable playback segue to complete');
+        }
+        const candidate = state.items.find((item) => item.trackId === trackId);
+        if (!candidate || trackId === state.currentTrackId) throw new ApiError(409, 'TRACK_NOT_QUEUED', 'The segue target must be an upcoming queue item');
+        const [currentTrack, nextTrack] = await Promise.all([repository.getTrack(state.currentTrackId), repository.getTrack(trackId)]);
+        const match = matchSegueCandidate(currentTrack, nextTrack, { bpmTolerancePct: currentLounge.settings?.bpmTolerancePct ?? 8 });
+        if (!match.eligible) throw new ApiError(409, 'SEGUE_NO_LONGER_COMPATIBLE', 'The selected track no longer satisfies acoustic segue rules');
+        return { events: [{ type: 'track.transitioned', actorUserId: actor.id, payload: { trackId, fromTrackId: state.currentTrackId, ...(transition ? { transition } : {}) } }] };
+      })).state;
+    },
+    async flush() {},
+    async flushAll() {},
+    clear() {},
+  };
+}
+
+// Lightweight fallback for injected in-memory/test repositories. The production
+// Mongo repository selects the revisioned coordinated implementation above.
 export function createQueueService(repository, { voteBatchSize = 20, voteFlushMs = 1000 } = {}) {
+  if (typeof repository.getCoordination === 'function' && typeof repository.commitCoordination === 'function') return createCoordinatedQueueService(repository);
   const states = new Map();
   const locks = new Map();
 
@@ -184,7 +329,7 @@ export function createQueueService(repository, { voteBatchSize = 20, voteFlushMs
         return publicState(lounge, state);
       });
     },
-    async transitionTo({ lounge, actor, trackId }) {
+    async transitionTo({ lounge, actor, trackId, transition = null }) {
       if (String(lounge.hostUserId) !== String(actor.id) || actor.role !== 'Host') throw new ApiError(403, 'LOUNGE_HOST_REQUIRED', 'Only the Lounge Host can advance a playback segue');
       if (!await repository.getTrack(trackId)) throw new ApiError(404, 'TRACK_NOT_FOUND', 'The segue track does not exist');
       return serialized(lounge.loungeId, async () => {
@@ -194,7 +339,7 @@ export function createQueueService(repository, { voteBatchSize = 20, voteFlushMs
         const [currentTrack, nextTrack] = await Promise.all([repository.getTrack(state.currentTrackId), repository.getTrack(trackId)]);
         const match = matchSegueCandidate(currentTrack, nextTrack, { bpmTolerancePct: lounge.settings?.bpmTolerancePct ?? 8 });
         if (!match.eligible) throw new ApiError(409, 'SEGUE_NO_LONGER_COMPATIBLE', 'The selected track no longer satisfies acoustic segue rules');
-        const event = { loungeId: lounge.loungeId, seq: state.seq + 1, type: 'track.transitioned', actorUserId: actor.id, payload: { trackId, fromTrackId: state.currentTrackId }, createdAt: new Date() };
+        const event = { loungeId: lounge.loungeId, seq: state.seq + 1, type: 'track.transitioned', actorUserId: actor.id, payload: { trackId, fromTrackId: state.currentTrackId, ...(transition ? { transition } : {}) }, createdAt: new Date() };
         await repository.appendQueueEvents([event]);
         const updated = await repository.setCurrentTrack?.(lounge.loungeId, trackId);
         if (repository.setCurrentTrack && !updated) throw new ApiError(409, 'LOUNGE_NOT_LIVE', 'The Lounge is no longer live');

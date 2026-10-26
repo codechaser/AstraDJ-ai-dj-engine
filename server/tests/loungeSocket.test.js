@@ -568,8 +568,9 @@ test('tied Soundclash votes can be resolved only by Host or Co-DJ and only to a 
     command(coDj, 'lounge.soundclash.resolve', { battleId: first.state.battleId, winningTrackId: 't_2004' }),
     command(coDj, 'lounge.soundclash.resolve', { battleId: first.state.battleId, winningTrackId: 't_2004' }),
   ]);
-  expect(outcomes.filter((outcome) => outcome.ok)).toHaveLength(1);
-  expect(outcomes.filter((outcome) => !outcome.ok)[0].error.code).toBe('SOUNDCLASH_NOT_TIED');
+  expect(outcomes.every((outcome) => outcome.ok)).toBe(true);
+  expect(outcomes.map((outcome) => outcome.state.winningTrackId)).toEqual(['t_2004', 't_2004']);
+  expect(repository.events.filter((event) => event.type === 'soundclash.resolved' && event.payload.battleId === first.state.battleId)).toHaveLength(1);
   expect((await resolved).payload.winningTrackId).toBe('t_2004');
 });
 

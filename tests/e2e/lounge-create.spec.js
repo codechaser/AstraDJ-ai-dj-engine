@@ -178,7 +178,7 @@ test('real accelerated media playback triggers a grounded Lounge segue and advan
     const audio = page.locator('audio');
     await expect.poll(() => audio.evaluate((element) => element.readyState)).toBeGreaterThanOrEqual(1);
     await audio.evaluate((element) => {
-      element.playbackRate = 10; // Accelerates real media time; does not dispatch or synthesize media events.
+      element.playbackRate = 4; // Accelerates real media time; the test seeks near the outro to keep the real-media run short.
       window.__outroBoundaryAt = null;
       window.__endedFromRealMedia = false;
       window.__naturalEndedAt = null;
@@ -187,13 +187,14 @@ test('real accelerated media playback triggers a grounded Lounge segue and advan
         if (window.__outroBoundaryAt === null && element.duration - element.currentTime <= 12) window.__outroBoundaryAt = performance.now();
       });
       element.addEventListener('ended', () => { window.__endedFromRealMedia = true; window.__naturalEndedAt = { currentTime: element.currentTime, duration: element.duration }; }, { once: true });
+      element.currentTime = Math.max(0, element.duration - 14);
     });
     await page.getByRole('button', { name: 'Play', exact: true }).click();
     const announcement = page.locator('.ai-grounded-result').getByText(/AstraDJ transition/);
     await expect(announcement).toBeVisible({ timeout: 30_000 });
     const triggerToDecisionMs = await page.evaluate(() => performance.now() - window.__outroBoundaryAt);
     expect(triggerToDecisionMs).toBeLessThan(3000);
-    console.log(`[segue-e2e] browser trigger-to-announcement ${triggerToDecisionMs.toFixed(1)} ms; playbackRate=10x; sample=1`);
+    console.log(`[segue-e2e] browser trigger-to-announcement ${triggerToDecisionMs.toFixed(1)} ms; playbackRate=4x; seek-to-14s-before-end; sample=1`);
     const preparedPlayback = await audio.evaluate((element) => ({ currentSrc: element.currentSrc, currentTime: element.currentTime, duration: element.duration, paused: element.paused }));
     expect(preparedPlayback.currentSrc).toContain('/audio/ivory-atlas.mp3');
     expect(preparedPlayback.duration - preparedPlayback.currentTime).toBeLessThanOrEqual(12);

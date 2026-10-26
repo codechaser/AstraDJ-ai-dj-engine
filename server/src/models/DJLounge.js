@@ -11,6 +11,7 @@ const loungeSchema = new mongoose.Schema({
     fromTrackId: { type: String, default: null },
     trackId: { type: String, default: null },
     createdAt: { type: Date, default: null },
+    decision: { type: mongoose.Schema.Types.Mixed, default: null },
   },
   soundclash: {
     active: { type: Boolean, default: false },
@@ -27,6 +28,10 @@ const loungeSchema = new mongoose.Schema({
   // from this Lounge's creation. Legacy documents remain explicitly unavailable.
   analyticsTrackingVersion: { type: Number, default: 0 },
   sessionEventSeq: { type: Number, default: 0, min: 0 },
+  // Queue, segue, and Soundclash coordination are versioned and committed
+  // together with their durable event intent in this single Mongo document.
+  // The outbox is bounded by the coordinator and drained to QueueEvent.
+  coordination: { type: mongoose.Schema.Types.Mixed, default: null },
   settings: {
     maxParticipants: { type: Number, required: true, min: 2, max: 50 },
     aiVerbosity: { type: String, enum: ['low', 'normal', 'high'], default: 'normal' },

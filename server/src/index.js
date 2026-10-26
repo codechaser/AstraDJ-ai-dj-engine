@@ -10,7 +10,7 @@ assertRuntimeConfig();
 await connectMongo(config.mongoUri);
 const server = createServer(app);
 const io = new SocketServer(server, { cors: { origin: config.clientOrigin ?? false, credentials: true }, maxHttpBufferSize: 64 * 1024, transports: ['websocket', 'polling'] });
-const { queueService, chatService, soundclashService, publishAnnouncement } = attachLoungeGateway(io);
+const { queueService, chatService, soundclashService, publishAnnouncement, close: closeLoungeGateway } = attachLoungeGateway(io);
 segueService.setAnnouncementPublisher(publishAnnouncement);
 server.listen(config.port, () => {
   app.logger?.info?.(`AstraDJ API listening on port ${config.port}`);
@@ -19,6 +19,7 @@ server.listen(config.port, () => {
 
 async function shutdown(signal) {
   console.info(`${signal} received; closing AstraDJ API`);
+  await closeLoungeGateway();
   soundclashService.close();
   try { await queueService.flushAll(); }
   catch (error) { console.error('Could not flush pending queue events during shutdown:', error.message); }

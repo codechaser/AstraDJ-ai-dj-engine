@@ -18,12 +18,68 @@ export function publishLoungeEvent(io, event, loungeId, payload) {
 }
 const ackError = (error) => ({ ok: false, error: { code: error.code ?? 'INTERNAL_ERROR', message: error.status && error.status < 500 ? error.message : 'The request could not be completed' } });
 
-export function attachLoungeGateway(io, { repository = queueRepository, queueService = createQueueService(repository), secret = config.jwtAccessSecret, sentimentService = roomSentimentService, chatService = createChatService({ repository, sentimentService }), soundclashService = null, soundclashOptions = {}, loungeLifecycleService = defaultLoungeLifecycleService, loungeMetricEventService = defaultLoungeMetricEventService, segueService = defaultSegueService } = {}) {
-  soundclashService ??= createSoundclashService({ repository, queueService, ...soundclashOptions, onEvent: (event, loungeId, payload) => publishLoungeEvent(io, event, loungeId, payload) });
+export function attachLoungeGateway(io, { repository = queueRepository, queueService = createQueueService(repository), secret = config.jwtAccessSecret, sentimentService = roomSentimentService, chatService = createChatService({ repository, sentimentService }), soundclashService = null, soundclashOptions = {}, loungeLifecycleService = defaultLoungeLifecycleService, loungeMetricEventService = defaultLoungeMetricEventService, segueService = defaultSegueService, pollIntervalMs = 50 } = {}) {
+  soundclashService ??= createSoundclashService({
+    repository, queueService, ...soundclashOptions,
+    onEvent: typeof repository.getCoordination === 'function' ? () => {} : (event, loungeId, payload) => publishLoungeEvent(io, event, loungeId, payload),
+  });
   const loungeBySocket = new Map();
   const socketsByLounge = new Map();
   const joiningUsers = new Map();
   const pendingSegueDecisions = new Map();
+  const eventCursors = new Map();
+  let polling = false;
+  const pollCommittedEvents = async () => {
+    if (typeof repository.getCoordination !== 'function') return;
+    if (polling) return;
+    polling = true;
+    try {
+      for (const loungeId of socketsByLounge.keys()) {
+        let cursor = eventCursors.get(loungeId);
+        if (!Number.isInteger(cursor)) continue;
+        const events = await queueService.listEvents(loungeId);
+        const fresh = events.filter((event) => event.seq > cursor).sort((a, b) => a.seq - b.seq);
+        for (const event of fresh) {
+          if (event.type.startsWith('soundclash.')) {
+            const payload = event.payload ?? {};
+            if (event.type === 'soundclash.submitted') {
+              const battleEvents = events.filter((candidate) => candidate.type === 'soundclash.submitted' && candidate.payload?.battleId === payload.battleId && candidate.seq <= event.seq);
+              publishLoungeEvent(io, 'lounge.soundclash.submission', loungeId, { battleId: payload.battleId, trackId: payload.trackId, submittedByUserId: String(event.actorUserId), candidateCount: battleEvents.length });
+            } else if (event.type === 'soundclash.opened') {
+              publishLoungeEvent(io, 'lounge.soundclash.open', loungeId, { battleId: payload.battleId, candidateTrackIds: payload.candidateTrackIds, closesAt: payload.closesAt });
+            } else if (event.type === 'soundclash.voted' || event.type === 'soundclash.tied') {
+              const battleVotes = events.filter((candidate) => candidate.type === 'soundclash.voted' && candidate.payload?.battleId === payload.battleId && candidate.seq <= event.seq);
+              const voteCounts = Object.fromEntries((events.find((candidate) => candidate.type === 'soundclash.opened' && candidate.payload?.battleId === payload.battleId)?.payload?.candidateTrackIds ?? []).map((id) => [id, 0]));
+              for (const vote of battleVotes) if (Object.hasOwn(voteCounts, vote.payload.trackId)) voteCounts[vote.payload.trackId] += 1;
+              const opened = events.find((candidate) => candidate.type === 'soundclash.opened' && candidate.payload?.battleId === payload.battleId);
+              publishLoungeEvent(io, 'lounge.soundclash.vote', loungeId, { battleId: payload.battleId, voteCounts, closesAt: opened?.payload?.closesAt ?? null, ...(event.type === 'soundclash.tied' ? { status: 'tied' } : {}) });
+            } else if (event.type === 'soundclash.resolved') {
+              const lounge = await repository.findLoungeById(loungeId);
+              const state = lounge ? await queueService.snapshot(lounge) : null;
+              if (state) publishLoungeEvent(io, 'lounge.queue.update', loungeId, { queue: queueRows(state), reason: 'battle' });
+              publishLoungeEvent(io, 'lounge.soundclash.resolved', loungeId, { battleId: payload.battleId, winningTrackId: payload.winningTrackId });
+            }
+          } else if (event.type === 'segue.prepared') {
+            const decision = event.payload?.decision;
+            if (decision?.transitionScript) publishLoungeEvent(io, 'lounge.ai.dj_announcement', loungeId, { text: decision.transitionScript, relatedTrackId: decision.selectedTrackId, sourceEvents: decision.sourceEvents });
+          } else if (event.type === 'track.added' || event.type === 'track.voted' || event.type === 'track.transitioned') {
+            const lounge = await repository.findLoungeById(loungeId);
+            const state = lounge ? await queueService.snapshot(lounge) : null;
+            if (state) publishLoungeEvent(io, 'lounge.queue.update', loungeId, {
+              queue: queueRows(state),
+              reason: event.type === 'track.added' ? 'add' : event.type === 'track.voted' ? 'vote' : 'segue',
+              ...(event.payload?.transition ? { transition: event.payload.transition } : {}),
+            });
+          }
+          cursor = event.seq;
+        }
+        eventCursors.set(loungeId, cursor);
+      }
+    } catch { /* A later poll retries durable events; no uncommitted event is broadcast. */ }
+    finally { polling = false; }
+  };
+  const pollTimer = setInterval(() => { void pollCommittedEvents(); }, pollIntervalMs);
+  pollTimer.unref?.();
   const serializeLoungeCommand = (loungeId, operation) => loungeCommandCoordinator.run(loungeId, operation);
 
   io.use(async (socket, next) => {
@@ -115,6 +171,7 @@ export function attachLoungeGateway(io, { repository = queueRepository, queueSer
         await socket.join(room(loungeId));
         const state = await queueService.snapshot(lounge);
         state.soundclash = await soundclashService.snapshot(lounge);
+        if (!eventCursors.has(loungeId)) eventCursors.set(loungeId, state.revision ?? 0);
         state.presence = participants(loungeId);
         state.hostDisconnected = !hasHost(loungeId, lounge.hostUserId);
         state.isHost = String(lounge.hostUserId) === socket.data.userId;
@@ -129,8 +186,7 @@ export function attachLoungeGateway(io, { repository = queueRepository, queueSer
       if (joined.status === 'ended') throw Object.assign(new Error('This Lounge session has ended'), { status: 409, code: 'LOUNGE_ENDED' });
       if (!hasHost(loungeId, joined.hostUserId)) throw Object.assign(new Error('Queue mutations are frozen while the Host is disconnected'), { status: 409, code: 'HOST_DISCONNECTED' });
       const state = await queueService.addTrack({ lounge: joined, actor: user, trackId: payload.trackId });
-      const envelopeValue = envelope('lounge.queue.update', loungeId, { queue: queueRows(state), reason: 'add' });
-      io.to(room(loungeId)).emit('lounge.queue.update', envelopeValue);
+      if (typeof repository.getCoordination !== 'function') io.to(room(loungeId)).emit('lounge.queue.update', envelope('lounge.queue.update', loungeId, { queue: queueRows(state), reason: 'add' }));
       return { state };
     })));
 
@@ -141,7 +197,7 @@ export function attachLoungeGateway(io, { repository = queueRepository, queueSer
       if (joined.status === 'ended') throw Object.assign(new Error('This Lounge session has ended'), { status: 409, code: 'LOUNGE_ENDED' });
       if (!hasHost(loungeId, joined.hostUserId)) throw Object.assign(new Error('Queue mutations are frozen while the Host is disconnected'), { status: 409, code: 'HOST_DISCONNECTED' });
       const state = await queueService.vote({ lounge: joined, actor: user, trackId: payload.trackId, value: Number(payload.value) });
-      io.to(room(loungeId)).emit('lounge.queue.update', envelope('lounge.queue.update', loungeId, { queue: queueRows(state), reason: 'vote' }));
+      if (typeof repository.getCoordination !== 'function') io.to(room(loungeId)).emit('lounge.queue.update', envelope('lounge.queue.update', loungeId, { queue: queueRows(state), reason: 'vote' }));
       return { state };
     })));
 
@@ -166,6 +222,11 @@ export function attachLoungeGateway(io, { repository = queueRepository, queueSer
       if (currentPending) pendingSegueDecisions.delete(loungeId);
       let recovered = false;
       const savedPending = lounge.pendingSegue;
+      if (savedPending?.fromTrackId === state.nowPlaying.trackId && candidates.includes(savedPending.trackId) && savedPending.decision && Date.now() - new Date(savedPending.createdAt).getTime() <= 5 * 60_000) {
+        const decision = savedPending.decision;
+        pendingSegueDecisions.set(loungeId, { fromTrackId: savedPending.fromTrackId, trackId: savedPending.trackId, decision, createdAt: new Date(savedPending.createdAt).getTime() });
+        return { decision, outroWindowSeconds: config.segueOutroWindowSeconds, duplicate: true, recovered: true };
+      }
       let candidateTrackIds = candidates;
       if (savedPending?.fromTrackId === state.nowPlaying.trackId && candidates.includes(savedPending.trackId) && Date.now() - new Date(savedPending.createdAt).getTime() <= 5 * 60_000) {
         candidateTrackIds = [savedPending.trackId];
@@ -189,11 +250,10 @@ export function attachLoungeGateway(io, { repository = queueRepository, queueSer
       }
       const createdAt = recovered ? new Date(savedPending.createdAt).getTime() : Date.now();
       if (!recovered) {
-        const persisted = await repository.setPendingSegue?.(loungeId, state.nowPlaying.trackId, { fromTrackId: state.nowPlaying.trackId, trackId: decision.selectedTrackId, createdAt: new Date(createdAt) });
+        const persisted = await repository.setPendingSegue?.(loungeId, state.nowPlaying.trackId, { fromTrackId: state.nowPlaying.trackId, trackId: decision.selectedTrackId, createdAt: new Date(createdAt), decision });
         if (repository.setPendingSegue && !persisted) throw Object.assign(new Error('The Lounge track changed before the segue could be scheduled'), { status: 409, code: 'SEGUE_STALE' });
       }
       pendingSegueDecisions.set(loungeId, { fromTrackId: state.nowPlaying.trackId, trackId: decision.selectedTrackId, decision, createdAt });
-      if (!recovered && decision.transitionScript) publishLoungeEvent(io, 'lounge.ai.dj_announcement', loungeId, { text: decision.transitionScript, relatedTrackId: decision.selectedTrackId, sourceEvents: decision.sourceEvents });
       return { decision, outroWindowSeconds: config.segueOutroWindowSeconds, recovered };
     }));
 
@@ -202,7 +262,10 @@ export function attachLoungeGateway(io, { repository = queueRepository, queueSer
       if (user.role !== 'Host' || String(lounge.hostUserId) !== String(user.id)) throw Object.assign(new Error('Only the Lounge Host can advance playback'), { status: 403, code: 'LOUNGE_HOST_REQUIRED' });
       let pending = pendingSegueDecisions.get(loungeId);
       const savedPending = lounge.pendingSegue;
-      if (!pending && savedPending?.fromTrackId === payload.trackId && savedPending.trackId && Date.now() - new Date(savedPending.createdAt).getTime() <= 5 * 60_000) {
+      if (!pending && savedPending?.fromTrackId === payload.trackId && savedPending.trackId && savedPending.decision && Date.now() - new Date(savedPending.createdAt).getTime() <= 5 * 60_000) {
+        pending = { fromTrackId: payload.trackId, trackId: savedPending.trackId, decision: savedPending.decision, createdAt: new Date(savedPending.createdAt).getTime() };
+        pendingSegueDecisions.set(loungeId, pending);
+      } else if (!pending && savedPending?.fromTrackId === payload.trackId && savedPending.trackId && Date.now() - new Date(savedPending.createdAt).getTime() <= 5 * 60_000) {
         const state = await queueService.snapshot(lounge);
         if (state.nowPlaying?.trackId === payload.trackId && state.nextUp.some((item) => item.trackId === savedPending.trackId)) {
           const decision = await segueService.requestSegue({
@@ -222,10 +285,10 @@ export function attachLoungeGateway(io, { repository = queueRepository, queueSer
         if (savedPending?.fromTrackId === payload.trackId) await repository.clearPendingSegue?.(loungeId, payload.trackId);
         throw Object.assign(new Error('There is no current playback segue to complete'), { status: 409, code: 'SEGUE_NOT_PENDING' });
       }
-      const nextState = await queueService.transitionTo({ lounge, actor: user, trackId: pending.trackId });
-      pendingSegueDecisions.delete(loungeId);
       const transition = { trackId: pending.trackId, matchReason: pending.decision.matchReason, transitionScript: pending.decision.transitionScript, sourceEvents: pending.decision.sourceEvents, provider: pending.decision.provider };
-      io.to(room(loungeId)).emit('lounge.queue.update', envelope('lounge.queue.update', loungeId, { queue: queueRows(nextState), reason: 'segue', transition }));
+      const nextState = await queueService.transitionTo({ lounge, actor: user, trackId: pending.trackId, transition });
+      pendingSegueDecisions.delete(loungeId);
+      if (typeof repository.getCoordination !== 'function') io.to(room(loungeId)).emit('lounge.queue.update', envelope('lounge.queue.update', loungeId, { queue: queueRows(nextState), reason: 'segue', transition }));
       return { state: nextState, transition };
     }));
 
@@ -347,6 +410,7 @@ export function attachLoungeGateway(io, { repository = queueRepository, queueSer
   });
   return {
     io, queueService, chatService, sentimentService, soundclashService,
+    async close() { clearInterval(pollTimer); soundclashService.close?.(); await queueService.flushAll?.(); },
     publishAnnouncement: (loungeId, payload) => publishLoungeEvent(io, 'lounge.ai.dj_announcement', loungeId, payload),
   };
 }
