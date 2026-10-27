@@ -8,6 +8,7 @@
     "start": "node src/index.js",
     "seed": "node src/seed/run.js",
     "benchmark:prd": "node scripts/prdAcceptanceBenchmarks.js",
+    "benchmark:runtime": "node --env-file-if-exists=.env.test scripts/runtimePerformanceBenchmark.js",
     "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --runInBand",
     "test:integration": "node --env-file-if-exists=.env.test --experimental-vm-modules ./node_modules/jest/bin/jest.js --runInBand"
   },
