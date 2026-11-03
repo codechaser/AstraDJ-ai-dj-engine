@@ -36,12 +36,16 @@ export const config = {
   get cookieSecure() { return this.nodeEnv === 'production'; },
 };
 
-export function assertRuntimeConfig() {
-  if (!config.mongoUri) throw new Error('MONGODB_URI is required');
-  if (!config.jwtAccessSecret || config.jwtAccessSecret.length < 32) {
+export function assertRuntimeConfig(runtime = config) {
+  if (runtime.nodeEnv === 'production') {
+    if (!runtime.clientOrigin) throw new Error('CLIENT_ORIGIN is required in production');
+    if (!runtime.clientOrigin.startsWith('https://')) throw new Error('CLIENT_ORIGIN must use HTTPS in production');
+  }
+  if (!runtime.mongoUri) throw new Error('MONGODB_URI is required');
+  if (!runtime.jwtAccessSecret || runtime.jwtAccessSecret.length < 32) {
     throw new Error('JWT_ACCESS_SECRET must contain at least 32 characters');
   }
-  if (!Number.isInteger(config.refreshTtlDays) || config.refreshTtlDays < 1 || config.refreshTtlDays > 30) {
+  if (!Number.isInteger(runtime.refreshTtlDays) || runtime.refreshTtlDays < 1 || runtime.refreshTtlDays > 30) {
     throw new Error('JWT_REFRESH_TTL_DAYS must be between 1 and 30');
   }
 }

@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: astradj-ai-dj-engine
+    runtime: node
+    buildCommand: npm ci && npm run build && npm --prefix server ci
+    startCommand: npm --prefix server start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 22.23.4
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: CLIENT_ORIGIN
+        sync: false
+      - key: RAZORPAY_CHECKOUT_ENABLED
+        value: "false"

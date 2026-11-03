@@ -16,7 +16,7 @@ const server = createServer(app);
 const io = new SocketServer(server, { cors: { origin: config.clientOrigin ?? false, credentials: true }, maxHttpBufferSize: 64 * 1024, transports: ['websocket', 'polling'] });
 const { queueService, chatService, soundclashService, publishAnnouncement, close: closeLoungeGateway } = attachLoungeGateway(io);
 segueService.setAnnouncementPublisher(publishAnnouncement);
-server.listen(config.port, () => {
+server.listen(config.port, '0.0.0.0', () => {
   app.logger?.info?.(`AstraDJ API listening on port ${config.port}`);
   console.info(`AstraDJ API listening on port ${config.port}`);
 });

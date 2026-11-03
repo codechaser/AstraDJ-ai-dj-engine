@@ -3,11 +3,11 @@ import { config } from '../config/env.js';
 
 const COOKIE_NAME = 'astradj_refresh';
 const COOKIE_PATH = '/api/v1/auth';
-function cookieOptions() {
-  return { httpOnly: true, secure: config.cookieSecure, sameSite: 'strict', path: COOKIE_PATH, maxAge: config.refreshTtlDays * 86400000 };
+export function refreshCookieOptions(runtime = config) {
+  return { httpOnly: true, secure: runtime.cookieSecure, sameSite: 'strict', path: COOKIE_PATH, maxAge: runtime.refreshTtlDays * 86400000 };
 }
 function sendAuthResult(res, result, status = 200) {
-  res.cookie(COOKIE_NAME, result.refreshToken, cookieOptions());
+  res.cookie(COOKIE_NAME, result.refreshToken, refreshCookieOptions());
   const { refreshToken: _refreshToken, ...body } = result;
   res.status(status).json(body);
 }
@@ -26,6 +26,6 @@ export async function refresh(req, res) {
 
 export async function logout(req, res) {
   await revokeRefreshToken(req.cookies[COOKIE_NAME]);
-  res.clearCookie(COOKIE_NAME, { ...cookieOptions(), maxAge: undefined });
+  res.clearCookie(COOKIE_NAME, { ...refreshCookieOptions(), maxAge: undefined });
   res.status(204).end();
 }

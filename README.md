@@ -24,6 +24,8 @@ npm run dev
 
 Build with `npm run build`.
 
+For the single-origin Render deployment (root build, Express static hosting, production environment variables, health check and direct-route fallback), see [the deployment guide](docs/DEPLOYMENT.md). Leave `VITE_API_BASE_URL` unset in production so REST and Socket.IO use the same HTTPS origin as the React app.
+
 ## Run the backend
 
 See [backend setup and endpoint guide](server/README.md). In short, create `server/.env` from `server/.env.example`, set `MONGODB_URI` and a unique `JWT_ACCESS_SECRET` of at least 32 characters, then run:
@@ -61,13 +63,13 @@ See [the PRD compliance matrix](docs/prd-compliance.md) for implementation evide
 
 The authenticated dashboard API exposes the caller's self-reported interaction history, ended Lounge history, and analytics reconciled from persisted lifecycle timestamps, queue/Soundclash events, Lounge metric events, and chat/sentiment records. New sessions have durable peak concurrency and successful AI DJ question counts; legacy sessions without a complete tracking marker return those values as unavailable. The Account/Profile route shows the persisted session summary, including unavailable values instead of misleading zeros. The player uses browser audio only when a track has an `audioAssetUrl`; Thoughtness and Chill Beat are CC0 local assets, while mock selections are never written as listens. See [dashboard API details](server/API.md#dashboard-history-and-lounge-analytics).
 
-For local Vite development, set `VITE_DEV_API_TARGET` if the API is not at the dev default. Production can set `VITE_API_BASE_URL` at build time and the backend `CLIENT_ORIGIN` to the exact frontend origin. Refresh cookies are SameSite=Strict, so the app and API must be same-origin or same-site; no local-only API URL is embedded in the production client bundle.
+For local Vite development, set `VITE_DEV_API_TARGET` if the API is not at the dev default. The Render production deployment keeps the frontend, REST API and Socket.IO on the same HTTPS origin; leave `VITE_API_BASE_URL` unset and set `CLIENT_ORIGIN` to that exact public origin. Refresh cookies are Secure in production and SameSite=Strict.
 
 ## Real-browser audio verification
 
 Install the root dependencies and Chrome, create `server/.env.test` from `server/.env.test.example`, and set `MONGODB_TEST_URI` to a local, disposable MongoDB database whose name contains `test`. Run `npm run test:e2e:audio` from the repository root. The runner refuses remote or non-test database targets, creates a uniquely named `astradj_e2e_*` database, seeds it, starts the API and Vite with test-only credentials, then drops only that database after the run. The test registers throwaway accounts through the UI and uses actual Chrome Ogg playback at normal speed; it waits for the real track end, then verifies the authenticated interaction/history and isolation. It requires Chrome and local MongoDB to be available.
 
-To verify the Lounge lifecycle and automatic segue, run `npm run test:e2e:lounge` with the same safe local `.env.test` setup. The first test checks Host/Listener session creation, history and privacy in an isolated database. The second loads the two CC0 MP3s, creates a Lounge with one as Now Playing and the other queued, plays actual media at 10× rate, observes the outro announcement, waits for the real `ended` event, and verifies the next asset begins playing and the queue transition persists in MongoDB. Each run logs one trigger-to-announcement latency sample; two recent runs measured 257.2 and 586.1 ms. These are local observations, not a production P95 guarantee.
+To verify the Lounge lifecycle and current unavailable-audio behavior, run `npm run test:e2e:lounge` with the safe local `.env.test` setup. The suite uses an isolated database to verify Host/Listener flows and confirms that a catalog entry whose former audio/profile was withdrawn cannot be forced into a segue. A real-audio transition pair and production transition latency remain unverified.
 
 To verify audio preference persistence, run `npm run test:e2e:settings` with the same local `.env.test` setup. Playwright registers accounts through the UI, verifies the six saved-only controls are disabled, changes AI DJ commentary, reloads, signs out/in, verifies another account starts with its own defaults, and checks a simulated failed-save response is shown as an error. AI DJ commentary also controls segue-script and Lounge announcement presentation; other audio settings remain stored-only.
 

@@ -1,4 +1,6 @@
 import express from 'express';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import pinoHttp from 'pino-http';
@@ -18,6 +20,7 @@ import podcastRoutes from './routes/podcastRoutes.js';
 import chartRoutes from './routes/chartRoutes.js';
 import { handleRazorpayWebhook } from './controllers/billingController.js';
 import { asyncHandler } from './utils/asyncHandler.js';
+import { mountProductionFrontend } from './middleware/productionFrontend.js';
 
 export const app = express();
 app.disable('x-powered-by');
@@ -40,6 +43,10 @@ app.use('/api/v1/dashboard', dashboardRoutes);
 app.post('/api/v1/billing/webhooks/razorpay', asyncHandler(handleRazorpayWebhook));
 app.use('/api/v1/billing', billingRoutes);
 app.use('/api/v1/admin/billing', billingAdminRoutes);
+if (config.nodeEnv === 'production') {
+  const distDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../dist');
+  mountProductionFrontend(app, distDirectory);
+}
 app.use((_req, _res, next) => next(new ApiError(404, 'ROUTE_NOT_FOUND', 'Route not found')));
 app.use((err, req, res, _next) => {
   let status = err.status ?? 500;
