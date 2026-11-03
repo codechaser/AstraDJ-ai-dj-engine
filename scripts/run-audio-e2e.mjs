@@ -14,6 +14,7 @@ const backendOrigin = `http://127.0.0.1:${backendPort}`;
 const frontendOrigin = `http://127.0.0.1:${frontendPort}`;
 const loungeMode = process.argv.includes('--lounge');
 const settingsMode = process.argv.includes('--settings');
+const billingMode = process.argv.includes('--billing');
 const catalogMode = process.argv.includes('--catalog');
 const adminAcousticMode = process.argv.includes('--admin-acoustic');
 const playwrightFilterArgs = [];
@@ -121,6 +122,8 @@ const runtimeEnv = {
   ASTRADJ_E2E_BASE_URL: frontendOrigin,
   ASTRADJ_E2E_HOST_EMAIL: `host-${randomBytes(8).toString('hex')}@example.invalid`,
   ASTRADJ_E2E_HOST_PASSWORD: randomBytes(24).toString('base64url'),
+  ASTRADJ_E2E_NATURAL_HOST_EMAIL: `natural-host-${randomBytes(8).toString('hex')}@example.invalid`,
+  ASTRADJ_E2E_NATURAL_HOST_PASSWORD: randomBytes(24).toString('base64url'),
   ASTRADJ_E2E_ADMIN_EMAIL: `admin-${randomBytes(8).toString('hex')}@example.invalid`,
   ASTRADJ_E2E_ADMIN_PASSWORD: randomBytes(24).toString('base64url'),
 };
@@ -153,22 +156,36 @@ try {
   if (!secondAudioTrack || secondAudioTrack.audioAssetUrl !== '/audio/chill-beat.ogg' || secondAudioTrack.durationSeconds !== 96.180612244898 || secondAudioTrack.acoustic !== null) {
     throw new Error('Seeded catalog did not return the expected second audio fixture metadata');
   }
-  for (const [trackId, assetUrl, bpm] of [
-    ['t_cc0_ivory_atlas', '/audio/ivory-atlas.mp3', 143],
-    ['t_cc0_faded_fortress', '/audio/faded-fortress.mp3', 142],
-  ]) {
-    const profileResponse = await fetch(`${frontendOrigin}/api/v1/tracks/${trackId}/acoustic-profile`);
-    if (!profileResponse.ok) throw new Error(`Catalog acoustic profile for ${trackId} returned ${profileResponse.status}`);
-    const profile = await profileResponse.json();
-    if (profile.audioAssetUrl !== assetUrl || profile.acoustic?.bpm !== bpm || profile.acoustic.camelotKey !== '8A' || !profile.acousticEvidence?.assetSha256) {
-      throw new Error(`Catalog profile/provenance did not match the verified fixture for ${trackId}`);
+  const nightDriveProfileResponse = await fetch(`${frontendOrigin}/api/v1/tracks/t_2001/acoustic-profile`);
+  if (!nightDriveProfileResponse.ok) throw new Error(`Night Drive acoustic profile returned ${nightDriveProfileResponse.status}`);
+  const nightDriveProfile = await nightDriveProfileResponse.json();
+  if (nightDriveProfile.audioAssetUrl !== '/audio/city-lights-at-night-demo.mp3'
+    || nightDriveProfile.acoustic?.bpm !== 89
+    || nightDriveProfile.acoustic?.camelotKey !== '5A'
+    || nightDriveProfile.acousticEvidence?.assetSha256 !== '47587641db646708facb4e636564ad0e4ff9970db86950c38425aad3b86b4b91') {
+    throw new Error('Seeded Night Drive acoustic profile/provenance did not match the independently analyzed asset');
+  }
+  for (const trackId of ['t_2002', 't_2003']) {
+    const unavailableResponse = await fetch(`${frontendOrigin}/api/v1/tracks/${trackId}/acoustic-profile`);
+    const unavailable = await unavailableResponse.json();
+    if (unavailableResponse.status !== 409 || unavailable.error?.code !== 'ACOUSTIC_PROFILE_UNAVAILABLE') {
+      throw new Error(`Expected no verified acoustic profile for ${trackId}`);
     }
-    const assetResponse = await fetch(`${frontendOrigin}${assetUrl}`, { method: 'HEAD' });
-    if (!assetResponse.ok || !assetResponse.headers.get('content-type')?.includes('audio/mpeg')) throw new Error(`Playable MP3 fixture ${trackId} was not served as audio/mpeg`);
+  }
+  for (const trackId of ['t_cc0_ivory_atlas', 't_cc0_faded_fortress']) {
+    const profileResponse = await fetch(`${frontendOrigin}/api/v1/tracks/${trackId}/acoustic-profile`);
+    const profile = await profileResponse.json();
+    const catalogResponse = await fetch(`${frontendOrigin}/api/v1/tracks?limit=50`);
+    const catalog = await catalogResponse.json();
+    const item = catalog.items?.find((track) => track.trackId === trackId);
+    if (profileResponse.status !== 409 || profile.error?.code !== 'ACOUSTIC_PROFILE_UNAVAILABLE'
+      || item?.audioAssetUrl !== null || item?.acoustic !== null || item?.acousticEvidence !== null) {
+      throw new Error(`Withdrawn demo track ${trackId} still exposes unverified audio or acoustic data`);
+    }
   }
 
   const playwrightCli = join(root, 'node_modules/@playwright/test/cli.js');
-  const config = loungeMode ? 'playwright.lounge-e2e.config.js' : settingsMode ? 'playwright.settings-e2e.config.js' : adminAcousticMode ? 'playwright.admin-acoustic-e2e.config.js' : catalogMode ? 'playwright.catalog-e2e.config.js' : 'playwright.audio-e2e.config.js';
+  const config = loungeMode ? 'playwright.lounge-e2e.config.js' : settingsMode ? 'playwright.settings-e2e.config.js' : billingMode ? 'playwright.billing-e2e.config.js' : adminAcousticMode ? 'playwright.admin-acoustic-e2e.config.js' : catalogMode ? 'playwright.catalog-e2e.config.js' : 'playwright.audio-e2e.config.js';
   run(process.execPath, [playwrightCli, 'test', `--config=${config}`, ...playwrightFilterArgs], { cwd: root, env: runtimeEnv });
   exitCode = 0;
 } catch (error) {

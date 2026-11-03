@@ -97,7 +97,7 @@ test('real audio playback creates only authenticated, owner-scoped completion hi
   expect(otherHistory.items).not.toEqual(expect.arrayContaining([
     expect.objectContaining({ trackId: 't_cc0_thoughtness' }),
   ]));
-  await expect(secondPage.getByText('No listening reports yet.')).toBeVisible();
+  await expect(secondPage.getByText(/No listening reports yet/)).toBeVisible();
 
   const incompleteAudio = await selectDemoTrack(secondPage);
   const incompleteInteractions = [];
@@ -110,7 +110,7 @@ test('real audio playback creates only authenticated, owner-scoped completion hi
   await secondPage.waitForTimeout(1200);
   expect(incompleteInteractions).toHaveLength(0);
   await secondPage.goto('/profile');
-  await expect(secondPage.getByText('No listening reports yet.')).toBeVisible();
+  await expect(secondPage.getByText(/No listening reports yet/)).toBeVisible();
 
   expect(consoleErrors).toEqual([]);
   await secondContext.close();

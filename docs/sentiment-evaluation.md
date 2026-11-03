@@ -21,7 +21,7 @@ The classifier remains deterministic lexical/context rules; it is not ML and doe
 All new messages are developer-authored synthetic examples. The `source` field on every example is `developer_authored_synthetic`; `caseType` records the intended linguistic challenge. No real-user messages were collected, and the data is not representative of actual Lounge traffic.
 
 - **Development set:** `server/tests/fixtures/sentimentDevelopmentDataset.js`, 36 messages (12 per class). This was inspected to select focused rule changes for common Hinglish terms, repeated-letter spelling normalization, recognized spelling variants, and explicit short negative/positive phrases.
-- **Frozen evaluation set:** `server/tests/fixtures/sentimentIndependentHeldoutDataset.js`, 90 messages (30 per class). The labels and examples were fixed before this increment's classifier changes. Its SHA-256 is `832b0f5ca1fbd62e67b293ddb09ecb33646c97b18cbc86201ec85f7a52519fcb`; a unit test guards that hash. The classifier was not tuned against these examples. The prior baseline and updated classifier were scored on this same set in a one-shot paired run.
+- **Frozen evaluation set:** `server/tests/fixtures/sentimentIndependentHeldoutDataset.js`, 90 messages (30 per class). The labels and examples were fixed before this increment's classifier changes. Its SHA-256 is `832b0f5ca1fbd62e67b293ddb09ecb33646c97b18cbc86201ec85f7a52519fcb`; a unit test guards that hash. No individual holdout examples were used to select rules; development examples guided changes. The frozen baseline and final classifier are evaluated on this same set for the paired comparison.
 - **Historical evaluation:** `server/tests/fixtures/sentimentHeldoutDataset.js` is the earlier 90-message synthetic set, previously used to inform rule changes. It remains historical/diagnostic and is not represented as an independent holdout in this milestone.
 - **Lexicon-aware regression diagnostic:** `server/tests/fixtures/sentimentLabeledDataset.js` contains 40 messages authored after review of the original lexicon. Its 80% baseline and 90% current score are regression-only, not independent accuracy evidence.
 
@@ -70,13 +70,13 @@ Tagged challenge results on this set: ambiguous 3/5 (60%) and mixed 1/1 (100%). 
 
 ### Development and prior evaluations
 
-- Development set: 20/36 (55.56%) before changes; 32/36 (88.89%) after development-guided rule changes. The development score is not a held-out result.
+- Development set: 20/36 (55.56%) for the frozen pre-rule classifier, 32/36 (88.89%) for the rules before this increment, and 36/36 (100%) after development-guided refinements. This small, synthetic set is not a held-out result and its score is not an accuracy claim.
 - Earlier, previously-used synthetic English set: 51/90 (56.67%) baseline and 68/90 (75.56%) after its earlier rule work. It is no longer independent and is shown by the benchmark only as historical evidence.
 - Lexicon-aware 40-item regression diagnostic: 32/40 (80%) original lexical baseline; 36/40 (90%) current rules. This set is not independent.
 
 ## Interpretation and limitations
 
-The new one-author synthetic holdout improved by 21/90 examples (23.33 percentage points) over the frozen prior classifier. The improvement is strongest for positive recall; neutral messages are sometimes overclassified positive, and negative recall remains 60%. The **PRD's 85% target was not reached** (76.67%). A balanced sample of 90 synthetic examples, authored/labeled by one developer, cannot establish production accuracy. Hinglish transliteration is narrow and dialect-sensitive; sarcasm, code-switching, emoji context, conversational history, and real room conditions need independently collected and multi-annotator-labeled evaluation. No real-user accuracy claim is supported.
+The new one-author synthetic holdout improved by 21/90 examples (23.33 percentage points) over the frozen prior classifier. Positive recall is 86.67%, neutral precision is 62.50%, and negative recall remains 60%. The **PRD's 85% target was not reached** (76.67%). A balanced sample of 90 synthetic examples, authored/labeled by one developer, cannot establish production accuracy. Hinglish transliteration is narrow and dialect-sensitive; sarcasm, code-switching, emoji context, conversational history, and real room conditions need independently collected and multi-annotator-labeled evaluation. No real-user accuracy claim is supported.
 
 The changes leave message event payloads, rolling aggregation, room isolation, and segue interfaces unchanged. Empty/ambiguous input continues to resolve conservatively to neutral when no lexical signal exists. Run the regression suite and benchmark with:
 

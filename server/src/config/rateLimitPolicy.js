@@ -1,0 +1,32 @@
+const second = 1_000;
+const minute = 60 * second;
+
+export const rateLimitPolicies = Object.freeze({
+  authRegister: { scope: 'http.auth.register', limit: 10, windowMs: 60 * minute, identity: 'ip', code: 'REGISTER_RATE_LIMITED', message: 'Too many registration attempts; retry later' },
+  authLogin: { scope: 'http.auth.login', limit: 20, windowMs: 15 * minute, identity: 'ip', code: 'LOGIN_RATE_LIMITED', message: 'Too many login attempts; retry later' },
+  authRefresh: { scope: 'http.auth.refresh', limit: 60, windowMs: 15 * minute, identity: 'ip', code: 'REFRESH_RATE_LIMITED', message: 'Too many refresh attempts; retry later' },
+  socketConnection: { scope: 'socket.connection', limit: 120, windowMs: minute, identity: 'ip', code: 'RATE_LIMITED', message: 'Too many connection attempts; retry later' },
+  socketJoin: { scope: 'socket.lounge.join', limit: 20, windowMs: minute, identity: 'user', code: 'JOIN_RATE_LIMITED', message: 'Too many Lounge join attempts; retry later' },
+  chat: { scope: 'socket.chat.message', limit: 5, windowMs: 10 * second, identity: 'userLounge', code: 'CHAT_RATE_LIMITED', message: 'Too many messages; wait before sending another' },
+  queueAdd: { scope: 'socket.queue.add', limit: 10, windowMs: minute, identity: 'userLounge', code: 'QUEUE_RATE_LIMITED', message: 'Too many queue additions; retry later' },
+  queueVote: { scope: 'socket.queue.vote', limit: 60, windowMs: minute, identity: 'userLounge', code: 'QUEUE_VOTE_RATE_LIMITED', message: 'Too many queue votes; retry later' },
+  soundclashSubmit: { scope: 'socket.soundclash.submit', limit: 5, windowMs: minute, identity: 'userLounge', code: 'SOUNDCLASH_RATE_LIMITED', message: 'Too many Soundclash submissions; retry later' },
+  soundclashOpen: { scope: 'socket.soundclash.open', limit: 3, windowMs: minute, identity: 'userLounge', code: 'SOUNDCLASH_RATE_LIMITED', message: 'Too many Soundclash actions; retry later' },
+  soundclashVote: { scope: 'socket.soundclash.vote', limit: 20, windowMs: minute, identity: 'userLounge', code: 'SOUNDCLASH_VOTE_RATE_LIMITED', message: 'Too many Soundclash votes; retry later' },
+  soundclashResolve: { scope: 'socket.soundclash.resolve', limit: 3, windowMs: minute, identity: 'userLounge', code: 'SOUNDCLASH_RATE_LIMITED', message: 'Too many Soundclash actions; retry later' },
+  sessionEnd: { scope: 'socket.session.end', limit: 2, windowMs: minute, identity: 'userLounge', code: 'SESSION_END_RATE_LIMITED', message: 'Too many session-end attempts; retry later' },
+  playback: { scope: 'socket.playback', limit: 10, windowMs: minute, identity: 'userLounge', code: 'PLAYBACK_RATE_LIMITED', message: 'Too many playback actions; retry later' },
+  syncRequest: { scope: 'socket.sync.request', limit: 60, windowMs: minute, identity: 'userLounge', code: 'SYNC_RATE_LIMITED', message: 'Too many synchronization requests; retry later' },
+  chatHistory: { scope: 'socket.chat.history', limit: 60, windowMs: minute, identity: 'userLounge', code: 'CHAT_HISTORY_RATE_LIMITED', message: 'Too many chat history requests; retry later' },
+  loungeCreate: { scope: 'http.lounge.create', limit: 5, windowMs: 60 * minute, identity: 'user', code: 'LOUNGE_CREATE_RATE_LIMITED', message: 'Too many Lounge creations; retry later' },
+  billingCreate: { scope: 'http.billing.create', limit: 5, windowMs: 60 * minute, identity: 'user', code: 'BILLING_RATE_LIMITED', message: 'Too many checkout requests; retry later' },
+  billingCancel: { scope: 'http.billing.cancel', limit: 5, windowMs: 60 * minute, identity: 'user', code: 'BILLING_RATE_LIMITED', message: 'Too many cancellation requests; retry later' },
+  segue: { scope: 'http.lounge.segue', limit: 10, windowMs: minute, identity: 'user', code: 'SEGUE_RATE_LIMITED', message: 'Too many segue requests; retry later' },
+  aiQuestion: { scope: 'http.lounge.ai-question', limit: 10, windowMs: minute, identity: 'userLounge', code: 'AI_QUESTION_RATE_LIMITED', message: 'Too many AI DJ questions; wait before asking again' },
+  interaction: { scope: 'http.interaction.create', limit: 60, windowMs: minute, identity: 'user', code: 'INTERACTION_RATE_LIMITED', message: 'Too many interaction updates; retry later' },
+  recommendation: { scope: 'http.recommendation.read', limit: 30, windowMs: minute, identity: 'user', code: 'RECOMMENDATION_RATE_LIMITED', message: 'Too many recommendation requests; retry later' },
+  recommendationTaste: { scope: 'http.recommendation.taste', limit: 30, windowMs: minute, identity: 'user', code: 'RECOMMENDATION_RATE_LIMITED', message: 'Too many recommendation requests; retry later' },
+  preferenceWrite: { scope: 'http.preferences.write', limit: 30, windowMs: minute, identity: 'user', code: 'PREFERENCE_RATE_LIMITED', message: 'Too many preference updates; retry later' },
+  adminCatalogWrite: { scope: 'http.admin.catalog.write', limit: 30, windowMs: minute, identity: 'user', code: 'ADMIN_WRITE_RATE_LIMITED', message: 'Too many catalog updates; retry later' },
+  publicCatalog: { scope: 'http.catalog.read', limit: 120, windowMs: minute, identity: 'ip', code: 'CATALOG_RATE_LIMITED', message: 'Too many catalog requests; retry later' },
+});

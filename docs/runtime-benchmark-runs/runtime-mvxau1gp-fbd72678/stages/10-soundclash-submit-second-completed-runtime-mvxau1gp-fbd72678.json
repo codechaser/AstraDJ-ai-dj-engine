@@ -1,0 +1,84 @@
+{
+  "runId": "runtime-mvxau1gp-fbd72678",
+  "name": "soundclash_submit_second",
+  "status": "completed",
+  "startedAt": "2026-11-01T03:57:57.477Z",
+  "endedAt": "2026-11-01T03:57:57.604Z",
+  "durationMs": 127.926,
+  "result": {
+    "correlationId": "b95667315ea715bcaad2da04",
+    "contract": {
+      "event": "lounge.soundclash.submit",
+      "payloadKeys": [
+        "trackId"
+      ],
+      "expectedRole": "Listener",
+      "authenticated": true,
+      "joinedLounge": true
+    },
+    "acknowledgement": {
+      "received": true,
+      "ok": true,
+      "code": null,
+      "timedOut": false,
+      "latencyMs": 103.596
+    },
+    "durable": {
+      "loungeFound": true,
+      "snapshotCommitted": true,
+      "battleStatus": "open",
+      "candidateCount": 2,
+      "pendingOutboxEvents": 0,
+      "projectedEventCount": 1,
+      "projectedEventsForExpectedActor": 1,
+      "projectedSequenceNumbers": [
+        471
+      ]
+    },
+    "socketEvents": {
+      "hostReceipts": 2,
+      "remoteHostReceived": true,
+      "otherListenerReceivedSubmission": true
+    },
+    "serverTraceStages": [
+      {
+        "stage": "request_received"
+      },
+      {
+        "stage": "rate_limit_passed"
+      },
+      {
+        "stage": "authentication_and_membership_passed"
+      },
+      {
+        "stage": "payload_validated"
+      },
+      {
+        "stage": "host_presence_passed"
+      },
+      {
+        "stage": "service_started"
+      },
+      {
+        "stage": "service_returned"
+      },
+      {
+        "stage": "handler_completed"
+      },
+      {
+        "stage": "ack_ready",
+        "status": 200
+      },
+      {
+        "stage": "ack_callback_invoked",
+        "status": 200
+      }
+    ],
+    "processHealth": {
+      "processId": 31088,
+      "alive": true,
+      "healthStatus": 200,
+      "healthOk": true
+    }
+  }
+}

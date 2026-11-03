@@ -5,9 +5,13 @@ import { assertRuntimeConfig, config } from './config/env.js';
 import { connectMongo } from './config/database.js';
 import { attachLoungeGateway } from './socket/loungeGateway.js';
 import { segueService } from './services/segueService.js';
+import { startAcceptanceDiagnostics } from './services/acceptanceDiagnostics.js';
+import { ensureDefaultPlans } from './services/entitlementService.js';
 
 assertRuntimeConfig();
 await connectMongo(config.mongoUri);
+await ensureDefaultPlans();
+const acceptanceDiagnostics = startAcceptanceDiagnostics((await import('mongoose')).default.connection);
 const server = createServer(app);
 const io = new SocketServer(server, { cors: { origin: config.clientOrigin ?? false, credentials: true }, maxHttpBufferSize: 64 * 1024, transports: ['websocket', 'polling'] });
 const { queueService, chatService, soundclashService, publishAnnouncement, close: closeLoungeGateway } = attachLoungeGateway(io);
@@ -19,6 +23,7 @@ server.listen(config.port, () => {
 
 async function shutdown(signal) {
   console.info(`${signal} received; closing AstraDJ API`);
+  acceptanceDiagnostics?.close();
   await closeLoungeGateway();
   soundclashService.close();
   try { await queueService.flushAll(); }

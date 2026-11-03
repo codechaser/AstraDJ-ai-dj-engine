@@ -24,12 +24,19 @@ test('frozen synthetic sentiment diagnostic reports its confusion matrix', () =>
 test('context rules handle negation, common music slang, and explicit mixed polarity deterministically', () => {
   expect(bucketSentiment('Not bad at all')).toBe('positive');
   expect(bucketSentiment('I am not happy with this')).toBe('negative');
+  expect(bucketSentiment('I am not enjoying this set')).toBe('negative');
   expect(bucketSentiment('This is not terrible')).toBe('positive');
   expect(bucketSentiment('This track is sick')).toBe('positive');
   expect(bucketSentiment('That beat slaps')).toBe('positive');
   expect(bucketSentiment('This track kills the mood')).toBe('negative');
   expect(bucketSentiment('The old song was dull, but this one is amazing')).toBe('positive');
   expect(bucketSentiment('The last song was brilliant, but this one is awful')).toBe('negative');
+  expect(bucketSentiment('I do not love it, but I do not hate it')).toBe('neutral');
+  expect(bucketSentiment("I don't love it, but I don't hate it")).toBe('neutral');
+  expect(bucketSentiment('I do not love the previous track; I hate this one')).toBe('negative');
+  expect(bucketSentiment('Not happy; I love this')).toBe('neutral');
+  expect(bucketSentiment('The last one was great; this is just different')).toBe('neutral');
+  expect(bucketSentiment('Maybe accha, maybe nahi; hard to tell')).toBe('neutral');
   expect(bucketSentiment('Nothing special either way')).toBe('neutral');
 });
 
@@ -75,7 +82,19 @@ test('the independent evaluation fixture is balanced, sourced, and frozen before
   const fixture = readFileSync(new URL('./fixtures/sentimentIndependentHeldoutDataset.js', import.meta.url));
   expect(createHash('sha256').update(fixture).digest('hex')).toBe('832b0f5ca1fbd62e67b293ddb09ecb33646c97b18cbc86201ec85f7a52519fcb');
   expect(evaluateClassifier(sentimentIndependentHeldoutDataset, frozenCurrentSentimentClassifier).correct).toBe(48);
-  expect(evaluateClassifier(sentimentIndependentHeldoutDataset, bucketSentiment).correct).toBe(69);
+  expect(evaluateClassifier(sentimentIndependentHeldoutDataset, bucketSentiment)).toMatchObject({
+    correct: 69,
+    confusionMatrix: {
+      positive: { positive: 26, neutral: 4, negative: 0 },
+      neutral: { positive: 5, neutral: 25, negative: 0 },
+      negative: { positive: 1, neutral: 11, negative: 18 },
+    },
+    perClass: {
+      positive: { precision: 0.8125, recall: 0.8667 },
+      neutral: { precision: 0.625, recall: 0.8333 },
+      negative: { precision: 1, recall: 0.6 },
+    },
+  });
 });
 
 test('empty rooms use the neutral aggregation fallback and Lounge state is isolated', () => {
@@ -94,6 +113,23 @@ test('rolling score expires old messages and aggregates the recent window', () =
   expect(service.snapshot('room-a')).toMatchObject({ rollingScore: 0.5, sampleSize: 2 });
   time += 61_000;
   expect(service.snapshot('room-a')).toMatchObject({ rollingScore: 0.5, sampleSize: 0 });
+});
+
+test('sentiment reconstruction replaces prior state and excludes expired persisted messages', () => {
+  let time = Date.parse('2026-01-01T00:10:00.000Z');
+  const service = createRoomSentimentService({ windowSeconds: 300, now: () => time });
+  const persisted = [
+    { createdAt: new Date(time - 60_000), sentimentBucket: 'positive' },
+    { createdAt: new Date(time - 120_000), sentimentBucket: 'negative' },
+    { createdAt: new Date(time - 301_000), sentimentBucket: 'positive' },
+  ];
+
+  expect(service.replace('room-a', persisted)).toMatchObject({ rollingScore: 0.5, sampleSize: 2 });
+  expect(service.replace('room-a', persisted)).toMatchObject({ rollingScore: 0.5, sampleSize: 2 });
+  expect(service.snapshot('room-b')).toMatchObject({ rollingScore: 0.5, sampleSize: 0 });
+
+  time += 241_000;
+  expect(service.replace('room-a', persisted)).toMatchObject({ rollingScore: 0.5, sampleSize: 0 });
 });
 
 test('concurrent message ingestion contributes every message exactly once', async () => {

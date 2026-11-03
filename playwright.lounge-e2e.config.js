@@ -2,7 +2,7 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests/e2e',
-  testMatch: 'lounge-create.spec.js',
+  testMatch: 'lounge-*.spec.js',
   fullyParallel: false,
   workers: 1,
   timeout: 45_000,

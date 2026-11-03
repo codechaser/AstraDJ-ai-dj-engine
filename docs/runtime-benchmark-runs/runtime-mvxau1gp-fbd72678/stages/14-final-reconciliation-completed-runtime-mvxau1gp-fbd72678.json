@@ -1,0 +1,53 @@
+{
+  "runId": "runtime-mvxau1gp-fbd72678",
+  "name": "final_reconciliation",
+  "status": "completed",
+  "startedAt": "2026-11-01T03:58:36.728Z",
+  "endedAt": "2026-11-01T03:58:36.763Z",
+  "durationMs": 35.414,
+  "result": {
+    "revision": 494,
+    "currentTrackId": "t_cc0_ivory_atlas",
+    "queueStateItems": 412,
+    "addEventRows": 429,
+    "repeatedTrackAddIds": [
+      {
+        "trackId": "t_cc0_ivory_atlas",
+        "eventCount": 10,
+        "expectedSeguePairRequeue": true
+      },
+      {
+        "trackId": "t_cc0_faded_fortress",
+        "eventCount": 9,
+        "expectedSeguePairRequeue": true
+      }
+    ],
+    "unexpectedRepeatedTrackIds": [],
+    "distinctTrackAddIdsAbsentFromFinalQueue": [
+      "t_cc0_faded_fortress"
+    ],
+    "laterLifecycleAddIdsNotRetained": 1,
+    "segueTransitionEvents": 20,
+    "totalQueueEvents": 494,
+    "soundclashEvents": {
+      "soundclash.submitted": 2,
+      "soundclash.opened": 1,
+      "soundclash.voted": 20,
+      "soundclash.tied": 1,
+      "soundclash.resolved": 1
+    },
+    "finalSoundclashStatus": "resolved",
+    "outboxBacklog": 0,
+    "queueLoadReconciliation": {
+      "successfulAdds": 400,
+      "persistedAddEvents": 400,
+      "duplicateLogicalEvents": 0,
+      "successfulAddsMissingFromEventLog": 0,
+      "successfulAddsMissingFromQueueState": 0,
+      "outboxBacklog": 0,
+      "connectedClientsResynchronized": 51,
+      "connectedClientsExpected": 51
+    },
+    "note": "Repeated track IDs are separate successful add operations for the CC0 segue pair when a pair member was consumed and later re-enqueued. Final-snapshot absence is measured after playback/Soundclash lifecycle; the queue-load stage separately reconciles all 400 additions immediately before those later operations."
+  }
+}

@@ -1,18 +1,49 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Heart, ListMusic, MoreHorizontal, Pause, Play, Repeat, Shuffle, SkipBack, SkipForward, SlidersHorizontal, Volume2 } from 'lucide-react';
+import { Heart, ListMusic, MoreHorizontal, Pause, Play, Repeat, Shuffle, SkipBack, SkipForward, SlidersHorizontal, Volume2, VolumeX } from 'lucide-react';
 import { apiRequest } from '../api/client.js';
 import { buildCompletionInteraction } from '../api/playbackEvents.js';
+import { TrackArtwork } from './CatalogArtwork.jsx';
 
-const imageUrl = (id) => `https://images.unsplash.com/${id || 'photo-1514525253161-7a46d19cd819'}?auto=format&fit=crop&w=180&q=80`;
 const timeLabel = (seconds = 0) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 
-export default function ConnectedPlayer({ track, playing, onToggle, registerPlaybackToggle, liked, setLiked, currentTime, setCurrentTime, setDuration, audioStatus, setAudioStatus, onPlaybackChange }) {
+export default function ConnectedPlayer({ track, playing, onToggle, registerPlaybackToggle, registerPlaybackSeek, liked, setLiked, currentTime, setCurrentTime, duration, setDuration, audioStatus, setAudioStatus, onPlaybackChange }) {
   const audioRef = useRef(null);
   const completedRef = useRef(null);
+  const [volume, setVolume] = useState(0.72);
+  const previousVolumeRef = useRef(0.72);
   const trackIdRef = useRef(track?.trackId);
   trackIdRef.current = track?.trackId;
   const available = Boolean(track?.audioAssetUrl);
+  const liveStream = track?.kind === 'radio';
+  const externalEpisode = track?.kind === 'podcast';
+  const nonCatalogMedia = liveStream || externalEpisode;
+
+  const seekTo = useCallback((seconds) => {
+    const audio = audioRef.current;
+    const target = Number(seconds);
+    if (!audio || liveStream || !Number.isFinite(audio.duration) || audio.duration <= 0 || !Number.isFinite(target)) return;
+    const bounded = Math.max(0, Math.min(audio.duration, target));
+    audio.currentTime = bounded;
+    setCurrentTime(bounded);
+  }, [liveStream, setCurrentTime]);
+
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.volume = volume;
+  }, [volume]);
+
+  function toggleMute() {
+    setVolume((current) => {
+      if (current > 0) { previousVolumeRef.current = current; return 0; }
+      return previousVolumeRef.current || 0.72;
+    });
+  }
+
+  function updateVolume(event) {
+    const next = Number(event.currentTarget.value);
+    if (next > 0) previousVolumeRef.current = next;
+    setVolume(next);
+  }
 
   useEffect(() => {
     completedRef.current = null;
@@ -51,8 +82,14 @@ export default function ConnectedPlayer({ track, playing, onToggle, registerPlay
     return () => registerPlaybackToggle?.(null);
   }, [registerPlaybackToggle, toggleAudio]);
 
+  useEffect(() => {
+    registerPlaybackSeek?.(seekTo);
+    return () => registerPlaybackSeek?.(null);
+  }, [registerPlaybackSeek, seekTo]);
+
   async function handleEnded() {
     const audio = audioRef.current;
+    if (nonCatalogMedia) { onPlaybackChange(false); setAudioStatus('ended'); return; }
     if (!track?.trackId || completedRef.current === track.trackId) return;
     completedRef.current = track.trackId;
     onPlaybackChange(false);
@@ -67,9 +104,9 @@ export default function ConnectedPlayer({ track, playing, onToggle, registerPlay
   }
 
   return <footer className="player">
-    <audio ref={audioRef} src={track?.audioAssetUrl || undefined} preload="metadata" onLoadedMetadata={(event) => { setDuration(event.currentTarget.duration); setAudioStatus('ready'); }} onPlay={(event) => { if (event.currentTarget.currentTime < 1) completedRef.current = null; }} onSeeking={(event) => window.dispatchEvent(new CustomEvent('astradj:playback-seeking', { detail: { trackId: track?.trackId, currentTime: event.currentTarget.currentTime, duration: event.currentTarget.duration } }))} onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)} onError={() => { setAudioStatus('error'); onPlaybackChange(false); }} onEnded={handleEnded}/>
-    <div className="player-song"><NavLink to="/now-playing"><img className="cover" src={imageUrl(track?.img)} alt=""/></NavLink><div><b>{track?.title ?? 'Select a track'}</b><small>{track?.artist ?? 'AstraDJ catalog'}</small><small className="player-availability">{audioStatus === 'loading' ? 'Loading audio…' : audioStatus === 'error' ? 'Audio failed to load' : available ? 'Audio ready' : 'Audio unavailable'}</small></div><button className={liked?'pink':''} onClick={() => setLiked(!liked)}><Heart size={15} fill={liked?'currentColor':'none'}/></button></div>
-    <div className="player-center"><div className="player-controls"><button disabled={!available} aria-label="Shuffle unavailable"><Shuffle size={14}/></button><button disabled={!available} aria-label="Previous track unavailable"><SkipBack size={16} fill="currentColor"/></button><button className="player-play" disabled={!available} aria-label={playing?'Pause':'Play'} onClick={onToggle}>{playing?<Pause size={15} fill="currentColor"/>:<Play size={15} fill="currentColor"/>}</button><button disabled={!available} aria-label="Next track unavailable"><SkipForward size={16} fill="currentColor"/></button><button disabled={!available} aria-label="Repeat unavailable"><Repeat size={14}/></button></div><div className="player-progress"><span>{available ? timeLabel(currentTime) : '—'}</span><div className="progress"><span style={{width: available && audioRef.current?.duration ? `${Math.min(100,currentTime/audioRef.current.duration*100)}%` : '0%'}}/></div><span>{available ? timeLabel(audioRef.current?.duration || 0) : '—'}</span></div></div>
-    <div className="player-extra"><NavLink to="/queue"><ListMusic size={16}/></NavLink><button disabled={!available}><Shuffle size={15}/></button><Volume2 size={16}/><div className="volume"><i/></div><NavLink to="/settings"><SlidersHorizontal size={15}/></NavLink></div>
+    <audio ref={audioRef} src={track?.audioAssetUrl || undefined} preload="metadata" onLoadedMetadata={(event) => { setDuration(liveStream ? 0 : event.currentTarget.duration); setAudioStatus('ready'); }} onPlaying={() => { if (liveStream) setAudioStatus('ready'); }} onPlay={(event) => { if (!nonCatalogMedia && event.currentTarget.currentTime < 1) completedRef.current = null; }} onSeeking={(event) => { if (!nonCatalogMedia) window.dispatchEvent(new CustomEvent('astradj:playback-seeking', { detail: { trackId: track?.trackId, currentTime: event.currentTarget.currentTime, duration: event.currentTarget.duration } })); }} onTimeUpdate={(event) => setCurrentTime(liveStream ? 0 : event.currentTarget.currentTime)} onError={() => { setAudioStatus('error'); onPlaybackChange(false); }} onEnded={handleEnded}/>
+    <div className="player-song"><NavLink to="/now-playing" aria-label="Open Now Playing"><TrackArtwork track={track} className="cover" alt={track?.title ? `${track.title} cover artwork` : 'No track artwork'}/></NavLink><div><b>{track?.title ?? 'Select a track'}</b><small>{track?.artist ?? 'AstraDJ catalog'}</small><small className="player-availability">{audioStatus === 'loading' ? 'Loading audio…' : audioStatus === 'error' ? liveStream ? 'Radio stream unavailable' : externalEpisode ? 'Podcast audio unavailable' : 'Audio failed to load' : liveStream ? playing ? 'Live radio · TheRadio.CC' : audioStatus === 'ended' ? 'Radio stream ended' : 'Radio ready · TheRadio.CC' : externalEpisode ? playing ? 'Podcast · NASA' : audioStatus === 'ended' ? 'Episode ended' : 'Podcast ready · NASA' : available ? 'Audio ready' : 'Audio unavailable'}</small></div><button className={liked?'pink':''} onClick={() => setLiked(!liked)}><Heart size={15} fill={liked?'currentColor':'none'}/></button></div>
+    <div className="player-center"><div className="player-controls"><button disabled={!available || nonCatalogMedia} aria-label="Shuffle unavailable"><Shuffle size={14}/></button><button disabled={!available || nonCatalogMedia} aria-label="Previous track unavailable"><SkipBack size={16} fill="currentColor"/></button><button className="player-play" disabled={!available} aria-label={playing?'Pause':'Play'} onClick={onToggle}>{playing?<Pause size={15} fill="currentColor"/>:<Play size={15} fill="currentColor"/>}</button><button disabled={!available || nonCatalogMedia} aria-label="Next track unavailable"><SkipForward size={16} fill="currentColor"/></button><button disabled={!available || nonCatalogMedia} aria-label="Repeat unavailable"><Repeat size={14}/></button></div><div className={`player-progress ${liveStream ? 'player-progress-live' : ''}`}><span>{liveStream ? 'LIVE' : available ? timeLabel(currentTime) : '—'}</span><input className="seek-slider" type="range" aria-label="Playback position" min="0" max={duration > 0 ? duration : 0} step="0.1" value={duration > 0 ? Math.min(currentTime, duration) : 0} onChange={(event) => seekTo(event.currentTarget.value)} style={{'--seek-level': `${duration > 0 ? Math.min(100, currentTime / duration * 100) : liveStream && playing ? 100 : 0}%`}} disabled={!available || liveStream || !Number.isFinite(duration) || duration <= 0}/><span>{liveStream ? 'ON AIR' : available ? timeLabel(duration || audioRef.current?.duration || 0) : '—'}</span></div></div>
+    <div className="player-extra"><NavLink to="/queue"><ListMusic size={16}/></NavLink><button disabled={!available}><Shuffle size={15}/></button><button type="button" className="volume-toggle" aria-label={volume === 0 ? 'Unmute' : 'Mute'} title={volume === 0 ? 'Unmute' : 'Mute'} disabled={!available} onClick={toggleMute}>{volume === 0 ? <VolumeX size={16}/> : <Volume2 size={16}/>}</button><div className="volume"><input type="range" aria-label="Volume" min="0" max="1" step="0.01" value={volume} onChange={updateVolume} style={{'--volume-level': `${volume * 100}%`}} disabled={!available}/></div><NavLink to="/settings"><SlidersHorizontal size={15}/></NavLink></div>
   </footer>;
 }

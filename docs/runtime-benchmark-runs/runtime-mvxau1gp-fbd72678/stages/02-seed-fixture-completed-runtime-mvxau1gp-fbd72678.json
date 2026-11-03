@@ -1,0 +1,42 @@
+{
+  "runId": "runtime-mvxau1gp-fbd72678",
+  "name": "seed_fixture",
+  "status": "completed",
+  "startedAt": "2026-11-01T03:57:24.284Z",
+  "endedAt": "2026-11-01T03:57:24.844Z",
+  "durationMs": 560.37,
+  "result": {
+    "usersCreated": 50,
+    "roleCounts": {
+      "Host": 1,
+      "Co-DJ": 25,
+      "Listener": 24
+    },
+    "realSeedTracks": 7,
+    "syntheticQueueTracks": 450,
+    "syntheticTracksHaveAcousticProfiles": false,
+    "loungeId": "lg_f0a0c0b2302e2fd3",
+    "initialNowPlayingTrackId": "t_cc0_ivory_atlas",
+    "initialNextUpTrackId": "t_cc0_faded_fortress",
+    "seguePair": [
+      {
+        "trackId": "t_cc0_ivory_atlas",
+        "bpm": 143,
+        "camelotKey": "8A",
+        "source": "https://kaino.dev/api/library/music/creator-workout-01",
+        "license": "CC0-1.0"
+      },
+      {
+        "trackId": "t_cc0_faded_fortress",
+        "bpm": 142,
+        "camelotKey": "8A",
+        "source": "https://kaino.dev/api/library/music/indie-rock-07",
+        "license": "CC0-1.0"
+      }
+    ],
+    "soundclashCandidates": [
+      "t_cc0_thoughtness",
+      "t_cc0_chill_beat"
+    ]
+  }
+}

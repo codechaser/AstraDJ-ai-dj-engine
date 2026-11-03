@@ -1,0 +1,16 @@
+{
+  "runId": "runtime-mvxaa4s4-e12935dd",
+  "name": "connect_and_join_clients",
+  "status": "completed",
+  "startedAt": "2026-11-01T03:42:03.449Z",
+  "endedAt": "2026-11-01T03:42:05.805Z",
+  "durationMs": 2356.754,
+  "result": {
+    "socketConnections": 51,
+    "distinctParticipantAccounts": 50,
+    "joinedAcks": 51,
+    "hostSocketsAcrossProcesses": 2,
+    "coDjAccounts": 25,
+    "listenerAccounts": 24
+  }
+}

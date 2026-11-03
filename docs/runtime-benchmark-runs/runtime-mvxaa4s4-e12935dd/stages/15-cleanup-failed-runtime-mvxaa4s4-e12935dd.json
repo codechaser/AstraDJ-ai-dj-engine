@@ -1,0 +1,13 @@
+{
+  "runId": "runtime-mvxaa4s4-e12935dd",
+  "name": "cleanup",
+  "status": "failed",
+  "startedAt": "2026-11-01T03:43:14.655Z",
+  "endedAt": "2026-11-01T03:43:14.743Z",
+  "durationMs": 88.261,
+  "error": {
+    "name": "Error",
+    "code": null,
+    "message": "A benchmark API process did not stop cleanly"
+  }
+}

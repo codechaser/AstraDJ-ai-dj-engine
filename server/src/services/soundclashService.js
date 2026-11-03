@@ -124,18 +124,18 @@ export function createSoundclashService({
     if (lounge.settings?.soundclashEnabled === false) throw new ApiError(409, 'SOUNDCLASH_DISABLED', 'Soundclash is disabled for this Lounge');
   }
 
-  async function record(lounge, actor, type, payload) {
-    const committed = await queueService.recordLoungeEvent({ lounge, actor, type, payload });
+  async function record(lounge, actor, type, payload, requireHostPresenceUserId = null) {
+    const committed = await queueService.recordLoungeEvent({ lounge, actor, type, payload, requireHostPresenceUserId });
     return committed?.events?.at(-1) ?? committed;
   }
 
-  async function openLocked(lounge, state, actor, openedBy) {
+  async function openLocked(lounge, state, actor, openedBy, requireHostPresenceUserId = null) {
     ensureEnabled(lounge);
     if (state.status === 'open') return { state: publicState(state) };
     if (state.status !== 'collecting') throw new ApiError(409, 'SOUNDCLASH_NOT_COLLECTING', 'Soundclash submissions are not ready to open');
     if (state.candidateTrackIds.length < 2 || state.candidateTrackIds.length > 4) throw new ApiError(400, 'SOUNDCLASH_REQUIRES_2_TO_4_CANDIDATES', 'A Soundclash requires two to four submitted tracks');
     const closesAt = now() + voteDurationMs;
-    await record(lounge, actor, 'soundclash.opened', { battleId: state.battleId, candidateTrackIds: [...state.candidateTrackIds], closesAt, openedBy });
+    await record(lounge, actor, 'soundclash.opened', { battleId: state.battleId, candidateTrackIds: [...state.candidateTrackIds], closesAt, openedBy }, requireHostPresenceUserId);
     Object.assign(state, await loadState(lounge));
     const payload = { battleId: state.battleId, candidateTrackIds: [...state.candidateTrackIds], closesAt };
     emit('lounge.soundclash.open', lounge.loungeId, payload);
@@ -147,8 +147,8 @@ export function createSoundclashService({
     if (state.status === 'collecting' && state.candidateTrackIds.length >= 2) await openLocked(lounge, state, null, 'ai_dj');
   }
 
-  async function finalize(lounge, state, winningTrackId, actor, autoResolved) {
-    const queue = await queueService.spliceNextUp({ lounge, actor, battleId: state.battleId, winningTrackId, autoResolved });
+  async function finalize(lounge, state, winningTrackId, actor, autoResolved, requireHostPresenceUserId = null) {
+    const queue = await queueService.spliceNextUp({ lounge, actor, battleId: state.battleId, winningTrackId, autoResolved, requireHostPresenceUserId });
     state.status = 'resolved';
     state.winningTrackId = winningTrackId;
     cancelTimer(lounge.loungeId);
@@ -198,7 +198,7 @@ export function createSoundclashService({
       });
     },
 
-    async submit({ lounge, actor, trackId }) {
+    async submit({ lounge, actor, trackId, requireHostPresenceUserId = String(lounge.hostUserId) }) {
       return serialized(lounge.loungeId, async () => {
         if (actor.role !== 'Listener') throw new ApiError(403, 'FORBIDDEN', 'Only Lounge Listeners may submit Soundclash tracks');
         ensureEnabled(lounge);
@@ -216,7 +216,7 @@ export function createSoundclashService({
         if (targetState.candidateTrackIds.includes(trackId)) throw new ApiError(409, 'TRACK_ALREADY_SUBMITTED', 'This track is already submitted');
         if (targetState.candidateTrackIds.length >= 4) throw new ApiError(409, 'SOUNDCLASH_CANDIDATE_LIMIT', 'A Soundclash accepts at most four tracks');
 
-        const submissionEvent = await record(lounge, actor, 'soundclash.submitted', { battleId: targetState.battleId, trackId });
+        const submissionEvent = await record(lounge, actor, 'soundclash.submitted', { battleId: targetState.battleId, trackId }, requireHostPresenceUserId);
         if (submissionEvent?.payload?.battleId) targetState.battleId = submissionEvent.payload.battleId;
         Object.assign(state, await loadState(lounge));
         const submission = { battleId: state.battleId, trackId, submittedByUserId: String(actor.id), candidateCount: state.candidateTrackIds.length };
@@ -226,11 +226,11 @@ export function createSoundclashService({
       });
     },
 
-    async open({ lounge, actor }) {
+    async open({ lounge, actor, requireHostPresenceUserId = String(lounge.hostUserId) }) {
       return serialized(lounge.loungeId, async () => {
-        if (actor.role !== 'Host') throw new ApiError(403, 'FORBIDDEN', 'Only the Lounge Host may open a Soundclash');
+        if (actor.role !== 'Host' || String(actor.id) !== String(lounge.hostUserId)) throw new ApiError(403, 'LOUNGE_HOST_REQUIRED', 'Only the owning Lounge Host may open a Soundclash');
         const state = await loadState(lounge);
-        return openLocked(lounge, state, actor, 'host');
+        return openLocked(lounge, state, actor, 'host', requireHostPresenceUserId);
       });
     },
 
@@ -259,8 +259,9 @@ export function createSoundclashService({
       });
     },
 
-    async forceResolve({ lounge, actor, battleId, winningTrackId }) {
+    async forceResolve({ lounge, actor, battleId, winningTrackId, requireHostPresenceUserId = String(lounge.hostUserId) }) {
       return serialized(lounge.loungeId, async () => {
+        if (actor.role === 'Host' && String(actor.id) !== String(lounge.hostUserId)) throw new ApiError(403, 'LOUNGE_HOST_REQUIRED', 'Only the owning Lounge Host may resolve a Soundclash as Host');
         if (!['Host', 'Co-DJ'].includes(actor.role)) throw new ApiError(403, 'FORBIDDEN', 'Only a Host or Co-DJ may resolve a tied Soundclash');
         ensureEnabled(lounge);
         const state = await loadState(lounge);
@@ -275,7 +276,7 @@ export function createSoundclashService({
         const highest = Math.max(...Object.values(counts));
         const tiedTrackIds = Object.entries(counts).filter(([, count]) => count === highest).map(([id]) => id);
         if (!tiedTrackIds.includes(winningTrackId)) throw new ApiError(400, 'INVALID_TIE_WINNER', 'winningTrackId must be one of the tied candidates');
-        return finalize(lounge, state, winningTrackId, actor, false);
+        return finalize(lounge, state, winningTrackId, actor, false, requireHostPresenceUserId);
       });
     },
 

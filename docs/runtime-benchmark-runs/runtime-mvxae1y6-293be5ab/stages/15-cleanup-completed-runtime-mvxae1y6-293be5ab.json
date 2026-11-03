@@ -1,0 +1,17 @@
+{
+  "runId": "runtime-mvxae1y6-293be5ab",
+  "name": "cleanup",
+  "status": "completed",
+  "startedAt": "2026-11-01T03:46:11.712Z",
+  "endedAt": "2026-11-01T03:46:11.812Z",
+  "durationMs": 99.598,
+  "result": {
+    "databaseDropped": true,
+    "databaseName": "astradj_test_runtimebench_72a083e51842407fab55bbfb3000d812",
+    "guardedDisposableNamespace": true,
+    "apiProcessesStopped": 2,
+    "forcedStops": 0,
+    "disconnectedSockets": 76,
+    "mongooseDisconnected": true
+  }
+}

@@ -1,9 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { getRecommendations } from '../api/client.js';
+import { getRecommendations, searchTracks } from '../api/client.js';
 import { normalizeRecommendations } from '../api/uiData.js';
-
-const artwork = ['photo-1470225620780-dba8ba36b745', 'photo-1514525253161-7a46d19cd819', 'photo-1511379938547-c1f69419868d'];
-const imageUrl = (id) => `https://images.unsplash.com/${id}?auto=format&fit=crop&w=320&q=80`;
+import { toPlayerTrack } from '../api/catalogData.js';
+import { TrackArtwork } from './CatalogArtwork.jsx';
 
 export default function RecommendationShelf({ user, onSelect, compact = false }) {
   const [items, setItems] = useState([]);
@@ -12,39 +11,52 @@ export default function RecommendationShelf({ user, onSelect, compact = false })
 
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
     if (!user) { setItems([]); setState('signed-out'); return () => { active = false; }; }
     setState('loading'); setMessage('');
-    getRecommendations().then((result) => {
+    getRecommendations().then(async (result) => {
       if (!active) return;
-      setItems(normalizeRecommendations(result));
-      setState('ready');
+      const recommendations = normalizeRecommendations(result);
+      if (recommendations.length) {
+        setItems(recommendations);
+        setState('ready');
+        return;
+      }
+      const catalog = await searchTracks('', controller.signal);
+      if (!active) return;
+      const playableTracks = (Array.isArray(catalog.items) ? catalog.items : [])
+        .filter((track) => typeof track.audioAssetUrl === 'string' && track.audioAssetUrl.trim())
+        .slice(0, compact ? 3 : 4);
+      setItems(playableTracks);
+      setState(playableTracks.length ? 'catalog-fallback' : 'empty');
     }).catch((error) => {
-      if (!active) return;
+      if (!active || error.name === 'AbortError') return;
       setMessage(error.status === 401 ? 'Sign in again to load recommendations.' : error.message || 'Recommendations are unavailable right now.');
       setState('error');
     });
-    return () => { active = false; };
-  }, [user?.id]);
+    return () => { active = false; controller.abort(); };
+  }, [user?.id, compact]);
 
-  const heading = compact ? 'Picked for your taste' : 'Recommended for you';
-  if (state === 'signed-out') return <div className="panel integration-status">{heading}: sign in to request your private recommendations.</div>;
-  if (state === 'loading') return <div className="panel integration-status" role="status">Loading recommendations…</div>;
-  if (state === 'error') return <div className="panel integration-error" role="alert">{message}</div>;
-  if (!items.length) return <div className="panel integration-status">No recommendations yet. More interaction history may be needed.</div>;
+  const title = state === 'catalog-fallback' ? (compact ? 'Tracks to try' : 'Explore the catalog') : compact ? 'Picked for your taste' : 'Recommended for you';
+  if (state === 'signed-out') return <><div className="section-title"><h2>{title}</h2></div><div className="panel integration-status">Sign in to request private recommendations.</div></>;
+  if (state === 'loading') return <><div className="section-title"><h2>{title}</h2></div><div className="panel integration-status" role="status">Loading recommendations…</div></>;
+  if (state === 'error') return <><div className="section-title"><h2>{title}</h2></div><div className="panel integration-error" role="alert">{message}</div></>;
+  if (state === 'empty' || !items.length) return <><div className="section-title"><h2>{title}</h2></div><div className="panel integration-status">No playable catalog tracks are available right now.</div></>;
 
-  return <div className={compact ? 'recommend-row' : 'mix-row'} aria-label={heading}>
+  return <><div className="section-title"><h2>{title}</h2></div><div className={compact ? 'recommend-row' : 'mix-row'} aria-label={title}>
     {items.slice(0, compact ? 3 : 4).map((item, index) => {
       const reason = typeof item.reason === 'string' ? item.reason : item.reason?.text;
+      const personalized = state === 'ready';
       return <div className={compact ? 'recommend-card' : 'mix-card'} key={item.trackId}
-        onClick={() => onSelect?.({ ...item, img: artwork[index % artwork.length] })}
+        onClick={() => onSelect?.(toPlayerTrack(item))}
         role={onSelect ? 'button' : undefined} tabIndex={onSelect ? 0 : undefined}
-        onKeyDown={onSelect ? (event) => { if (event.key === 'Enter' || event.key === ' ') onSelect({ ...item, img: artwork[index % artwork.length] }); } : undefined}>
-        <img className="cover" src={imageUrl(artwork[index % artwork.length])} alt=""/>
+        onKeyDown={onSelect ? (event) => { if (event.key === 'Enter' || event.key === ' ') onSelect(toPlayerTrack(item)); } : undefined}>
+        <TrackArtwork track={item} className="cover"/>
         <b>{item.title}</b><small>{item.artist}</small>
-        <small className="recommendation-meta">#{index + 1} · score {Number.isFinite(item.score) ? item.score.toFixed(2) : '—'}</small>
-        {reason && <small className="recommendation-meta">{reason}</small>}
+        {personalized && <small className="recommendation-meta">#{index + 1} · score {Number.isFinite(item.score) ? item.score.toFixed(2) : '—'}</small>}
+        {personalized && reason && <small className="recommendation-meta">{reason}</small>}
       </div>;
     })}
-    <small className="recommendation-disclosure">Catalog recommendations; source interactions may be self-reported. Audio availability is not included in this response.</small>
-  </div>;
+    <small className="recommendation-disclosure">{state === 'catalog-fallback' ? 'Playable tracks from the AstraDJ catalog. These are starter picks, not personalized recommendations; listening history can enable personalization.' : 'Catalog recommendations; source interactions may be self-reported. Audio availability is not included in this response.'}</small>
+  </div></>;
 }

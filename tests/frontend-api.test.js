@@ -1,11 +1,12 @@
 import test, { afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { apiRequest, askTrackQuestion, clearAccessToken, createLounge, getAcousticTaste, getLoungeAnalytics, getLoungeHistory, getPreferences, getRecommendations, login, logout, registerAccount, requestSegue, restoreSession, searchTracks, updatePreferences } from '../src/api/client.js';
+import { apiRequest, askTrackQuestion, cancelBillingSubscription, clearAccessToken, createBillingSubscription, createLounge, getAcousticTaste, getBillingPlans, getLoungeAnalytics, getLoungeHistory, getMySubscription, getPaymentHistory, getPodcastCatalog, getPreferences, getRecommendations, login, logout, registerAccount, requestSegue, restoreSession, searchTracks, updatePreferences, verifyBillingCheckout } from '../src/api/client.js';
 import { buildCompletionInteraction } from '../src/api/playbackEvents.js';
-import { catalogDurationSeconds, formatTrackDuration, groupCatalogArtists, toPlayerTrack, tracksForArtist } from '../src/api/catalogData.js';
+import { artistPortraitUrl, catalogDurationSeconds, formatTrackDuration, groupCatalogArtists, toPlayerTrack, trackCoverUrl, tracksForArtist } from '../src/api/catalogData.js';
 import { connectToLounge } from '../src/api/loungeConnection.js';
 import { subscribeToLoungeEvents } from '../src/api/loungeEvents.js';
 import { applySoundclashEvent, displayAnalyticsMetric, normalizeRecommendations, segueCommentaryText, shouldShowAiDjCommentary, tiedCandidateIds, uniqueChatMessages } from '../src/api/uiData.js';
+import { STARTER_PLAYLISTS, mergeStarterPlaylists } from '../src/api/starterPlaylists.js';
 
 const originalFetch = globalThis.fetch;
 afterEach(() => { globalThis.fetch = originalFetch; clearAccessToken(); });
@@ -126,6 +127,16 @@ test('catalog search uses the backend query contract without browser credentials
   assert.equal(request.options.headers.Authorization, undefined);
 });
 
+test('podcast browsing reads the public fixed-feed API and supports cancellation', async () => {
+  let request;
+  const controller = new AbortController();
+  globalThis.fetch = async (url, options) => { request = { url, options }; return response({ items: [{ podcastId: 'nasa-curious-universe', episodes: [] }] }); };
+  assert.equal((await getPodcastCatalog(controller.signal)).items[0].podcastId, 'nasa-curious-universe');
+  assert.equal(request.url, '/api/v1/podcasts');
+  assert.equal(request.options.headers.Authorization, undefined);
+  assert.equal(request.options.signal, controller.signal);
+});
+
 test('Host Lounge creation sends the validated PRD request with the authenticated access token', async () => {
   let request;
   globalThis.fetch = async (url, options) => {
@@ -209,6 +220,24 @@ test('recommendation, Lounge history/analytics, segue, and Q&A calls use existin
   assert.equal(calls[6].options.headers.Authorization, 'Bearer integration-token');
 });
 
+test('subscription client uses authenticated APIs and sends idempotent checkout requests', async () => {
+  const calls = [];
+  globalThis.fetch = async (url, options) => { calls.push({ url, options }); return response(url.endsWith('/subscriptions/pending/cancel') ? { cancelAtPeriodEnd: true } : {}); };
+  await getBillingPlans();
+  await getMySubscription();
+  await getPaymentHistory();
+  await createBillingSubscription('premium', 'checkout-request-1');
+  await verifyBillingCheckout({ razorpay_payment_id: 'pay_1234', razorpay_subscription_id: 'sub_1234', razorpay_signature: 'signature' });
+  await cancelBillingSubscription('pending/cancel');
+  assert.equal(calls[0].url, '/api/v1/billing/plans');
+  assert.equal(calls[1].url, '/api/v1/billing/me');
+  assert.equal(calls[2].url, '/api/v1/billing/me/payments?limit=20');
+  assert.equal(calls[3].options.headers['Idempotency-Key'], 'checkout-request-1');
+  assert.deepEqual(JSON.parse(calls[3].options.body), { planId: 'premium' });
+  assert.equal(calls[4].url, '/api/v1/billing/verify');
+  assert.equal(calls[5].url, '/api/v1/billing/subscriptions/pending%2Fcancel/cancel');
+});
+
 test('room event subscriptions ignore other Lounges and remove each listener on cleanup', () => {
   class FakeSocket {
     handlers = new Map();
@@ -226,9 +255,10 @@ test('room event subscriptions ignore other Lounges and remove each listener on 
   assert.equal([...socket.handlers.values()].reduce((sum, set) => sum + set.size, 0), 0);
 });
 
-test('chat history and broadcasts deduplicate accepted messages by server messageId', () => {
-  const row = { messageId: 'm1', userId: 'u1', body: 'Hello', tsSeconds: 10 };
-  assert.deepEqual(uniqueChatMessages([row, row, { ...row, messageId: 'm2', tsSeconds: 11 }]).map((item) => item.messageId), ['m1', 'm2']);
+test('chat history and broadcasts deduplicate without reordering messages in the same second', () => {
+  const first = { messageId: 'm2', userId: 'u1', body: 'First', tsSeconds: 10 };
+  const second = { messageId: 'm1', userId: 'u1', body: 'Second', tsSeconds: 10 };
+  assert.deepEqual(uniqueChatMessages([first, second, first]).map((item) => item.messageId), ['m2', 'm1']);
 });
 
 test('Soundclash view state follows server events and ignores stale battle events', () => {
@@ -272,6 +302,38 @@ test('catalog helpers derive artist pages and player tracks only from catalog me
   assert.deepEqual(tracksForArtist(tracks, 'mira sol').map((track) => track.trackId), ['t_2', 't_1']);
   assert.equal(formatTrackDuration(61), '1:01');
   assert.equal(catalogDurationSeconds(tracks), 361);
-  assert.deepEqual(toPlayerTrack(tracks[0]), { ...tracks[0], time: '1:01', img: 'photo-1514525253161-7a46d19cd819' });
+  assert.deepEqual(toPlayerTrack(tracks[0]), { ...tracks[0], coverImageUrl: null, time: '1:01' });
   assert.deepEqual(groupCatalogArtists([]), []);
+});
+
+test('centralized local artwork mappings cover the six artists and every seeded track', () => {
+  const artists = ['Kainotomic', 'Kian Moretz', 'Maddy', 'Mira Sol', 'Nova Circuit', 'The Quiet Current'];
+  const artistPaths = artists.map(artistPortraitUrl);
+  assert.equal(new Set(artistPaths).size, 6);
+  assert.ok(artistPaths.every((path) => path?.startsWith('/assets/artists/')));
+
+  const trackIds = ['t_2001', 't_2002', 't_2003', 't_cc0_thoughtness', 't_cc0_chill_beat', 't_cc0_ivory_atlas', 't_cc0_faded_fortress'];
+  const coverPaths = trackIds.map((trackId) => trackCoverUrl({ trackId }));
+  assert.equal(new Set(coverPaths).size, 7);
+  assert.ok(coverPaths.every((path) => path?.startsWith('/assets/covers/')));
+  assert.equal(artistPortraitUrl('Unknown Artist'), null);
+  assert.equal(trackCoverUrl({ trackId: 'unknown_track' }), null);
+});
+
+test('starter mixes contain different catalog tracks and upgrade old empty defaults once', () => {
+  const signatures = new Set(STARTER_PLAYLISTS.map((playlist) => [...playlist.trackIds].sort().join('|')));
+  assert.equal(STARTER_PLAYLISTS.length, 5);
+  assert.equal(signatures.size, STARTER_PLAYLISTS.length);
+  const available = new Set(['t_2001', 't_2002', 't_2003', 't_cc0_chill_beat', 't_cc0_thoughtness']);
+  assert.ok(STARTER_PLAYLISTS.every((playlist) => playlist.trackIds.length >= 3 && playlist.trackIds.every((id) => available.has(id))));
+
+  const legacy = STARTER_PLAYLISTS.map(({ id, name }) => ({ id, name, starter: true, trackIds: [...available] }));
+  const upgraded = mergeStarterPlaylists(legacy);
+  assert.equal(upgraded.migrated, true);
+  assert.ok(upgraded.playlists.every((playlist) => playlist.trackIds.length >= 3));
+  assert.equal(new Set(upgraded.playlists.map((playlist) => [...playlist.trackIds].sort().join('|'))).size, STARTER_PLAYLISTS.length);
+  const userEdited = upgraded.playlists.map((playlist) => playlist.id === 'starter-chill' ? { ...playlist, trackIds: playlist.trackIds.slice(1) } : playlist);
+  const restored = mergeStarterPlaylists(userEdited);
+  assert.equal(restored.migrated, false);
+  assert.equal(restored.playlists.find((playlist) => playlist.id === 'starter-chill').trackIds.length, userEdited[0].trackIds.length);
 });

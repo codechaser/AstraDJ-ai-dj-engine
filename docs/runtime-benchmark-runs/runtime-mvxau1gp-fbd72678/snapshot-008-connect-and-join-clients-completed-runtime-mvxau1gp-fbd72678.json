@@ -1,0 +1,317 @@
+{
+  "schemaVersion": 1,
+  "runId": "runtime-mvxau1gp-fbd72678",
+  "status": "running",
+  "createdAt": "2026-11-01T03:57:24.201Z",
+  "manifest": {
+    "benchmark": "AstraDJ runtime performance and Soundclash diagnostics",
+    "runId": "runtime-mvxau1gp-fbd72678",
+    "startedAt": "2026-11-01T03:57:24.074Z",
+    "startingHead": "2e74782d074f0ec26c0b380f58184f45c5c0fba7",
+    "worktree": {
+      "dirtyAtStart": true,
+      "statusEntryCount": 101,
+      "indexHtmlSha256AtStart": "6f039e9d735547f95bbc38631ab9d4ceda28e007ce0beb6d32bd48fee753d1ee"
+    },
+    "runtime": {
+      "node": "v24.22.2",
+      "platform": "win32-x64",
+      "cpuModel": "Intel(R) Core(TM) i5-8350U CPU @ 1.70GHz",
+      "logicalCpuCount": 8,
+      "totalMemoryGiB": 7.88,
+      "freeMemoryGiBAtStart": 1.64,
+      "expectedApiProcesses": 2,
+      "expectedSockets": 51,
+      "browserStressLaunched": false
+    },
+    "database": {
+      "configuredTarget": {
+        "configured": true,
+        "parseable": true,
+        "protocol": "mongodb:",
+        "hostname": "127.0.0.1",
+        "database": "astradj_test_base",
+        "loopback": true
+      },
+      "generatedIsolatedDatabase": "astradj_test_runtimebench_074089eb2f6a46c4afefbc00ae2b637e",
+      "uriRecorded": false,
+      "requiredHostScope": "loopback",
+      "requiredNamespace": "astradj_test_*"
+    },
+    "configuration": {
+      "apiSamplesPerProcessPerConcurrency": 500,
+      "apiConcurrencyPerProcess": [
+        1,
+        10,
+        25
+      ],
+      "queueSamplesPerConcurrency": 100,
+      "queueConcurrency": [
+        1,
+        5,
+        10,
+        20
+      ],
+      "segueSamples": 20,
+      "soundclashVoters": 20,
+      "warmupRequestsPerProcess": 25,
+      "normalRateLimitsEnabled": true
+    },
+    "prdTargets": {
+      "apiP95Ms": 200,
+      "segueTransitionP95Ms": 3000,
+      "queueSyncDriftMs": 100,
+      "websocketFanoutMs": 500
+    },
+    "method": {
+      "percentiles": "nearest-rank",
+      "api": "Loopback GET /api/v1/tracks?limit=10; Server-Timing is app-path duration; Mongo subquery spans are not instrumented.",
+      "segue": "Authenticated Host outro-trigger and playback.ended commands using source-evidenced seed pair; no browser or actual audio.",
+      "soundclash": "Authenticated Listener submissions with {trackId}; inspect durable snapshot, outbox and projected QueueEvent after ack/timeout.",
+      "rateLimits": "Production limiter remains enabled; only isolated database counters reset between workload batches."
+    },
+    "stagePlan": [
+      "database_guard_and_connect",
+      "seed_fixture",
+      "start_api_processes",
+      "connect_and_join_clients",
+      "api_catalog_reads",
+      "segue_measurement",
+      "queue_mutations",
+      "outbox_stage_observations",
+      "soundclash_submit_first",
+      "soundclash_submit_second",
+      "soundclash_vote_wave",
+      "soundclash_resolution",
+      "gateway_restart_recovery",
+      "final_reconciliation",
+      "cleanup"
+    ]
+  },
+  "stagePlan": [
+    {
+      "name": "database_guard_and_connect",
+      "status": "completed"
+    },
+    {
+      "name": "seed_fixture",
+      "status": "completed"
+    },
+    {
+      "name": "start_api_processes",
+      "status": "completed"
+    },
+    {
+      "name": "connect_and_join_clients",
+      "status": "completed"
+    },
+    {
+      "name": "api_catalog_reads",
+      "status": "pending"
+    },
+    {
+      "name": "segue_measurement",
+      "status": "pending"
+    },
+    {
+      "name": "queue_mutations",
+      "status": "pending"
+    },
+    {
+      "name": "outbox_stage_observations",
+      "status": "pending"
+    },
+    {
+      "name": "soundclash_submit_first",
+      "status": "pending"
+    },
+    {
+      "name": "soundclash_submit_second",
+      "status": "pending"
+    },
+    {
+      "name": "soundclash_vote_wave",
+      "status": "pending"
+    },
+    {
+      "name": "soundclash_resolution",
+      "status": "pending"
+    },
+    {
+      "name": "gateway_restart_recovery",
+      "status": "pending"
+    },
+    {
+      "name": "final_reconciliation",
+      "status": "pending"
+    },
+    {
+      "name": "cleanup",
+      "status": "pending"
+    }
+  ],
+  "stages": [
+    {
+      "name": "database_guard_and_connect",
+      "status": "completed",
+      "startedAt": "2026-11-01T03:57:24.209Z",
+      "endedAt": "2026-11-01T03:57:24.272Z",
+      "durationMs": 63.758,
+      "result": {
+        "guardPassed": true,
+        "configuredHostname": "127.0.0.1",
+        "generatedDatabaseName": "astradj_test_runtimebench_074089eb2f6a46c4afefbc00ae2b637e",
+        "topology": "standalone",
+        "mongoVersion": "8.2.5",
+        "freeMemoryGiB": 1.62
+      }
+    },
+    {
+      "name": "seed_fixture",
+      "status": "completed",
+      "startedAt": "2026-11-01T03:57:24.284Z",
+      "endedAt": "2026-11-01T03:57:24.844Z",
+      "durationMs": 560.37,
+      "result": {
+        "usersCreated": 50,
+        "roleCounts": {
+          "Host": 1,
+          "Co-DJ": 25,
+          "Listener": 24
+        },
+        "realSeedTracks": 7,
+        "syntheticQueueTracks": 450,
+        "syntheticTracksHaveAcousticProfiles": false,
+        "loungeId": "lg_f0a0c0b2302e2fd3",
+        "initialNowPlayingTrackId": "t_cc0_ivory_atlas",
+        "initialNextUpTrackId": "t_cc0_faded_fortress",
+        "seguePair": [
+          {
+            "trackId": "t_cc0_ivory_atlas",
+            "bpm": 143,
+            "camelotKey": "8A",
+            "source": "https://kaino.dev/api/library/music/creator-workout-01",
+            "license": "CC0-1.0"
+          },
+          {
+            "trackId": "t_cc0_faded_fortress",
+            "bpm": 142,
+            "camelotKey": "8A",
+            "source": "https://kaino.dev/api/library/music/indie-rock-07",
+            "license": "CC0-1.0"
+          }
+        ],
+        "soundclashCandidates": [
+          "t_cc0_thoughtness",
+          "t_cc0_chill_beat"
+        ]
+      }
+    },
+    {
+      "name": "start_api_processes",
+      "status": "completed",
+      "startedAt": "2026-11-01T03:57:24.854Z",
+      "endedAt": "2026-11-01T03:57:29.514Z",
+      "durationMs": 4659.222,
+      "result": {
+        "processCount": 2,
+        "processStartup": [
+          {
+            "pid": 33356,
+            "port": 58110,
+            "startupMs": 2594.487
+          },
+          {
+            "pid": 31088,
+            "port": 58111,
+            "startupMs": 2017.393
+          }
+        ]
+      }
+    },
+    {
+      "name": "connect_and_join_clients",
+      "status": "completed",
+      "startedAt": "2026-11-01T03:57:29.524Z",
+      "endedAt": "2026-11-01T03:57:31.082Z",
+      "durationMs": 1557.322,
+      "result": {
+        "socketConnections": 51,
+        "distinctParticipantAccounts": 50,
+        "joinedAcks": 51,
+        "hostSocketsAcrossProcesses": 2,
+        "coDjAccounts": 25,
+        "listenerAccounts": 24
+      }
+    }
+  ],
+  "measurements": {
+    "database_guard_and_connect": {
+      "guardPassed": true,
+      "configuredHostname": "127.0.0.1",
+      "generatedDatabaseName": "astradj_test_runtimebench_074089eb2f6a46c4afefbc00ae2b637e",
+      "topology": "standalone",
+      "mongoVersion": "8.2.5",
+      "freeMemoryGiB": 1.62
+    },
+    "seed_fixture": {
+      "usersCreated": 50,
+      "roleCounts": {
+        "Host": 1,
+        "Co-DJ": 25,
+        "Listener": 24
+      },
+      "realSeedTracks": 7,
+      "syntheticQueueTracks": 450,
+      "syntheticTracksHaveAcousticProfiles": false,
+      "loungeId": "lg_f0a0c0b2302e2fd3",
+      "initialNowPlayingTrackId": "t_cc0_ivory_atlas",
+      "initialNextUpTrackId": "t_cc0_faded_fortress",
+      "seguePair": [
+        {
+          "trackId": "t_cc0_ivory_atlas",
+          "bpm": 143,
+          "camelotKey": "8A",
+          "source": "https://kaino.dev/api/library/music/creator-workout-01",
+          "license": "CC0-1.0"
+        },
+        {
+          "trackId": "t_cc0_faded_fortress",
+          "bpm": 142,
+          "camelotKey": "8A",
+          "source": "https://kaino.dev/api/library/music/indie-rock-07",
+          "license": "CC0-1.0"
+        }
+      ],
+      "soundclashCandidates": [
+        "t_cc0_thoughtness",
+        "t_cc0_chill_beat"
+      ]
+    },
+    "start_api_processes": {
+      "processCount": 2,
+      "processStartup": [
+        {
+          "pid": 33356,
+          "port": 58110,
+          "startupMs": 2594.487
+        },
+        {
+          "pid": 31088,
+          "port": 58111,
+          "startupMs": 2017.393
+        }
+      ]
+    },
+    "connect_and_join_clients": {
+      "socketConnections": 51,
+      "distinctParticipantAccounts": 50,
+      "joinedAcks": 51,
+      "hostSocketsAcrossProcesses": 2,
+      "coDjAccounts": 25,
+      "listenerAccounts": 24
+    }
+  },
+  "snapshotReason": "connect_and_join_clients-completed",
+  "snapshotAt": "2026-11-01T03:57:31.086Z"
+}

@@ -1,0 +1,1839 @@
+{
+  "benchmark": "AstraDJ local multi-room Lounge acceptance and performance",
+  "generatedAt": "2026-10-29T09:06:29.007Z",
+  "startedAt": "2026-10-29T09:05:55.315Z",
+  "durationMs": 33691.55,
+  "database": {
+    "topology": "standalone",
+    "version": "8.2.5",
+    "hostScope": "loopback only",
+    "isolatedDatabase": "astradj_test_multiroombench_013930616d2a48af9851d547cb66ea90",
+    "isolatedDatabaseDroppedAfterReport": true
+  },
+  "runtime": {
+    "node": "v24.16.0",
+    "platform": "win32-x64",
+    "cpuModel": "Intel(R) Core(TM) i5-8350U CPU @ 1.70GHz",
+    "logicalCpuCount": 8,
+    "apiProcessCount": 2,
+    "apiProcessStartupMs": [
+      5599.118,
+      4129.794
+    ],
+    "roomCount": 3,
+    "clientsPerRoom": 50,
+    "totalSocketConnections": 153,
+    "loopbackSourceAddressesPerRoom": [
+      "127.0.0.1",
+      "127.0.0.2",
+      "127.0.0.3"
+    ],
+    "clientConnectionsPerRoomByProcess": [
+      [
+        {
+          "port": 55142,
+          "connections": 25
+        },
+        {
+          "port": 55143,
+          "connections": 25
+        }
+      ],
+      [
+        {
+          "port": 55142,
+          "connections": 25
+        },
+        {
+          "port": 55143,
+          "connections": 25
+        }
+      ],
+      [
+        {
+          "port": 55142,
+          "connections": 25
+        },
+        {
+          "port": 55143,
+          "connections": 25
+        }
+      ]
+    ]
+  },
+  "methodology": {
+    "queueWorkload": "3 rooms concurrently; 50 sockets per room; 1 serialized queue additions per second per room for 10 seconds; operations start at the configured interval and are flushed before report.",
+    "warmup": "No synthetic mutation warm-up is included; join and schema index initialization occur before measurement.",
+    "trace": "Each queue add carries a UUID correlation ID. Server command receipt and monotonic processing duration are captured in the gateway; the durable QueueEvent carries the correlation ID and receipt wall timestamp; each broadcast envelope already carries server wall-clock ts.",
+    "clockMethod": "All API processes and Socket.IO clients run on one host and use the same OS wall clock; server/client wall timestamps are compared directly (no inter-host offset subtraction), with 1 ms clock-resolution allowance. No remote-host clock synchronization or deployment network behavior is established.",
+    "rateLimitHandling": "The benchmark uses a unique disposable database. To collect more than five segue samples per room despite the production limit of 10 playback actions/user/minute, the benchmark clears only the disposable database rate-limit counters before segue sample 16. Rate-limit throughput is not measured by this workload.",
+    "clientApplyAndRender": "Socket.IO driver applies the received queue snapshot to an in-memory client state and records a setImmediate render-callback proxy. It is not React/DOM/browser rendering and is not treated as actual rendered UI evidence.",
+    "percentiles": "Nearest-rank p50/p95/p99 (ceil(p*n), 1-based); per-metric sample count shown. Three rooms aggregate for queue latency, with room-level breakdown.",
+    "chatAndReconnect": "One unique persisted chat message per room delivered to every currently joined socket; disconnect a listener, send a second message, reconnect/join, and verify authoritative queue snapshot plus history recovery.",
+    "clientSourceAddresses": "Each room uses a distinct loopback source address (127.0.0.1 onward) so its 50 initial sockets remain below the shared per-IP connection-attempt limit; this does not model a single-NAT 150-client burst.",
+    "lifecycle": "Host end command, durable ended status, and end notification count observed per room.",
+    "syntheticDataOnly": true
+  },
+  "prdTargets": {
+    "queueSyncDriftMs": 100,
+    "webSocketFanoutFromServerReceiptMs": 500,
+    "designParticipantsPerRoom": 50,
+    "concurrentRoomDescription": "handful; local acceptance uses the configured room count",
+    "aiDjSegueP95Ms": 3000
+  },
+  "queueAcceptance": {
+    "queueStateSyncDrift": {
+      "samples": 30,
+      "p50Ms": 34.126,
+      "p95Ms": 108.143,
+      "p99Ms": 130.212,
+      "maxMs": 130.212
+    },
+    "serverProcessing": {
+      "samples": 30,
+      "p50Ms": 134.475,
+      "p95Ms": 229.718,
+      "p99Ms": 234.253,
+      "maxMs": 234.253
+    },
+    "serverReceiptToBroadcast": {
+      "samples": 30,
+      "p50Ms": 149,
+      "p95Ms": 260,
+      "p99Ms": 268,
+      "maxMs": 268
+    },
+    "serverReceiptToLastClientDelivery": {
+      "samples": 30,
+      "p50Ms": 222,
+      "p95Ms": 299,
+      "p99Ms": 314,
+      "maxMs": 314
+    },
+    "broadcastToLastClient": {
+      "samples": 30,
+      "p50Ms": 35,
+      "p95Ms": 110,
+      "p99Ms": 132,
+      "maxMs": 132
+    },
+    "ackRoundTrip": {
+      "samples": 30,
+      "p50Ms": 138.63,
+      "p95Ms": 236.426,
+      "p99Ms": 246.94,
+      "maxMs": 246.94
+    },
+    "clientStateApplication": {
+      "samples": 1500,
+      "p50Ms": 0.001,
+      "p95Ms": 0.003,
+      "p99Ms": 0.014,
+      "maxMs": 0.068
+    },
+    "simulatedRenderCallback": {
+      "samples": 1500,
+      "p50Ms": 0.934,
+      "p95Ms": 4.963,
+      "p99Ms": 15.957,
+      "maxMs": 22.677
+    },
+    "expectedRecipientEvents": 1500,
+    "receivedRecipientEvents": 1500,
+    "missingRecipientEvents": 0,
+    "duplicateRecipientEvents": 0,
+    "queueStateDivergence": 0,
+    "serverProcessingFailures": 0,
+    "maximumClockUncertaintyBoundMs": 1
+  },
+  "acceptanceEvaluation": {
+    "queueSyncDrift": {
+      "targetP95Ms": 100,
+      "measuredP95Ms": 108.143,
+      "status": "FAIL_LOCAL_PROXY",
+      "boundary": "Client in-memory state/render-callback proxy; not browser DOM rendering."
+    },
+    "webSocketFanout": {
+      "targetP95Ms": 500,
+      "measuredP95Ms": 299,
+      "status": "PASS_LOCAL_ONLY",
+      "boundary": "Server handler receipt to final Socket.IO client receipt on one host."
+    },
+    "roomCapacity": {
+      "targetClientsPerRoom": 50,
+      "measuredClientsPerRoom": 50,
+      "status": "EXERCISED_LOCAL_ONLY"
+    },
+    "concurrentRooms": {
+      "measuredRoomCount": 3,
+      "status": "EXERCISED_LOCAL_ONLY"
+    },
+    "aiDjSegue": {
+      "targetP95Ms": 3000,
+      "measuredSocketServiceProxyP95Ms": 165.029,
+      "status": "UNVERIFIED_TRUE_OUTRO_TO_RENDER_BOUNDARY"
+    },
+    "deploymentRepresentative": false
+  },
+  "queuePerRoom": [
+    {
+      "loungeId": "lg_908e093a736f5dbe",
+      "clients": 50,
+      "clientConnectionsByProcess": [
+        {
+          "port": 55142,
+          "connections": 25
+        },
+        {
+          "port": 55143,
+          "connections": 25
+        }
+      ],
+      "queueMutations": 10,
+      "queueStateSyncDrift": {
+        "samples": 10,
+        "p50Ms": 67.346,
+        "p95Ms": 130.212,
+        "p99Ms": 130.212,
+        "maxMs": 130.212
+      },
+      "serverProcessing": {
+        "samples": 10,
+        "p50Ms": 131.667,
+        "p95Ms": 229.718,
+        "p99Ms": 229.718,
+        "maxMs": 229.718
+      },
+      "serverReceiptToBroadcast": {
+        "samples": 10,
+        "p50Ms": 139,
+        "p95Ms": 214,
+        "p99Ms": 214,
+        "maxMs": 214
+      },
+      "serverReceiptToLastClientDelivery": {
+        "samples": 10,
+        "p50Ms": 214,
+        "p95Ms": 264,
+        "p99Ms": 264,
+        "maxMs": 264
+      },
+      "broadcastToLastClient": {
+        "samples": 10,
+        "p50Ms": 69,
+        "p95Ms": 132,
+        "p99Ms": 132,
+        "maxMs": 132
+      },
+      "clientStateApplication": {
+        "samples": 500,
+        "p50Ms": 0.001,
+        "p95Ms": 0.005,
+        "p99Ms": 0.016,
+        "maxMs": 0.039
+      },
+      "simulatedRenderCallback": {
+        "samples": 500,
+        "p50Ms": 0.843,
+        "p95Ms": 4.761,
+        "p99Ms": 15.957,
+        "maxMs": 16.868
+      },
+      "missingClientReceipts": 0,
+      "duplicateClientEvents": 0,
+      "queueStateDivergence": 0,
+      "maximumClockUncertaintyBoundMs": 1
+    },
+    {
+      "loungeId": "lg_83b184f3d9b13b65",
+      "clients": 50,
+      "clientConnectionsByProcess": [
+        {
+          "port": 55142,
+          "connections": 25
+        },
+        {
+          "port": 55143,
+          "connections": 25
+        }
+      ],
+      "queueMutations": 10,
+      "queueStateSyncDrift": {
+        "samples": 10,
+        "p50Ms": 19.28,
+        "p95Ms": 66.066,
+        "p99Ms": 66.066,
+        "maxMs": 66.066
+      },
+      "serverProcessing": {
+        "samples": 10,
+        "p50Ms": 132.751,
+        "p95Ms": 226.596,
+        "p99Ms": 226.596,
+        "maxMs": 226.596
+      },
+      "serverReceiptToBroadcast": {
+        "samples": 10,
+        "p50Ms": 158,
+        "p95Ms": 268,
+        "p99Ms": 268,
+        "maxMs": 268
+      },
+      "serverReceiptToLastClientDelivery": {
+        "samples": 10,
+        "p50Ms": 225,
+        "p95Ms": 280,
+        "p99Ms": 280,
+        "maxMs": 280
+      },
+      "broadcastToLastClient": {
+        "samples": 10,
+        "p50Ms": 21,
+        "p95Ms": 67,
+        "p99Ms": 67,
+        "maxMs": 67
+      },
+      "clientStateApplication": {
+        "samples": 500,
+        "p50Ms": 0.001,
+        "p95Ms": 0.003,
+        "p99Ms": 0.011,
+        "maxMs": 0.024
+      },
+      "simulatedRenderCallback": {
+        "samples": 500,
+        "p50Ms": 0.941,
+        "p95Ms": 4.623,
+        "p99Ms": 5.733,
+        "maxMs": 6.596
+      },
+      "missingClientReceipts": 0,
+      "duplicateClientEvents": 0,
+      "queueStateDivergence": 0,
+      "maximumClockUncertaintyBoundMs": 1
+    },
+    {
+      "loungeId": "lg_bc1714f3afcc00ff",
+      "clients": 50,
+      "clientConnectionsByProcess": [
+        {
+          "port": 55142,
+          "connections": 25
+        },
+        {
+          "port": 55143,
+          "connections": 25
+        }
+      ],
+      "queueMutations": 10,
+      "queueStateSyncDrift": {
+        "samples": 10,
+        "p50Ms": 38.592,
+        "p95Ms": 98.233,
+        "p99Ms": 98.233,
+        "maxMs": 98.233
+      },
+      "serverProcessing": {
+        "samples": 10,
+        "p50Ms": 134.475,
+        "p95Ms": 234.253,
+        "p99Ms": 234.253,
+        "maxMs": 234.253
+      },
+      "serverReceiptToBroadcast": {
+        "samples": 10,
+        "p50Ms": 147,
+        "p95Ms": 244,
+        "p99Ms": 244,
+        "maxMs": 244
+      },
+      "serverReceiptToLastClientDelivery": {
+        "samples": 10,
+        "p50Ms": 191,
+        "p95Ms": 314,
+        "p99Ms": 314,
+        "maxMs": 314
+      },
+      "broadcastToLastClient": {
+        "samples": 10,
+        "p50Ms": 43,
+        "p95Ms": 100,
+        "p99Ms": 100,
+        "maxMs": 100
+      },
+      "clientStateApplication": {
+        "samples": 500,
+        "p50Ms": 0.001,
+        "p95Ms": 0.003,
+        "p99Ms": 0.017,
+        "maxMs": 0.068
+      },
+      "simulatedRenderCallback": {
+        "samples": 500,
+        "p50Ms": 1.031,
+        "p95Ms": 5.423,
+        "p99Ms": 21.722,
+        "maxMs": 22.677
+      },
+      "missingClientReceipts": 0,
+      "duplicateClientEvents": 0,
+      "queueStateDivergence": 0,
+      "maximumClockUncertaintyBoundMs": 1
+    }
+  ],
+  "queueMutations": {
+    "requestedPerRoom": 10,
+    "requestedRatePerRoomHz": 1,
+    "requestedDurationSeconds": 10,
+    "measuredWorkloadElapsedMs": 9177.755,
+    "perMutationMeasurements": [
+      {
+        "traceId": "599a5e88-2a66-498f-947c-354a405e126f",
+        "loungeId": "lg_908e093a736f5dbe",
+        "trackId": "t_mr_000000",
+        "accepted": true,
+        "errorCode": null,
+        "ackRoundTripMs": 118.198,
+        "serverProcessingMs": 116.13,
+        "serverReceiptToBroadcastMs": 92,
+        "serverReceiptToLastClientDeliveryMs": 202,
+        "broadcastToLastClientMs": 110,
+        "clientStateApplicationMs": {
+          "samples": 50,
+          "p50Ms": 0.001,
+          "p95Ms": 0.013,
+          "p99Ms": 0.039,
+          "maxMs": 0.039
+        },
+        "simulatedRenderCallbackMs": {
+          "samples": 40,
+          "p50Ms": 0.58,
+          "p95Ms": 2.976,
+          "p99Ms": 3.39,
+          "maxMs": 3.39
+        },
+        "stateApplicationDriftMs": 108.38509999999951,
+        "simulatedRenderDriftMs": 108.14329999999973,
+        "clientReceipts": 50,
+        "expectedClientReceipts": 50,
+        "missingClientReceipts": 0,
+        "duplicateClientEvents": 0,
+        "queueStateDivergence": 0,
+        "clockUncertaintyBoundMs": 1
+      },
+      {
+        "traceId": "66edbd4f-99ec-45f1-ae25-3fa85a229a11",
+        "loungeId": "lg_908e093a736f5dbe",
+        "trackId": "t_mr_000003",
+        "accepted": true,
+        "errorCode": null,
+        "ackRoundTripMs": 133.447,
+        "serverProcessingMs": 131.667,
+        "serverReceiptToBroadcastMs": 108,
+        "serverReceiptToLastClientDeliveryMs": 214,
+        "broadcastToLastClientMs": 106,
+        "clientStateApplicationMs": {
+          "samples": 50,
+          "p50Ms": 0.002,
+          "p95Ms": 0.004,
+          "p99Ms": 0.007,
+          "maxMs": 0.007
+        },
+        "simulatedRenderCallbackMs": {
+          "samples": 42,
+          "p50Ms": 0.857,
+          "p95Ms": 2.698,
+          "p99Ms": 5.24,
+          "maxMs": 5.24
+        },
+        "stateApplicationDriftMs": 104.95900000000256,
+        "simulatedRenderDriftMs": 104.94050000000061,
+        "clientReceipts": 50,
+        "expectedClientReceipts": 50,
+        "missingClientReceipts": 0,
+        "duplicateClientEvents": 0,
+        "queueStateDivergence": 0,
+        "clockUncertaintyBoundMs": 1
+      },
+      {
+        "traceId": "e9554d8f-e9e4-468e-8e2e-e4bc92f1c64c",
+        "loungeId": "lg_908e093a736f5dbe",
+        "trackId": "t_mr_000006",
+        "accepted": true,
+        "errorCode": null,
+        "ackRoundTripMs": 125.717,
+        "serverProcessingMs": 123.508,
+        "serverReceiptToBroadcastMs": 78,
+        "serverReceiptToLastClientDeliveryMs": 210,
+        "broadcastToLastClientMs": 132,
+        "clientStateApplicationMs": {
+          "samples": 50,
+          "p50Ms": 0.002,
+          "p95Ms": 0.004,
+          "p99Ms": 0.009,
+          "maxMs": 0.009
+        },
+        "simulatedRenderCallbackMs": {
+          "samples": 47,
+          "p50Ms": 1.024,
+          "p95Ms": 16.504,
+          "p99Ms": 16.868,
+          "maxMs": 16.868
+        },
+        "stateApplicationDriftMs": 130.25,
+        "simulatedRenderDriftMs": 130.21220000000176,
+        "clientReceipts": 50,
+        "expectedClientReceipts": 50,
+        "missingClientReceipts": 0,
+        "duplicateClientEvents": 0,
+        "queueStateDivergence": 0,
+        "clockUncertaintyBoundMs": 1
+      },
+      {
+        "traceId": "b8d7d338-c7da-4e6b-9729-9a4922867d76",
+        "loungeId": "lg_908e093a736f5dbe",
+        "trackId": "t_mr_000009",
+        "accepted": true,
+        "errorCode": null,
+        "ackRoundTripMs": 170.845,
+        "serverProcessingMs": 167.083,
+        "serverReceiptToBroadcastMs": 214,
+        "serverReceiptToLastClientDeliveryMs": 238,
+        "broadcastToLastClientMs": 24,
+        "clientStateApplicationMs": {
+          "samples": 50,
+          "p50Ms": 0.001,
+          "p95Ms": 0.003,
+          "p99Ms": 0.013,
+          "maxMs": 0.013
+        },
+        "simulatedRenderCallbackMs": {
+          "samples": 40,
+          "p50Ms": 0.423,
+          "p95Ms": 1.606,
+          "p99Ms": 4.815,
+          "maxMs": 4.815
+        },
+        "stateApplicationDriftMs": 22.85320000000138,
+        "simulatedRenderDriftMs": 24.296599999997852,
+        "clientReceipts": 50,
+        "expectedClientReceipts": 50,
+        "missingClientReceipts": 0,
+        "duplicateClientEvents": 0,
+        "queueStateDivergence": 0,
+        "clockUncertaintyBoundMs": 1
+      },
+      {
+        "traceId": "7040c3d2-021c-4634-ac80-ecf0c287006f",
+        "loungeId": "lg_908e093a736f5dbe",
+        "trackId": "t_mr_000012",
+        "accepted": true,
+        "errorCode": null,
+        "ackRoundTripMs": 200.001,
+        "serverProcessingMs": 192.892,
+        "serverReceiptToBroadcastMs": 190,
+        "serverReceiptToLastClientDeliveryMs": 222,
+        "broadcastToLastClientMs": 32,
+        "clientStateApplicationMs": {
+          "samples": 50,
+          "p50Ms": 0.001,
+          "p95Ms": 0.013,
+          "p99Ms": 0.021,
+          "maxMs": 0.021
+        },
+        "simulatedRenderCallbackMs": {
+          "samples": 48,
+          "p50Ms": 1.209,
+          "p95Ms": 3.593,
+          "p99Ms": 4.076,
+          "maxMs": 4.076
+        },
+        "stateApplicationDriftMs": 30.185700000001816,
+        "simulatedRenderDriftMs": 32.78620000000228,
+        "clientReceipts": 50,
+        "expectedClientReceipts": 50,
+        "missingClientReceipts": 0,
+        "duplicateClientEvents": 0,
+        "queueStateDivergence": 0,
+        "clockUncertaintyBoundMs": 1
+      },
+      {
+        "traceId": "0eecdb1d-7c2f-4b24-aa92-770cde00692d",
+        "loungeId": "lg_908e093a736f5dbe",
+        "trackId": "t_mr_000015",
+        "accepted": true,
+        "errorCode": null,
+        "ackRoundTripMs": 204.025,
+        "serverProcessingMs": 200.647,
+        "serverReceiptToBroadcastMs": 165,
+        "serverReceiptToLastClientDeliveryMs": 244,
+        "broadcastToLastClientMs": 79,
+        "clientStateApplicationMs": {
+          "samples": 50,
+          "p50Ms": 0.002,
+          "p95Ms": 0.004,
+          "p99Ms": 0.021,
+          "maxMs": 0.021
+        },
+        "simulatedRenderCallbackMs": {
+          "samples": 49,
+          "p50Ms": 0.822,
+          "p95Ms": 4.569,
+          "p99Ms": 4.963,
+          "maxMs": 4.963
+        },
+        "stateApplicationDriftMs": 77.1114000000016,
+        "simulatedRenderDriftMs": 77.01929999999993,
+        "clientReceipts": 50,
+        "expectedClientReceipts": 50,
+        "missingClientReceipts": 0,
+        "duplicateClientEvents": 0,
+        "queueStateDivergence": 0,
+        "clockUncertaintyBoundMs": 1
+      },
+      {
+        "traceId": "71d101da-4e89-45ad-a47a-aa7ab41f53db",
+        "loungeId": "lg_908e093a736f5dbe",
+        "trackId": "t_mr_000018",
+        "accepted": true,
+        "errorCode": null,
+        "ackRoundTripMs": 234.634,
+        "serverProcessingMs": 229.718,
+        "serverReceiptToBroadcastMs": 195,
+        "serverReceiptToLastClientDeliveryMs": 264,
+        "broadcastToLastClientMs": 69,
+        "clientStateApplicationMs": {
+          "samples": 50,
+          "p50Ms": 0.001,
+          "p95Ms": 0.003,
+          "p99Ms": 0.005,
+          "maxMs": 0.005
+        },
+        "simulatedRenderCallbackMs": {
+          "samples": 34,
+          "p50Ms": 0.613,
+          "p95Ms": 1.957,
+          "p99Ms": 6.462,
+          "maxMs": 6.462
+        },
+        "stateApplicationDriftMs": 66.86170000000129,
+        "simulatedRenderDriftMs": 67.34619999999995,
+        "clientReceipts": 50,
+        "expectedClientReceipts": 50,
+        "missingClientReceipts": 0,
+        "duplicateClientEvents": 0,
+        "queueStateDivergence": 0,
+        "clockUncertaintyBoundMs": 1
+      },
+      {
+        "traceId": "fc8a6d19-1d9b-4ab6-a55b-eb52b94bbc1f",
+        "loungeId": "lg_908e093a736f5dbe",
+        "trackId": "t_mr_000021",
+        "accepted": true,
+        "errorCode": null,
+        "ackRoundTripMs": 101.421,
+        "serverProcessingMs": 97.924,
+        "serverReceiptToBroadcastMs": 139,
+        "serverReceiptToLastClientDeliveryMs": 167,
+        "broadcastToLastClientMs": 28,
+        "clientStateApplicationMs": {
+          "samples": 50,
+          "p50Ms": 0.001,
+          "p95Ms": 0.002,
+          "p99Ms": 0.011,
+          "maxMs": 0.011
+        },
+        "simulatedRenderCallbackMs": {
+          "samples": 43,
+          "p50Ms": 0.344,
+          "p95Ms": 0.87,
+          "p99Ms": 1.019,
+          "maxMs": 1.019
+        },
+        "stateApplicationDriftMs": 27.07839999999851,
+        "simulatedRenderDriftMs": 27.077499999999418,
+        "clientReceipts": 50,
+        "expectedClientReceipts": 50,
+        "missingClientReceipts": 0,
+        "duplicateClientEvents": 0,
+        "queueStateDivergence": 0,
+        "clockUncertaintyBoundMs": 1
+      },
+      {
+        "traceId": "90dedbb4-775b-4640-97b2-d2522ee8f1ad",
+        "loungeId": "lg_908e093a736f5dbe",
+        "trackId": "t_mr_000024",
+        "accepted": true,
+        "errorCode": null,
+        "ackRoundTripMs": 188.993,
+        "serverProcessingMs": 184.618,
+        "serverReceiptToBroadcastMs": 140,
+        "serverReceiptToLastClientDeliveryMs": 227,
+        "broadcastToLastClientMs": 87,
+        "clientStateApplicationMs": {
+          "samples": 50,
+          "p50Ms": 0.002,
+          "p95Ms": 0.005,
+          "p99Ms": 0.025,
+          "maxMs": 0.025
+        },
+        "simulatedRenderCallbackMs": {
+          "samples": 42,
+          "p50Ms": 1.235,
+          "p95Ms": 3.782,
+          "p99Ms": 4.638,
+          "maxMs": 4.638
+        },
+        "stateApplicationDriftMs": 84.72680000000037,
+        "simulatedRenderDriftMs": 84.71190000000206,
+        "clientReceipts": 50,
+        "expectedClientReceipts": 50,
+        "missingClientReceipts": 0,
+        "duplicateClientEvents": 0,
+        "queueStateDivergence": 0,
+        "clockUncertaintyBoundMs": 1
+      },
+      {
+        "traceId": "ffae7a67-7310-4f2f-a65c-0d50f1601f95",
+        "loungeId": "lg_908e093a736f5dbe",
+        "trackId": "t_mr_000027",
+        "accepted": true,
+        "errorCode": null,
+        "ackRoundTripMs": 116.438,
+        "serverProcessingMs": 113.102,
+        "serverReceiptToBroadcastMs": 123,
+        "serverReceiptToLastClientDeliveryMs": 131,
+        "broadcastToLastClientMs": 8,
+        "clientStateApplicationMs": {
+          "samples": 50,
+          "p50Ms": 0.001,
+          "p95Ms": 0.001,
+          "p99Ms": 0.013,
+          "maxMs": 0.013
+        },
+        "simulatedRenderCallbackMs": {
+          "samples": 36,
+          "p50Ms": 0.532,
+          "p95Ms": 1.356,
+          "p99Ms": 1.853,
+          "maxMs": 1.853
+        },
+        "stateApplicationDriftMs": 7.157599999998638,
+        "simulatedRenderDriftMs": 7.13550000000032,
+        "clientReceipts": 50,
+        "expectedClientReceipts": 50,
+        "missingClientReceipts": 0,
+        "duplicateClientEvents": 0,
+        "queueStateDivergence": 0,
+        "clockUncertaintyBoundMs": 1
+      },
+      {
+        "traceId": "12b309bb-380d-448e-a309-1805b0b13bb0",
+        "loungeId": "lg_83b184f3d9b13b65",
+        "trackId": "t_mr_000001",
+        "accepted": true,
+        "errorCode": null,
+        "ackRoundTripMs": 118.537,
+        "serverProcessingMs": 115.622,
+        "serverReceiptToBroadcastMs": 123,
+        "serverReceiptToLastClientDeliveryMs": 148,
+        "broadcastToLastClientMs": 25,
+        "clientStateApplicationMs": {
+          "samples": 50,
+          "p50Ms": 0.001,
+          "p95Ms": 0.002,
+          "p99Ms": 0.003,
+          "maxMs": 0.003
+        },
+        "simulatedRenderCallbackMs": {
+          "samples": 36,
+          "p50Ms": 1.332,
+          "p95Ms": 5.841,
+          "p99Ms": 5.959,
+          "maxMs": 5.959
+        },
+        "stateApplicationDriftMs": 22.640199999998003,
+        "simulatedRenderDriftMs": 20.811400000002322,
+        "clientReceipts": 50,
+        "expectedClientReceipts": 50,
+        "missingClientReceipts": 0,
+        "duplicateClientEvents": 0,
+        "queueStateDivergence": 0,
+        "clockUncertaintyBoundMs": 1
+      },
+      {
+        "traceId": "cee21df4-db9e-4065-b453-725ef4d5ccc2",
+        "loungeId": "lg_83b184f3d9b13b65",
+        "trackId": "t_mr_000004",
+        "accepted": true,
+        "errorCode": null,
+        "ackRoundTripMs": 135.99,
+        "serverProcessingMs": 132.751,
+        "serverReceiptToBroadcastMs": 169,
+        "serverReceiptToLastClientDeliveryMs": 228,
+        "broadcastToLastClientMs": 59,
+        "clientStateApplicationMs": {
+          "samples": 50,
+          "p50Ms": 0.001,
+          "p95Ms": 0.002,
+          "p99Ms": 0.002,
+          "maxMs": 0.002
+        },
+        "simulatedRenderCallbackMs": {
+          "samples": 40,
+          "p50Ms": 0.362,
+          "p95Ms": 1.386,
+          "p99Ms": 1.563,
+          "maxMs": 1.563
+        },
+        "stateApplicationDriftMs": 57.91489999999976,
+        "simulatedRenderDriftMs": 57.90620000000126,
+        "clientReceipts": 50,
+        "expectedClientReceipts": 50,
+        "missingClientReceipts": 0,
+        "duplicateClientEvents": 0,
+        "queueStateDivergence": 0,
+        "clockUncertaintyBoundMs": 1
+      },
+      {
+        "traceId": "d788378f-b9b5-4016-a961-16dcd1d0a093",
+        "loungeId": "lg_83b184f3d9b13b65",
+        "trackId": "t_mr_000007",
+        "accepted": true,
+        "errorCode": null,
+        "ackRoundTripMs": 128.127,
+        "serverProcessingMs": 123.837,
+        "serverReceiptToBroadcastMs": 158,
+        "serverReceiptToLastClientDeliveryMs": 225,
+        "broadcastToLastClientMs": 67,
+        "clientStateApplicationMs": {
+          "samples": 50,
+          "p50Ms": 0.001,
+          "p95Ms": 0.003,
+          "p99Ms": 0.003,
+          "maxMs": 0.003
+        },
+        "simulatedRenderCallbackMs": {
+          "samples": 39,
+          "p50Ms": 0.618,
+          "p95Ms": 1.512,
+          "p99Ms": 1.773,
+          "maxMs": 1.773
+        },
+        "stateApplicationDriftMs": 65.9887000000017,
+        "simulatedRenderDriftMs": 66.0656999999992,
+        "clientReceipts": 50,
+        "expectedClientReceipts": 50,
+        "missingClientReceipts": 0,
+        "duplicateClientEvents": 0,
+        "queueStateDivergence": 0,
+        "clockUncertaintyBoundMs": 1
+      },
+      {
+        "traceId": "5ef34cfc-0032-4e80-b95f-26a073c7dd91",
+        "loungeId": "lg_83b184f3d9b13b65",
+        "trackId": "t_mr_000010",
+        "accepted": true,
+        "errorCode": null,
+        "ackRoundTripMs": 170.583,
+        "serverProcessingMs": 164.48,
+        "serverReceiptToBroadcastMs": 149,
+        "serverReceiptToLastClientDeliveryMs": 177,
+        "broadcastToLastClientMs": 28,
+        "clientStateApplicationMs": {
+          "samples": 50,
+          "p50Ms": 0.001,
+          "p95Ms": 0.002,
+          "p99Ms": 0.003,
+          "maxMs": 0.003
+        },
+        "simulatedRenderCallbackMs": {
+          "samples": 39,
+          "p50Ms": 0.59,
+          "p95Ms": 1.672,
+          "p99Ms": 1.822,
+          "maxMs": 1.822
+        },
+        "stateApplicationDriftMs": 26.048099999999977,
+        "simulatedRenderDriftMs": 26.017299999999523,
+        "clientReceipts": 50,
+        "expectedClientReceipts": 50,
+        "missingClientReceipts": 0,
+        "duplicateClientEvents": 0,
+        "queueStateDivergence": 0,
+        "clockUncertaintyBoundMs": 1
+      },
+      {
+        "traceId": "d5f56a3c-d104-4c78-a878-a6deb23fa006",
+        "loungeId": "lg_83b184f3d9b13b65",
+        "trackId": "t_mr_000013",
+        "accepted": true,
+        "errorCode": null,
+        "ackRoundTripMs": 199.745,
+        "serverProcessingMs": 187.923,
+        "serverReceiptToBroadcastMs": 229,
+        "serverReceiptToLastClientDeliveryMs": 236,
+        "broadcastToLastClientMs": 7,
+        "clientStateApplicationMs": {
+          "samples": 50,
+          "p50Ms": 0.001,
+          "p95Ms": 0.004,
+          "p99Ms": 0.013,
+          "maxMs": 0.013
+        },
+        "simulatedRenderCallbackMs": {
+          "samples": 16,
+          "p50Ms": 0.645,
+          "p95Ms": 3.459,
+          "p99Ms": 3.459,
+          "maxMs": 3.459
+        },
+        "stateApplicationDriftMs": 6.0996999999988475,
+        "simulatedRenderDriftMs": 5.864699999998265,
+        "clientReceipts": 50,
+        "expectedClientReceipts": 50,
+        "missingClientReceipts": 0,
+        "duplicateClientEvents": 0,
+        "queueStateDivergence": 0,
+        "clockUncertaintyBoundMs": 1
+      },
+      {
+        "traceId": "aa65fc94-905b-4685-91c5-475da84b1a31",
+        "loungeId": "lg_83b184f3d9b13b65",
+        "trackId": "t_mr_000016",
+        "accepted": true,
+        "errorCode": null,
+        "ackRoundTripMs": 213.127,
+        "serverProcessingMs": 204.006,
+        "serverReceiptToBroadcastMs": 260,
+        "serverReceiptToLastClientDeliveryMs": 280,
+        "broadcastToLastClientMs": 20,
+        "clientStateApplicationMs": {
+          "samples": 50,
+          "p50Ms": 0.001,
+          "p95Ms": 0.005,
+          "p99Ms": 0.024,
+          "maxMs": 0.024
+        },
+        "simulatedRenderCallbackMs": {
+          "samples": 37,
+          "p50Ms": 0.681,
+          "p95Ms": 2.696,
+          "p99Ms": 3.675,
+          "maxMs": 3.675
+        },
+        "stateApplicationDriftMs": 19.310499999999593,
+        "simulatedRenderDriftMs": 19.279999999998836,
+        "clientReceipts": 50,
+        "expectedClientReceipts": 50,
+        "missingClientReceipts": 0,
+        "duplicateClientEvents": 0,
+        "queueStateDivergence": 0,
+        "clockUncertaintyBoundMs": 1
+      },
+      {
+        "traceId": "4d7c0de3-2311-4de3-a257-9ec9c43c954e",
+        "loungeId": "lg_83b184f3d9b13b65",
+        "trackId": "t_mr_000019",
+        "accepted": true,
+        "errorCode": null,
+        "ackRoundTripMs": 236.426,
+        "serverProcessingMs": 226.596,
+        "serverReceiptToBroadcastMs": 268,
+        "serverReceiptToLastClientDeliveryMs": 278,
+        "broadcastToLastClientMs": 10,
+        "clientStateApplicationMs": {
+          "samples": 50,
+          "p50Ms": 0.001,
+          "p95Ms": 0.002,
+          "p99Ms": 0.011,
+          "maxMs": 0.011
+        },
+        "simulatedRenderCallbackMs": {
+          "samples": 48,
+          "p50Ms": 1.698,
+          "p95Ms": 5.085,
+          "p99Ms": 5.474,
+          "maxMs": 5.474
+        },
+        "stateApplicationDriftMs": 9.00539999999819,
+        "simulatedRenderDriftMs": 8.958600000001752,
+        "clientReceipts": 50,
+        "expectedClientReceipts": 50,
+        "missingClientReceipts": 0,
+        "duplicateClientEvents": 0,
+        "queueStateDivergence": 0,
+        "clockUncertaintyBoundMs": 1
+      },
+      {
+        "traceId": "bedf6713-80ec-4ac5-b6ae-9a68bf04c967",
+        "loungeId": "lg_83b184f3d9b13b65",
+        "trackId": "t_mr_000022",
+        "accepted": true,
+        "errorCode": null,
+        "ackRoundTripMs": 104.361,
+        "serverProcessingMs": 100.997,
+        "serverReceiptToBroadcastMs": 94,
+        "serverReceiptToLastClientDeliveryMs": 158,
+        "broadcastToLastClientMs": 64,
+        "clientStateApplicationMs": {
+          "samples": 50,
+          "p50Ms": 0.001,
+          "p95Ms": 0.002,
+          "p99Ms": 0.011,
+          "maxMs": 0.011
+        },
+        "simulatedRenderCallbackMs": {
+          "samples": 43,
+          "p50Ms": 0.423,
+          "p95Ms": 1.586,
+          "p99Ms": 1.842,
+          "maxMs": 1.842
+        },
+        "stateApplicationDriftMs": 63.746500000001106,
+        "simulatedRenderDriftMs": 63.7461000000003,
+        "clientReceipts": 50,
+        "expectedClientReceipts": 50,
+        "missingClientReceipts": 0,
+        "duplicateClientEvents": 0,
+        "queueStateDivergence": 0,
+        "clockUncertaintyBoundMs": 1
+      },
+      {
+        "traceId": "4606f970-8f64-4949-845e-7786d09b71a6",
+        "loungeId": "lg_83b184f3d9b13b65",
+        "trackId": "t_mr_000025",
+        "accepted": true,
+        "errorCode": null,
+        "ackRoundTripMs": 195.739,
+        "serverProcessingMs": 189.083,
+        "serverReceiptToBroadcastMs": 249,
+        "serverReceiptToLastClientDeliveryMs": 263,
+        "broadcastToLastClientMs": 14,
+        "clientStateApplicationMs": {
+          "samples": 50,
+          "p50Ms": 0.001,
+          "p95Ms": 0.004,
+          "p99Ms": 0.023,
+          "maxMs": 0.023
+        },
+        "simulatedRenderCallbackMs": {
+          "samples": 46,
+          "p50Ms": 0.925,
+          "p95Ms": 2.09,
+          "p99Ms": 2.45,
+          "maxMs": 2.45
+        },
+        "stateApplicationDriftMs": 12.304400000000896,
+        "simulatedRenderDriftMs": 12.254799999998795,
+        "clientReceipts": 50,
+        "expectedClientReceipts": 50,
+        "missingClientReceipts": 0,
+        "duplicateClientEvents": 0,
+        "queueStateDivergence": 0,
+        "clockUncertaintyBoundMs": 1
+      },
+      {
+        "traceId": "afe20755-7a13-461b-a2a4-37a0f5f424a8",
+        "loungeId": "lg_83b184f3d9b13b65",
+        "trackId": "t_mr_000029",
+        "accepted": true,
+        "errorCode": null,
+        "ackRoundTripMs": 117.612,
+        "serverProcessingMs": 111.057,
+        "serverReceiptToBroadcastMs": 138,
+        "serverReceiptToLastClientDeliveryMs": 159,
+        "broadcastToLastClientMs": 21,
+        "clientStateApplicationMs": {
+          "samples": 50,
+          "p50Ms": 0.001,
+          "p95Ms": 0.002,
+          "p99Ms": 0.014,
+          "maxMs": 0.014
+        },
+        "simulatedRenderCallbackMs": {
+          "samples": 42,
+          "p50Ms": 1.325,
+          "p95Ms": 3.59,
+          "p99Ms": 4.676,
+          "maxMs": 4.676
+        },
+        "stateApplicationDriftMs": 16.949100000001636,
+        "simulatedRenderDriftMs": 12.32549999999901,
+        "clientReceipts": 50,
+        "expectedClientReceipts": 50,
+        "missingClientReceipts": 0,
+        "duplicateClientEvents": 0,
+        "queueStateDivergence": 0,
+        "clockUncertaintyBoundMs": 1
+      },
+      {
+        "traceId": "b2aecc28-ed72-4bc4-b6c1-ccae691d39a6",
+        "loungeId": "lg_bc1714f3afcc00ff",
+        "trackId": "t_mr_000002",
+        "accepted": true,
+        "errorCode": null,
+        "ackRoundTripMs": 122.78,
+        "serverProcessingMs": 118.456,
+        "serverReceiptToBroadcastMs": 119,
+        "serverReceiptToLastClientDeliveryMs": 146,
+        "broadcastToLastClientMs": 27,
+        "clientStateApplicationMs": {
+          "samples": 50,
+          "p50Ms": 0.001,
+          "p95Ms": 0.002,
+          "p99Ms": 0.002,
+          "maxMs": 0.002
+        },
+        "simulatedRenderCallbackMs": {
+          "samples": 36,
+          "p50Ms": 0.942,
+          "p95Ms": 3.291,
+          "p99Ms": 6.037,
+          "maxMs": 6.037
+        },
+        "stateApplicationDriftMs": 26.137399999999616,
+        "simulatedRenderDriftMs": 28.3666000000012,
+        "clientReceipts": 50,
+        "expectedClientReceipts": 50,
+        "missingClientReceipts": 0,
+        "duplicateClientEvents": 0,
+        "queueStateDivergence": 0,
+        "clockUncertaintyBoundMs": 1
+      },
+      {
+        "traceId": "8e0f264f-c5af-4b10-a867-569198ed8c8d",
+        "loungeId": "lg_bc1714f3afcc00ff",
+        "trackId": "t_mr_000005",
+        "accepted": true,
+        "errorCode": null,
+        "ackRoundTripMs": 138.63,
+        "serverProcessingMs": 134.475,
+        "serverReceiptToBroadcastMs": 147,
+        "serverReceiptToLastClientDeliveryMs": 156,
+        "broadcastToLastClientMs": 9,
+        "clientStateApplicationMs": {
+          "samples": 50,
+          "p50Ms": 0.001,
+          "p95Ms": 0.002,
+          "p99Ms": 0.003,
+          "maxMs": 0.003
+        },
+        "simulatedRenderCallbackMs": {
+          "samples": 19,
+          "p50Ms": 0.747,
+          "p95Ms": 5.166,
+          "p99Ms": 5.166,
+          "maxMs": 5.166
+        },
+        "stateApplicationDriftMs": 8.658899999998539,
+        "simulatedRenderDriftMs": 8.194400000000314,
+        "clientReceipts": 50,
+        "expectedClientReceipts": 50,
+        "missingClientReceipts": 0,
+        "duplicateClientEvents": 0,
+        "queueStateDivergence": 0,
+        "clockUncertaintyBoundMs": 1
+      },
+      {
+        "traceId": "1eae4a9d-9b05-485f-a39a-1653ac2559ae",
+        "loungeId": "lg_bc1714f3afcc00ff",
+        "trackId": "t_mr_000008",
+        "accepted": true,
+        "errorCode": null,
+        "ackRoundTripMs": 128.191,
+        "serverProcessingMs": 123.107,
+        "serverReceiptToBroadcastMs": 133,
+        "serverReceiptToLastClientDeliveryMs": 147,
+        "broadcastToLastClientMs": 14,
+        "clientStateApplicationMs": {
+          "samples": 50,
+          "p50Ms": 0.001,
+          "p95Ms": 0.002,
+          "p99Ms": 0.003,
+          "maxMs": 0.003
+        },
+        "simulatedRenderCallbackMs": {
+          "samples": 45,
+          "p50Ms": 0.512,
+          "p95Ms": 1.364,
+          "p99Ms": 1.602,
+          "maxMs": 1.602
+        },
+        "stateApplicationDriftMs": 12.728199999997742,
+        "simulatedRenderDriftMs": 12.710900000001857,
+        "clientReceipts": 50,
+        "expectedClientReceipts": 50,
+        "missingClientReceipts": 0,
+        "duplicateClientEvents": 0,
+        "queueStateDivergence": 0,
+        "clockUncertaintyBoundMs": 1
+      },
+      {
+        "traceId": "249bad0b-d41e-4fd9-9294-b887d9f714cd",
+        "loungeId": "lg_bc1714f3afcc00ff",
+        "trackId": "t_mr_000011",
+        "accepted": true,
+        "errorCode": null,
+        "ackRoundTripMs": 173.011,
+        "serverProcessingMs": 164.501,
+        "serverReceiptToBroadcastMs": 187,
+        "serverReceiptToLastClientDeliveryMs": 232,
+        "broadcastToLastClientMs": 45,
+        "clientStateApplicationMs": {
+          "samples": 50,
+          "p50Ms": 0.001,
+          "p95Ms": 0.003,
+          "p99Ms": 0.011,
+          "maxMs": 0.011
+        },
+        "simulatedRenderCallbackMs": {
+          "samples": 26,
+          "p50Ms": 0.764,
+          "p95Ms": 4.507,
+          "p99Ms": 5.238,
+          "maxMs": 5.238
+        },
+        "stateApplicationDriftMs": 44.84189999999944,
+        "simulatedRenderDriftMs": 45.64219999999841,
+        "clientReceipts": 50,
+        "expectedClientReceipts": 50,
+        "missingClientReceipts": 0,
+        "duplicateClientEvents": 0,
+        "queueStateDivergence": 0,
+        "clockUncertaintyBoundMs": 1
+      },
+      {
+        "traceId": "f1c94c0d-785f-4a41-9d46-485d4116692a",
+        "loungeId": "lg_bc1714f3afcc00ff",
+        "trackId": "t_mr_000014",
+        "accepted": true,
+        "errorCode": null,
+        "ackRoundTripMs": 201.894,
+        "serverProcessingMs": 190.606,
+        "serverReceiptToBroadcastMs": 205,
+        "serverReceiptToLastClientDeliveryMs": 249,
+        "broadcastToLastClientMs": 44,
+        "clientStateApplicationMs": {
+          "samples": 50,
+          "p50Ms": 0.001,
+          "p95Ms": 0.002,
+          "p99Ms": 0.018,
+          "maxMs": 0.018
+        },
+        "simulatedRenderCallbackMs": {
+          "samples": 40,
+          "p50Ms": 1.299,
+          "p95Ms": 3.296,
+          "p99Ms": 3.54,
+          "maxMs": 3.54
+        },
+        "stateApplicationDriftMs": 41.210399999999936,
+        "simulatedRenderDriftMs": 38.59200000000055,
+        "clientReceipts": 50,
+        "expectedClientReceipts": 50,
+        "missingClientReceipts": 0,
+        "duplicateClientEvents": 0,
+        "queueStateDivergence": 0,
+        "clockUncertaintyBoundMs": 1
+      },
+      {
+        "traceId": "4be9b558-d061-47cc-86c5-1f448e8c4523",
+        "loungeId": "lg_bc1714f3afcc00ff",
+        "trackId": "t_mr_000017",
+        "accepted": true,
+        "errorCode": null,
+        "ackRoundTripMs": 217.603,
+        "serverProcessingMs": 206.465,
+        "serverReceiptToBroadcastMs": 216,
+        "serverReceiptToLastClientDeliveryMs": 314,
+        "broadcastToLastClientMs": 98,
+        "clientStateApplicationMs": {
+          "samples": 50,
+          "p50Ms": 0.001,
+          "p95Ms": 0.004,
+          "p99Ms": 0.068,
+          "maxMs": 0.068
+        },
+        "simulatedRenderCallbackMs": {
+          "samples": 39,
+          "p50Ms": 0.657,
+          "p95Ms": 1.894,
+          "p99Ms": 2.084,
+          "maxMs": 2.084
+        },
+        "stateApplicationDriftMs": 96.83760000000257,
+        "simulatedRenderDriftMs": 96.76139999999941,
+        "clientReceipts": 50,
+        "expectedClientReceipts": 50,
+        "missingClientReceipts": 0,
+        "duplicateClientEvents": 0,
+        "queueStateDivergence": 0,
+        "clockUncertaintyBoundMs": 1
+      },
+      {
+        "traceId": "b38fcef8-eb3c-4703-87a3-db3b0954dbfd",
+        "loungeId": "lg_bc1714f3afcc00ff",
+        "trackId": "t_mr_000020",
+        "accepted": true,
+        "errorCode": null,
+        "ackRoundTripMs": 246.94,
+        "serverProcessingMs": 234.253,
+        "serverReceiptToBroadcastMs": 244,
+        "serverReceiptToLastClientDeliveryMs": 287,
+        "broadcastToLastClientMs": 43,
+        "clientStateApplicationMs": {
+          "samples": 50,
+          "p50Ms": 0.001,
+          "p95Ms": 0.013,
+          "p99Ms": 0.019,
+          "maxMs": 0.019
+        },
+        "simulatedRenderCallbackMs": {
+          "samples": 35,
+          "p50Ms": 0.998,
+          "p95Ms": 6.557,
+          "p99Ms": 6.774,
+          "maxMs": 6.774
+        },
+        "stateApplicationDriftMs": 41.0837999999967,
+        "simulatedRenderDriftMs": 39.66690000000017,
+        "clientReceipts": 50,
+        "expectedClientReceipts": 50,
+        "missingClientReceipts": 0,
+        "duplicateClientEvents": 0,
+        "queueStateDivergence": 0,
+        "clockUncertaintyBoundMs": 1
+      },
+      {
+        "traceId": "cbaef4fb-7a59-4b43-809f-9b698a648bc2",
+        "loungeId": "lg_bc1714f3afcc00ff",
+        "trackId": "t_mr_000023",
+        "accepted": true,
+        "errorCode": null,
+        "ackRoundTripMs": 105.251,
+        "serverProcessingMs": 100.278,
+        "serverReceiptToBroadcastMs": 114,
+        "serverReceiptToLastClientDeliveryMs": 191,
+        "broadcastToLastClientMs": 77,
+        "clientStateApplicationMs": {
+          "samples": 50,
+          "p50Ms": 0.001,
+          "p95Ms": 0.002,
+          "p99Ms": 0.014,
+          "maxMs": 0.014
+        },
+        "simulatedRenderCallbackMs": {
+          "samples": 42,
+          "p50Ms": 0.432,
+          "p95Ms": 1.297,
+          "p99Ms": 1.401,
+          "maxMs": 1.401
+        },
+        "stateApplicationDriftMs": 76.11639999999898,
+        "simulatedRenderDriftMs": 76.10280000000057,
+        "clientReceipts": 50,
+        "expectedClientReceipts": 50,
+        "missingClientReceipts": 0,
+        "duplicateClientEvents": 0,
+        "queueStateDivergence": 0,
+        "clockUncertaintyBoundMs": 1
+      },
+      {
+        "traceId": "827ee84c-6600-440d-b84c-27bcaed732e9",
+        "loungeId": "lg_bc1714f3afcc00ff",
+        "trackId": "t_mr_000026",
+        "accepted": true,
+        "errorCode": null,
+        "ackRoundTripMs": 198.21,
+        "serverProcessingMs": 189.029,
+        "serverReceiptToBroadcastMs": 199,
+        "serverReceiptToLastClientDeliveryMs": 299,
+        "broadcastToLastClientMs": 100,
+        "clientStateApplicationMs": {
+          "samples": 50,
+          "p50Ms": 0.001,
+          "p95Ms": 0.004,
+          "p99Ms": 0.024,
+          "maxMs": 0.024
+        },
+        "simulatedRenderCallbackMs": {
+          "samples": 40,
+          "p50Ms": 0.759,
+          "p95Ms": 2.225,
+          "p99Ms": 2.78,
+          "maxMs": 2.78
+        },
+        "stateApplicationDriftMs": 98.37289999999848,
+        "simulatedRenderDriftMs": 98.2329000000027,
+        "clientReceipts": 50,
+        "expectedClientReceipts": 50,
+        "missingClientReceipts": 0,
+        "duplicateClientEvents": 0,
+        "queueStateDivergence": 0,
+        "clockUncertaintyBoundMs": 1
+      },
+      {
+        "traceId": "e1937417-2c89-4e20-8f50-5a076e2d8057",
+        "loungeId": "lg_bc1714f3afcc00ff",
+        "trackId": "t_mr_000028",
+        "accepted": true,
+        "errorCode": null,
+        "ackRoundTripMs": 116.198,
+        "serverProcessingMs": 111.207,
+        "serverReceiptToBroadcastMs": 137,
+        "serverReceiptToLastClientDeliveryMs": 172,
+        "broadcastToLastClientMs": 35,
+        "clientStateApplicationMs": {
+          "samples": 50,
+          "p50Ms": 0.001,
+          "p95Ms": 0.002,
+          "p99Ms": 0.002,
+          "maxMs": 0.002
+        },
+        "simulatedRenderCallbackMs": {
+          "samples": 40,
+          "p50Ms": 0.702,
+          "p95Ms": 3.903,
+          "p99Ms": 4.164,
+          "maxMs": 4.164
+        },
+        "stateApplicationDriftMs": 34.13509999999951,
+        "simulatedRenderDriftMs": 34.12649999999849,
+        "clientReceipts": 50,
+        "expectedClientReceipts": 50,
+        "missingClientReceipts": 0,
+        "duplicateClientEvents": 0,
+        "queueStateDivergence": 0,
+        "clockUncertaintyBoundMs": 1
+      }
+    ]
+  },
+  "chatAndReconnect": [
+    {
+      "loungeId": "lg_908e093a736f5dbe",
+      "initialChatAckOk": true,
+      "initialChatAckRoundTripMs": 87.614,
+      "initialChatDeliveryLatencyMs": 594.966,
+      "chatRecipientsExpected": 50,
+      "chatRecipientsObservedExactlyOnce": 50,
+      "chatDuplicateRecipientEvents": 0,
+      "chatMissingRecipients": 0,
+      "disconnectedClientChatHistoryRecovered": true,
+      "reconnectJoinSucceeded": true,
+      "reconnectQueueSnapshotTracks": 20,
+      "reconnectForeignLoungeEvents": 0,
+      "queueStateAfterReconnect": [
+        "t_mr_current_0",
+        "t_mr_initial_0",
+        "t_mr_seg_0000",
+        "t_mr_seg_0001",
+        "t_mr_seg_0002",
+        "t_mr_seg_0003",
+        "t_mr_seg_0004",
+        "t_mr_seg_0005",
+        "t_mr_seg_0006",
+        "t_mr_seg_0007",
+        "t_mr_000000",
+        "t_mr_000003",
+        "t_mr_000006",
+        "t_mr_000009",
+        "t_mr_000012",
+        "t_mr_000015",
+        "t_mr_000018",
+        "t_mr_000021",
+        "t_mr_000024",
+        "t_mr_000027"
+      ]
+    },
+    {
+      "loungeId": "lg_83b184f3d9b13b65",
+      "initialChatAckOk": true,
+      "initialChatAckRoundTripMs": 144.138,
+      "initialChatDeliveryLatencyMs": 598.018,
+      "chatRecipientsExpected": 50,
+      "chatRecipientsObservedExactlyOnce": 50,
+      "chatDuplicateRecipientEvents": 0,
+      "chatMissingRecipients": 0,
+      "disconnectedClientChatHistoryRecovered": true,
+      "reconnectJoinSucceeded": true,
+      "reconnectQueueSnapshotTracks": 20,
+      "reconnectForeignLoungeEvents": 0,
+      "queueStateAfterReconnect": [
+        "t_mr_current_1",
+        "t_mr_initial_1",
+        "t_mr_seg_0008",
+        "t_mr_seg_0009",
+        "t_mr_seg_0010",
+        "t_mr_seg_0011",
+        "t_mr_seg_0012",
+        "t_mr_seg_0013",
+        "t_mr_seg_0014",
+        "t_mr_seg_0015",
+        "t_mr_000001",
+        "t_mr_000004",
+        "t_mr_000007",
+        "t_mr_000010",
+        "t_mr_000013",
+        "t_mr_000016",
+        "t_mr_000019",
+        "t_mr_000022",
+        "t_mr_000025",
+        "t_mr_000029"
+      ]
+    },
+    {
+      "loungeId": "lg_bc1714f3afcc00ff",
+      "initialChatAckOk": true,
+      "initialChatAckRoundTripMs": 86.76,
+      "initialChatDeliveryLatencyMs": 585.398,
+      "chatRecipientsExpected": 50,
+      "chatRecipientsObservedExactlyOnce": 50,
+      "chatDuplicateRecipientEvents": 0,
+      "chatMissingRecipients": 0,
+      "disconnectedClientChatHistoryRecovered": true,
+      "reconnectJoinSucceeded": true,
+      "reconnectQueueSnapshotTracks": 20,
+      "reconnectForeignLoungeEvents": 0,
+      "queueStateAfterReconnect": [
+        "t_mr_current_2",
+        "t_mr_initial_2",
+        "t_mr_seg_0016",
+        "t_mr_seg_0017",
+        "t_mr_seg_0018",
+        "t_mr_seg_0019",
+        "t_mr_seg_0020",
+        "t_mr_seg_0021",
+        "t_mr_seg_0022",
+        "t_mr_seg_0023",
+        "t_mr_000002",
+        "t_mr_000005",
+        "t_mr_000008",
+        "t_mr_000011",
+        "t_mr_000014",
+        "t_mr_000017",
+        "t_mr_000020",
+        "t_mr_000023",
+        "t_mr_000026",
+        "t_mr_000028"
+      ]
+    }
+  ],
+  "segue": {
+    "samplesRequested": 20,
+    "successfulSamples": 20,
+    "triggerToRemoteAnnouncement": {
+      "samples": 20,
+      "p50Ms": 91.228,
+      "p95Ms": 165.029,
+      "p99Ms": 170.221,
+      "maxMs": 170.221
+    },
+    "triggerAckRoundTrip": {
+      "samples": 20,
+      "p50Ms": 70.596,
+      "p95Ms": 126.956,
+      "p99Ms": 159.009,
+      "maxMs": 159.009
+    },
+    "notificationFailures": 0,
+    "samples": [
+      {
+        "loungeId": "lg_908e093a736f5dbe",
+        "ok": true,
+        "errorCode": null,
+        "triggerAckRoundTripMs": 159.009,
+        "triggerToLastRemoteAnnouncementMs": 170.221,
+        "announcementRecipientsExpected": 25,
+        "announcementRecipientsObserved": 25,
+        "playbackCompletionSucceeded": true,
+        "note": "Socket/service boundary with synthetic currentTs; no audio clock or browser render measurement."
+      },
+      {
+        "loungeId": "lg_83b184f3d9b13b65",
+        "ok": true,
+        "errorCode": null,
+        "triggerAckRoundTripMs": 91.198,
+        "triggerToLastRemoteAnnouncementMs": 92.636,
+        "announcementRecipientsExpected": 25,
+        "announcementRecipientsObserved": 25,
+        "playbackCompletionSucceeded": true,
+        "note": "Socket/service boundary with synthetic currentTs; no audio clock or browser render measurement."
+      },
+      {
+        "loungeId": "lg_bc1714f3afcc00ff",
+        "ok": true,
+        "errorCode": null,
+        "triggerAckRoundTripMs": 74.556,
+        "triggerToLastRemoteAnnouncementMs": 92.283,
+        "announcementRecipientsExpected": 25,
+        "announcementRecipientsObserved": 25,
+        "playbackCompletionSucceeded": true,
+        "note": "Socket/service boundary with synthetic currentTs; no audio clock or browser render measurement."
+      },
+      {
+        "loungeId": "lg_908e093a736f5dbe",
+        "ok": true,
+        "errorCode": null,
+        "triggerAckRoundTripMs": 59.802,
+        "triggerToLastRemoteAnnouncementMs": 91.228,
+        "announcementRecipientsExpected": 25,
+        "announcementRecipientsObserved": 25,
+        "playbackCompletionSucceeded": true,
+        "note": "Socket/service boundary with synthetic currentTs; no audio clock or browser render measurement."
+      },
+      {
+        "loungeId": "lg_83b184f3d9b13b65",
+        "ok": true,
+        "errorCode": null,
+        "triggerAckRoundTripMs": 109.277,
+        "triggerToLastRemoteAnnouncementMs": 119.246,
+        "announcementRecipientsExpected": 25,
+        "announcementRecipientsObserved": 25,
+        "playbackCompletionSucceeded": true,
+        "note": "Socket/service boundary with synthetic currentTs; no audio clock or browser render measurement."
+      },
+      {
+        "loungeId": "lg_bc1714f3afcc00ff",
+        "ok": true,
+        "errorCode": null,
+        "triggerAckRoundTripMs": 126.956,
+        "triggerToLastRemoteAnnouncementMs": 165.029,
+        "announcementRecipientsExpected": 25,
+        "announcementRecipientsObserved": 25,
+        "playbackCompletionSucceeded": true,
+        "note": "Socket/service boundary with synthetic currentTs; no audio clock or browser render measurement."
+      },
+      {
+        "loungeId": "lg_908e093a736f5dbe",
+        "ok": true,
+        "errorCode": null,
+        "triggerAckRoundTripMs": 68.256,
+        "triggerToLastRemoteAnnouncementMs": 74.394,
+        "announcementRecipientsExpected": 25,
+        "announcementRecipientsObserved": 25,
+        "playbackCompletionSucceeded": true,
+        "note": "Socket/service boundary with synthetic currentTs; no audio clock or browser render measurement."
+      },
+      {
+        "loungeId": "lg_83b184f3d9b13b65",
+        "ok": true,
+        "errorCode": null,
+        "triggerAckRoundTripMs": 66.406,
+        "triggerToLastRemoteAnnouncementMs": 88.699,
+        "announcementRecipientsExpected": 25,
+        "announcementRecipientsObserved": 25,
+        "playbackCompletionSucceeded": true,
+        "note": "Socket/service boundary with synthetic currentTs; no audio clock or browser render measurement."
+      },
+      {
+        "loungeId": "lg_bc1714f3afcc00ff",
+        "ok": true,
+        "errorCode": null,
+        "triggerAckRoundTripMs": 69.612,
+        "triggerToLastRemoteAnnouncementMs": 88.337,
+        "announcementRecipientsExpected": 25,
+        "announcementRecipientsObserved": 25,
+        "playbackCompletionSucceeded": true,
+        "note": "Socket/service boundary with synthetic currentTs; no audio clock or browser render measurement."
+      },
+      {
+        "loungeId": "lg_908e093a736f5dbe",
+        "ok": true,
+        "errorCode": null,
+        "triggerAckRoundTripMs": 70.596,
+        "triggerToLastRemoteAnnouncementMs": 123.882,
+        "announcementRecipientsExpected": 25,
+        "announcementRecipientsObserved": 25,
+        "playbackCompletionSucceeded": true,
+        "note": "Socket/service boundary with synthetic currentTs; no audio clock or browser render measurement."
+      },
+      {
+        "loungeId": "lg_83b184f3d9b13b65",
+        "ok": true,
+        "errorCode": null,
+        "triggerAckRoundTripMs": 74.005,
+        "triggerToLastRemoteAnnouncementMs": 85.052,
+        "announcementRecipientsExpected": 25,
+        "announcementRecipientsObserved": 25,
+        "playbackCompletionSucceeded": true,
+        "note": "Socket/service boundary with synthetic currentTs; no audio clock or browser render measurement."
+      },
+      {
+        "loungeId": "lg_bc1714f3afcc00ff",
+        "ok": true,
+        "errorCode": null,
+        "triggerAckRoundTripMs": 65.655,
+        "triggerToLastRemoteAnnouncementMs": 84.626,
+        "announcementRecipientsExpected": 25,
+        "announcementRecipientsObserved": 25,
+        "playbackCompletionSucceeded": true,
+        "note": "Socket/service boundary with synthetic currentTs; no audio clock or browser render measurement."
+      },
+      {
+        "loungeId": "lg_908e093a736f5dbe",
+        "ok": true,
+        "errorCode": null,
+        "triggerAckRoundTripMs": 63.635,
+        "triggerToLastRemoteAnnouncementMs": 66.444,
+        "announcementRecipientsExpected": 25,
+        "announcementRecipientsObserved": 25,
+        "playbackCompletionSucceeded": true,
+        "note": "Socket/service boundary with synthetic currentTs; no audio clock or browser render measurement."
+      },
+      {
+        "loungeId": "lg_83b184f3d9b13b65",
+        "ok": true,
+        "errorCode": null,
+        "triggerAckRoundTripMs": 67.303,
+        "triggerToLastRemoteAnnouncementMs": 69.398,
+        "announcementRecipientsExpected": 25,
+        "announcementRecipientsObserved": 25,
+        "playbackCompletionSucceeded": true,
+        "note": "Socket/service boundary with synthetic currentTs; no audio clock or browser render measurement."
+      },
+      {
+        "loungeId": "lg_bc1714f3afcc00ff",
+        "ok": true,
+        "errorCode": null,
+        "triggerAckRoundTripMs": 62.233,
+        "triggerToLastRemoteAnnouncementMs": 78.755,
+        "announcementRecipientsExpected": 25,
+        "announcementRecipientsObserved": 25,
+        "playbackCompletionSucceeded": true,
+        "note": "Socket/service boundary with synthetic currentTs; no audio clock or browser render measurement."
+      },
+      {
+        "loungeId": "lg_908e093a736f5dbe",
+        "ok": true,
+        "errorCode": null,
+        "triggerAckRoundTripMs": 65.092,
+        "triggerToLastRemoteAnnouncementMs": 113.259,
+        "announcementRecipientsExpected": 25,
+        "announcementRecipientsObserved": 25,
+        "playbackCompletionSucceeded": true,
+        "note": "Socket/service boundary with synthetic currentTs; no audio clock or browser render measurement."
+      },
+      {
+        "loungeId": "lg_83b184f3d9b13b65",
+        "ok": true,
+        "errorCode": null,
+        "triggerAckRoundTripMs": 74.486,
+        "triggerToLastRemoteAnnouncementMs": 89.359,
+        "announcementRecipientsExpected": 25,
+        "announcementRecipientsObserved": 25,
+        "playbackCompletionSucceeded": true,
+        "note": "Socket/service boundary with synthetic currentTs; no audio clock or browser render measurement."
+      },
+      {
+        "loungeId": "lg_bc1714f3afcc00ff",
+        "ok": true,
+        "errorCode": null,
+        "triggerAckRoundTripMs": 107.706,
+        "triggerToLastRemoteAnnouncementMs": 140.213,
+        "announcementRecipientsExpected": 25,
+        "announcementRecipientsObserved": 25,
+        "playbackCompletionSucceeded": true,
+        "note": "Socket/service boundary with synthetic currentTs; no audio clock or browser render measurement."
+      },
+      {
+        "loungeId": "lg_908e093a736f5dbe",
+        "ok": true,
+        "errorCode": null,
+        "triggerAckRoundTripMs": 109.588,
+        "triggerToLastRemoteAnnouncementMs": 150.947,
+        "announcementRecipientsExpected": 25,
+        "announcementRecipientsObserved": 25,
+        "playbackCompletionSucceeded": true,
+        "note": "Socket/service boundary with synthetic currentTs; no audio clock or browser render measurement."
+      },
+      {
+        "loungeId": "lg_83b184f3d9b13b65",
+        "ok": true,
+        "errorCode": null,
+        "triggerAckRoundTripMs": 104.031,
+        "triggerToLastRemoteAnnouncementMs": 98.507,
+        "announcementRecipientsExpected": 25,
+        "announcementRecipientsObserved": 25,
+        "playbackCompletionSucceeded": true,
+        "note": "Socket/service boundary with synthetic currentTs; no audio clock or browser render measurement."
+      }
+    ],
+    "disposition": "Service/socket proxy only; no real media clock or browser render measurement. P95 target remains unverified even if the proxy is below 3000 ms."
+  },
+  "lifecycle": [
+    {
+      "loungeId": "lg_908e093a736f5dbe",
+      "hostEndAcknowledged": true,
+      "hostEndErrorCode": null,
+      "persistedEnded": true,
+      "endEventRecipientsExpected": 50,
+      "endEventRecipientsObserved": 50,
+      "missingEndNotifications": 0,
+      "endAckRoundTripMs": 269.079
+    },
+    {
+      "loungeId": "lg_83b184f3d9b13b65",
+      "hostEndAcknowledged": true,
+      "hostEndErrorCode": null,
+      "persistedEnded": true,
+      "endEventRecipientsExpected": 50,
+      "endEventRecipientsObserved": 50,
+      "missingEndNotifications": 0,
+      "endAckRoundTripMs": 269.508
+    },
+    {
+      "loungeId": "lg_bc1714f3afcc00ff",
+      "hostEndAcknowledged": true,
+      "hostEndErrorCode": null,
+      "persistedEnded": true,
+      "endEventRecipientsExpected": 50,
+      "endEventRecipientsObserved": 50,
+      "missingEndNotifications": 0,
+      "endAckRoundTripMs": 270.204
+    }
+  ],
+  "durableReconciliation": {
+    "acknowledgedAdds": 30,
+    "missingDurableEvents": 0,
+    "duplicateDurableEvents": 0,
+    "successfulAddsMissingFromPersistedQueue": 0,
+    "clientQueueSnapshotDivergences": 0,
+    "roomDetails": [
+      {
+        "loungeId": "lg_908e093a736f5dbe",
+        "acknowledgedAdds": 10,
+        "persistedAddEvents": 10,
+        "uniqueCorrelationIds": 10,
+        "persistedQueueTracks": 20,
+        "outboxBacklog": 0,
+        "allMembersRenderedPersistedSnapshot": true
+      },
+      {
+        "loungeId": "lg_83b184f3d9b13b65",
+        "acknowledgedAdds": 10,
+        "persistedAddEvents": 10,
+        "uniqueCorrelationIds": 10,
+        "persistedQueueTracks": 20,
+        "outboxBacklog": 0,
+        "allMembersRenderedPersistedSnapshot": true
+      },
+      {
+        "loungeId": "lg_bc1714f3afcc00ff",
+        "acknowledgedAdds": 10,
+        "persistedAddEvents": 10,
+        "uniqueCorrelationIds": 10,
+        "persistedQueueTracks": 20,
+        "outboxBacklog": 0,
+        "allMembersRenderedPersistedSnapshot": true
+      }
+    ]
+  },
+  "prdDisposition": {
+    "queueSyncDrift": "Local simulated-client state/render-callback proxy only; not a production or browser-rendered acceptance result.",
+    "webSocketFanout": "Estimated from instrumented server receipt and envelope broadcast time plus per-client clock offset correction; local shared-host clock. Production network fan-out remains unverified.",
+    "roomCapacity": "Exercised at PRD design capacity in each local room; not production capacity proof.",
+    "multipleRooms": "3 rooms exercised concurrently across two app processes against one local MongoDB instance.",
+    "segue": "Measured separately from queue event fan-out and remains unverified at the true outro-entry-to-browser-rendered boundary."
+  }
+}

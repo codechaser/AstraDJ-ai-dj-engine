@@ -1,0 +1,357 @@
+{
+  "runId": "runtime-mvxau1gp-fbd72678",
+  "name": "api_catalog_reads",
+  "status": "completed",
+  "startedAt": "2026-11-01T03:57:31.093Z",
+  "endedAt": "2026-11-01T03:57:39.692Z",
+  "durationMs": 8598.99,
+  "result": {
+    "endpoint": "GET /api/v1/tracks?limit=10",
+    "warmupRequests": 25,
+    "configuredSamplesPerProcessPerLevel": 500,
+    "levels": [
+      {
+        "concurrencyPerProcess": 1,
+        "aggregate": {
+          "requests": 1000,
+          "successes": 1000,
+          "failures": 0,
+          "timeouts": 0,
+          "errorRatePercent": 0,
+          "responseLatencyMs": {
+            "samples": 1000,
+            "p50Ms": 6.97,
+            "p95Ms": 9.733,
+            "p99Ms": 12.036,
+            "maxMs": 24.607
+          },
+          "successLatencyMs": {
+            "samples": 1000,
+            "p50Ms": 6.97,
+            "p95Ms": 9.733,
+            "p99Ms": 12.036,
+            "maxMs": 24.607
+          },
+          "serverAppPathLatencyMs": {
+            "samples": 1000,
+            "p50Ms": 5.179,
+            "p95Ms": 7.292,
+            "p99Ms": 8.624,
+            "maxMs": 13.214
+          }
+        },
+        "perProcess": [
+          {
+            "processOrdinal": 1,
+            "requests": 500,
+            "successes": 500,
+            "failures": 0,
+            "timeouts": 0,
+            "errorRatePercent": 0,
+            "httpStatusCounts": {
+              "200": 500
+            },
+            "responseLatencyMs": {
+              "samples": 500,
+              "p50Ms": 6.959,
+              "p95Ms": 9.803,
+              "p99Ms": 12.104,
+              "maxMs": 17.375
+            },
+            "successLatencyMs": {
+              "samples": 500,
+              "p50Ms": 6.959,
+              "p95Ms": 9.803,
+              "p99Ms": 12.104,
+              "maxMs": 17.375
+            },
+            "failedLatencyMs": {
+              "samples": 0,
+              "p50Ms": null,
+              "p95Ms": null,
+              "p99Ms": null,
+              "maxMs": null
+            },
+            "serverAppPathLatencyMs": {
+              "samples": 500,
+              "p50Ms": 5.185,
+              "p95Ms": 7.311,
+              "p99Ms": 8.673,
+              "maxMs": 11.348
+            },
+            "requestsPerSecond": 136.12
+          },
+          {
+            "processOrdinal": 2,
+            "requests": 500,
+            "successes": 500,
+            "failures": 0,
+            "timeouts": 0,
+            "errorRatePercent": 0,
+            "httpStatusCounts": {
+              "200": 500
+            },
+            "responseLatencyMs": {
+              "samples": 500,
+              "p50Ms": 6.992,
+              "p95Ms": 9.593,
+              "p99Ms": 11.02,
+              "maxMs": 24.607
+            },
+            "successLatencyMs": {
+              "samples": 500,
+              "p50Ms": 6.992,
+              "p95Ms": 9.593,
+              "p99Ms": 11.02,
+              "maxMs": 24.607
+            },
+            "failedLatencyMs": {
+              "samples": 0,
+              "p50Ms": null,
+              "p95Ms": null,
+              "p99Ms": null,
+              "maxMs": null
+            },
+            "serverAppPathLatencyMs": {
+              "samples": 500,
+              "p50Ms": 5.161,
+              "p95Ms": 7.245,
+              "p99Ms": 8.364,
+              "maxMs": 13.214
+            },
+            "requestsPerSecond": 137.8
+          }
+        ],
+        "note": "Normal rate limiting remained active; only disposable Mongo counters were cleared between batches. DB subquery spans are not instrumented."
+      },
+      {
+        "concurrencyPerProcess": 10,
+        "aggregate": {
+          "requests": 1000,
+          "successes": 1000,
+          "failures": 0,
+          "timeouts": 0,
+          "errorRatePercent": 0,
+          "responseLatencyMs": {
+            "samples": 1000,
+            "p50Ms": 38.462,
+            "p95Ms": 54.079,
+            "p99Ms": 62.203,
+            "maxMs": 69.478
+          },
+          "successLatencyMs": {
+            "samples": 1000,
+            "p50Ms": 38.462,
+            "p95Ms": 54.079,
+            "p99Ms": 62.203,
+            "maxMs": 69.478
+          },
+          "serverAppPathLatencyMs": {
+            "samples": 1000,
+            "p50Ms": 30.609,
+            "p95Ms": 40.616,
+            "p99Ms": 46.88,
+            "maxMs": 52.439
+          }
+        },
+        "perProcess": [
+          {
+            "processOrdinal": 1,
+            "requests": 500,
+            "successes": 500,
+            "failures": 0,
+            "timeouts": 0,
+            "errorRatePercent": 0,
+            "httpStatusCounts": {
+              "200": 500
+            },
+            "responseLatencyMs": {
+              "samples": 500,
+              "p50Ms": 38.592,
+              "p95Ms": 57.608,
+              "p99Ms": 63.4,
+              "maxMs": 69.478
+            },
+            "successLatencyMs": {
+              "samples": 500,
+              "p50Ms": 38.592,
+              "p95Ms": 57.608,
+              "p99Ms": 63.4,
+              "maxMs": 69.478
+            },
+            "failedLatencyMs": {
+              "samples": 0,
+              "p50Ms": null,
+              "p95Ms": null,
+              "p99Ms": null,
+              "maxMs": null
+            },
+            "serverAppPathLatencyMs": {
+              "samples": 500,
+              "p50Ms": 30.455,
+              "p95Ms": 44.216,
+              "p99Ms": 47.777,
+              "maxMs": 52.439
+            },
+            "requestsPerSecond": 215.23
+          },
+          {
+            "processOrdinal": 2,
+            "requests": 500,
+            "successes": 500,
+            "failures": 0,
+            "timeouts": 0,
+            "errorRatePercent": 0,
+            "httpStatusCounts": {
+              "200": 500
+            },
+            "responseLatencyMs": {
+              "samples": 500,
+              "p50Ms": 38.289,
+              "p95Ms": 51.809,
+              "p99Ms": 56.026,
+              "maxMs": 64.887
+            },
+            "successLatencyMs": {
+              "samples": 500,
+              "p50Ms": 38.289,
+              "p95Ms": 51.809,
+              "p99Ms": 56.026,
+              "maxMs": 64.887
+            },
+            "failedLatencyMs": {
+              "samples": 0,
+              "p50Ms": null,
+              "p95Ms": null,
+              "p99Ms": null,
+              "maxMs": null
+            },
+            "serverAppPathLatencyMs": {
+              "samples": 500,
+              "p50Ms": 30.726,
+              "p95Ms": 39.469,
+              "p99Ms": 41.579,
+              "maxMs": 44.812
+            },
+            "requestsPerSecond": 218.08
+          }
+        ],
+        "note": "Normal rate limiting remained active; only disposable Mongo counters were cleared between batches. DB subquery spans are not instrumented."
+      },
+      {
+        "concurrencyPerProcess": 25,
+        "aggregate": {
+          "requests": 1000,
+          "successes": 1000,
+          "failures": 0,
+          "timeouts": 0,
+          "errorRatePercent": 0,
+          "responseLatencyMs": {
+            "samples": 1000,
+            "p50Ms": 93.849,
+            "p95Ms": 115.499,
+            "p99Ms": 123.184,
+            "maxMs": 132.808
+          },
+          "successLatencyMs": {
+            "samples": 1000,
+            "p50Ms": 93.849,
+            "p95Ms": 115.499,
+            "p99Ms": 123.184,
+            "maxMs": 132.808
+          },
+          "serverAppPathLatencyMs": {
+            "samples": 1000,
+            "p50Ms": 76.015,
+            "p95Ms": 91.528,
+            "p99Ms": 97.656,
+            "maxMs": 127.768
+          }
+        },
+        "perProcess": [
+          {
+            "processOrdinal": 1,
+            "requests": 500,
+            "successes": 500,
+            "failures": 0,
+            "timeouts": 0,
+            "errorRatePercent": 0,
+            "httpStatusCounts": {
+              "200": 500
+            },
+            "responseLatencyMs": {
+              "samples": 500,
+              "p50Ms": 94.368,
+              "p95Ms": 118.415,
+              "p99Ms": 123.468,
+              "maxMs": 132.577
+            },
+            "successLatencyMs": {
+              "samples": 500,
+              "p50Ms": 94.368,
+              "p95Ms": 118.415,
+              "p99Ms": 123.468,
+              "maxMs": 132.577
+            },
+            "failedLatencyMs": {
+              "samples": 0,
+              "p50Ms": null,
+              "p95Ms": null,
+              "p99Ms": null,
+              "maxMs": null
+            },
+            "serverAppPathLatencyMs": {
+              "samples": 500,
+              "p50Ms": 77.059,
+              "p95Ms": 91.757,
+              "p99Ms": 112.322,
+              "maxMs": 117.587
+            },
+            "requestsPerSecond": 220.27
+          },
+          {
+            "processOrdinal": 2,
+            "requests": 500,
+            "successes": 500,
+            "failures": 0,
+            "timeouts": 0,
+            "errorRatePercent": 0,
+            "httpStatusCounts": {
+              "200": 500
+            },
+            "responseLatencyMs": {
+              "samples": 500,
+              "p50Ms": 93.411,
+              "p95Ms": 111.496,
+              "p99Ms": 119.141,
+              "maxMs": 132.808
+            },
+            "successLatencyMs": {
+              "samples": 500,
+              "p50Ms": 93.411,
+              "p95Ms": 111.496,
+              "p99Ms": 119.141,
+              "maxMs": 132.808
+            },
+            "failedLatencyMs": {
+              "samples": 0,
+              "p50Ms": null,
+              "p95Ms": null,
+              "p99Ms": null,
+              "maxMs": null
+            },
+            "serverAppPathLatencyMs": {
+              "samples": 500,
+              "p50Ms": 74.971,
+              "p95Ms": 90.733,
+              "p99Ms": 97.339,
+              "maxMs": 127.768
+            },
+            "requestsPerSecond": 224.81
+          }
+        ],
+        "note": "Normal rate limiting remained active; only disposable Mongo counters were cleared between batches. DB subquery spans are not instrumented."
+      }
+    ]
+  }
+}

@@ -65,6 +65,12 @@ liveTest('two independent queue and Soundclash instances coordinate through Mong
       { trackId: 't_9402', title: 'Next', artist: 'Fixture', durationSeconds: 180, acoustic: { bpm: 120, camelotKey: '8A', energy: 0.5, valence: 0.5 }, timeline: [] },
       ...['t_9403', 't_9404', 't_9405', 't_9406', 't_9407', 't_9408', 't_9409', 't_9410'].map((trackId) => ({ trackId, title: trackId, artist: 'Fixture', durationSeconds: 180, acoustic: null, timeline: [] })),
     ]);
+    // Service-level transition/Soundclash calls model commands issued by a
+    // connected Lounge gateway, so their fixture needs the same shared Host
+    // presence that production socket commands require.
+    await Promise.all([loungeId, battleLoungeId].map((id) => queueRepository.upsertGatewayPresence(id, {
+      gatewayId: 'multi-instance-integration-host', userId: host, generation: `host-session-${id}`, socketCount: 1,
+    })));
 
     const queueA = createQueueService(queueRepository);
     const queueB = createQueueService(queueRepository);
@@ -81,6 +87,8 @@ liveTest('two independent queue and Soundclash instances coordinate through Mong
     const addedEvents = await QueueEvent.find({ loungeId, type: 'track.added' }).sort({ seq: 1 }).lean();
     expect(addedEvents.map((event) => event.payload.trackId).sort()).toEqual(['t_9403', 't_9404']);
     expect(new Set(addedEvents.map((event) => event.seq)).size).toBe(2);
+    expect((await queueRepository.listQueueEventsAfter(loungeId, addedEvents[0].seq)).map((event) => event.seq)).toEqual([addedEvents[1].seq]);
+    expect(await queueRepository.listQueueEventsAfter(loungeId, addedEvents[1].seq)).toEqual([]);
 
     await Promise.all([
       queueA.vote({ lounge, actor: { id: listeners[0], role: 'Listener' }, trackId: 't_9402', value: 1 }),
@@ -109,11 +117,11 @@ liveTest('two independent queue and Soundclash instances coordinate through Mong
     expect((await queueB.snapshot(lounge)).nowPlaying.trackId).toBe('t_9402');
     expect((await DJLounge.findOne({ loungeId }).lean()).pendingSegue).toBeUndefined();
 
-    const originalUpdateOne = QueueEvent.updateOne;
-    QueueEvent.updateOne = async (...args) => { throw new Error('simulated process failure during outbox projection'); };
+    const originalFindOneAndUpdate = QueueEvent.findOneAndUpdate;
+    QueueEvent.findOneAndUpdate = () => ({ lean: async () => { throw new Error('simulated process failure during outbox projection'); } });
     try {
       await expect(queueA.addTrack({ lounge, actor: { id: host, role: 'Host' }, trackId: 't_9407' })).rejects.toThrow('simulated process failure');
-    } finally { QueueEvent.updateOne = originalUpdateOne; }
+    } finally { QueueEvent.findOneAndUpdate = originalFindOneAndUpdate; }
     expect(await QueueEvent.countDocuments({ loungeId, type: 'track.added', 'payload.trackId': 't_9407' })).toBe(0);
     await runQueueWorker(uri, loungeId, '__drain__', host);
     expect(await QueueEvent.countDocuments({ loungeId, type: 'track.added', 'payload.trackId': 't_9407' })).toBe(1);

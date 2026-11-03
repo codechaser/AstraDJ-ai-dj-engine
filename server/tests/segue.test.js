@@ -7,6 +7,7 @@ const users = new Map();
 const lounges = new Map();
 const tracks = new Map();
 const metricEvents = [];
+const queueEvents = [];
 
 class Query {
   constructor(value) { this.value = value; }
@@ -35,16 +36,29 @@ const LoungeMetricEvent = {
   findOne: jest.fn(({ loungeId, requestId }) => new Query(metricEvents.find((event) => event.loungeId === loungeId && event.requestId === requestId) ?? null)),
   create: jest.fn(async (event) => { metricEvents.push(structuredClone(event)); return event; }),
 };
+const QueueEvent = {
+  find: jest.fn(({ loungeId: requestedLoungeId, type }) => ({
+    events: queueEvents.filter((event) => event.loungeId === requestedLoungeId && event.type === type),
+    sort() { this.events.sort((a, b) => a.seq - b.seq); return this; },
+    limit() { return this; },
+    lean() { return Promise.resolve(this.events); },
+  })),
+};
 
 await jest.unstable_mockModule('../src/models/User.js', () => ({ User }));
 await jest.unstable_mockModule('../src/models/RefreshToken.js', () => ({ RefreshToken }));
 await jest.unstable_mockModule('../src/models/Track.js', () => ({ Track, CAMELOT_KEYS: camelotKeys }));
 await jest.unstable_mockModule('../src/models/DJLounge.js', () => ({ DJLounge }));
 await jest.unstable_mockModule('../src/models/LoungeMetricEvent.js', () => ({ LoungeMetricEvent }));
+await jest.unstable_mockModule('../src/models/QueueEvent.js', () => ({ QueueEvent }));
 
 const { app } = await import('../src/app.js');
 const { createSegueService, segueService } = await import('../src/services/segueService.js');
 const { createRoomSentimentService } = await import('../src/services/roomSentimentService.js');
+const { createMemoryRateLimiter } = await import('./support/memoryRateLimiter.js');
+const rateLimiter = createMemoryRateLimiter();
+app.locals.rateLimiter = rateLimiter;
+app.locals.entitlementService = { assertFeature: async () => {}, consumeAiDjRequest: async () => ({ used: 1, limit: 100 }) };
 
 const loungeId = 'lg_123456789abc';
 const memberId = '507f1f77bcf86cd799439011';
@@ -79,8 +93,9 @@ function accessToken(userId) {
   return jwt.sign({}, process.env.JWT_ACCESS_SECRET, { subject: userId, issuer: 'astradj-api', audience: 'astradj-client', expiresIn: 900, algorithm: 'HS256' });
 }
 
-beforeEach(() => {
-  users.clear(); lounges.clear(); tracks.clear(); metricEvents.length = 0;
+beforeEach(async () => {
+  await rateLimiter.clear();
+  users.clear(); lounges.clear(); tracks.clear(); metricEvents.length = 0; queueEvents.length = 0;
   users.set(memberId, { _id: memberId, id: memberId, email: 'member@example.invalid', displayName: 'Lounge Member', role: 'Listener' });
   users.set(outsiderId, { _id: outsiderId, id: outsiderId, email: 'outsider@example.invalid', displayName: 'Outsider', role: 'Listener' });
   lounges.set(loungeId, {

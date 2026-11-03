@@ -12,7 +12,7 @@ export async function askTrackQuestion(req, res) {
     throw new ApiError(400, 'VALIDATION_ERROR', 'A valid Idempotency-Key header is required');
   }
   const result = await loungeCommandCoordinator.run(req.params.id, async () => {
-    const answer = await metadataRetrievalService.answerQuestion({ loungeId: req.params.id, userId: req.user.id, question: req.body.question });
+    const answer = await metadataRetrievalService.answerQuestion({ loungeId: req.params.id, userId: req.user.id, question: req.body.question, rateLimiter: req.app.locals.rateLimiter });
     await loungeMetricEventService.recordAiQuestion({ loungeId: req.params.id, userId: req.user.id, requestId });
     return answer;
   });

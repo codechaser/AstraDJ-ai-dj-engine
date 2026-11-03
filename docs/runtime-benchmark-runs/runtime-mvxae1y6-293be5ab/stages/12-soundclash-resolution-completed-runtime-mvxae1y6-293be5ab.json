@@ -1,0 +1,16 @@
+{
+  "runId": "runtime-mvxae1y6-293be5ab",
+  "name": "soundclash_resolution",
+  "status": "completed",
+  "startedAt": "2026-11-01T03:46:06.662Z",
+  "endedAt": "2026-11-01T03:46:06.908Z",
+  "durationMs": 245.904,
+  "result": {
+    "battleId": "fac43621-ba57-48e6-8214-335413b9c1e7",
+    "winningTrackId": "t_cc0_thoughtness",
+    "ackMs": 148.38,
+    "peerBroadcastMs": 136.26,
+    "persistedResolutionEvents": 1,
+    "persistedStatus": "resolved"
+  }
+}

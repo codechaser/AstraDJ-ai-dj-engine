@@ -24,6 +24,21 @@ def analyze(path: Path):
     raw, original_rate = sf.read(path, dtype='float32', always_2d=True)
     duration = len(raw) / original_rate
     mono = raw.mean(axis=1)
+    rms_envelope_windows = []
+    window_starts = sorted(set((
+        0,
+        max(0, duration * 0.25 - 15),
+        max(0, duration * 0.5 - 15),
+        max(0, duration * 0.75 - 15),
+        max(0, duration - 30),
+    )))
+    for start in window_starts:
+        segment = mono[int(start * original_rate):int(min(start + 30, duration) * original_rate)]
+        rms_envelope_windows.append({
+            'start_seconds': round(start, 3),
+            'duration_seconds': len(segment) / original_rate,
+            'tempo_candidates': rms_envelope_tempo_candidates(segment, original_rate),
+        })
     rate = 11025
     if original_rate != rate:
         mono = signal.resample_poly(mono, rate, original_rate)
@@ -75,8 +90,47 @@ def analyze(path: Path):
         'rms_float32': float(np.sqrt(np.mean(mono * mono))),
         'peak_float32': float(np.max(np.abs(mono))),
         'key_candidates': keys, 'tempo_candidates': tempos[:8],
-        'method': 'stereo mean to mono; resample_poly to 11025 Hz; STFT magnitude chroma vs Krumhansl-Schmuckler templates at 8192/16384 FFT; positive spectral-flux autocorrelation for tempo candidates',
+        'rms_envelope_tempo_windows': rms_envelope_windows,
+        'method': 'stereo mean to mono; resample_poly to 11025 Hz; STFT magnitude chroma vs Krumhansl-Schmuckler templates at 8192/16384 FFT; positive spectral-flux autocorrelation for tempo candidates; independent high-pass RMS-envelope autocorrelation in up to five 30-second windows',
     }
+
+
+def rms_envelope_tempo_candidates(mono: np.ndarray, sample_rate: int):
+    """Independent tempo cross-check using high-pass RMS-envelope novelty.
+
+    The 30-second segment is resampled to 22,050 Hz, high-pass filtered with a
+    fourth-order 100 Hz Butterworth filter, and analyzed in 20 ms RMS frames at
+    5 ms hops. Positive RMS changes are autocorrelated over 55–220 BPM. These
+    are candidate pulses, not ground-truth tempo labels.
+    """
+    target_rate = 22050
+    if sample_rate != target_rate:
+        mono = signal.resample_poly(mono, target_rate, sample_rate).astype(np.float32)
+        sample_rate = target_rate
+    filtered = signal.sosfilt(signal.butter(4, 100, fs=sample_rate, btype='highpass', output='sos'), mono)
+    frame_length = 440
+    hop = 110
+    if len(filtered) < frame_length * 4:
+        return []
+    frames = np.lib.stride_tricks.sliding_window_view(filtered, frame_length)[::hop]
+    rms = np.sqrt(np.mean(frames * frames, axis=1))
+    novelty = np.maximum(0, np.diff(rms, prepend=rms[0]))
+    novelty = signal.detrend(novelty)
+    novelty -= novelty.mean()
+    autocorrelation = signal.correlate(novelty, novelty, mode='full', method='fft')[len(novelty) - 1:]
+    autocorrelation /= autocorrelation[0] + 1e-12
+    frames_per_second = sample_rate / hop
+    min_lag = round(frames_per_second * 60 / 220)
+    max_lag = round(frames_per_second * 60 / 55)
+    peaks = []
+    for lag in range(max(min_lag, 1), min(max_lag, len(autocorrelation) - 1)):
+        if autocorrelation[lag] >= autocorrelation[lag - 1] and autocorrelation[lag] >= autocorrelation[lag + 1]:
+            peaks.append({
+                'bpm': float(60 * frames_per_second / lag),
+                'autocorrelation': float(autocorrelation[lag]),
+            })
+    peaks.sort(key=lambda item: item['autocorrelation'], reverse=True)
+    return peaks[:4]
 
 
 def main():

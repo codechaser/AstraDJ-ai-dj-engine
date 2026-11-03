@@ -28,6 +28,11 @@ export const config = {
   nodeEnv: process.env.NODE_ENV ?? 'development',
   clientOrigin,
   segueOutroWindowSeconds,
+  razorpayKeyId: process.env.RAZORPAY_KEY_ID ?? null,
+  razorpayKeySecret: process.env.RAZORPAY_KEY_SECRET ?? null,
+  razorpayWebhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET ?? null,
+  razorpayPlanPremiumId: process.env.RAZORPAY_PLAN_PREMIUM_ID ?? null,
+  razorpayPlanProId: process.env.RAZORPAY_PLAN_PRO_ID ?? null,
   get cookieSecure() { return this.nodeEnv === 'production'; },
 };
 

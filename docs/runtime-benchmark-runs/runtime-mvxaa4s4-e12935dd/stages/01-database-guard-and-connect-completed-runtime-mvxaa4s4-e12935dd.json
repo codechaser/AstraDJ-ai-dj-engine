@@ -1,0 +1,16 @@
+{
+  "runId": "runtime-mvxaa4s4-e12935dd",
+  "name": "database_guard_and_connect",
+  "status": "completed",
+  "startedAt": "2026-11-01T03:41:55.396Z",
+  "endedAt": "2026-11-01T03:41:55.463Z",
+  "durationMs": 66.73,
+  "result": {
+    "guardPassed": true,
+    "configuredHostname": "127.0.0.1",
+    "generatedDatabaseName": "astradj_test_runtimebench_bbb87e5baef2490a992a342f2008dfc7",
+    "topology": "standalone",
+    "mongoVersion": "8.2.5",
+    "freeMemoryGiB": 0.72
+  }
+}

@@ -122,8 +122,13 @@ await jest.unstable_mockModule('../src/services/recommendationRepository.js', ()
 }));
 const { app } = await import('../src/app.js');
 const { seedTracks } = await import('../src/seed/tracks.js');
+const { createMemoryRateLimiter } = await import('./support/memoryRateLimiter.js');
+const rateLimiter = createMemoryRateLimiter();
+app.locals.rateLimiter = rateLimiter;
+app.locals.entitlementService = { current: async () => ({ usageLimits: { loungeCapacity: 50 } }) };
 
-beforeEach(() => {
+beforeEach(async () => {
+  await rateLimiter.clear();
   users.clear(); refreshTokens.clear(); tracks.clear(); lounges.clear(); interactions.splice(0);
   jest.clearAllMocks();
 });
@@ -224,23 +229,42 @@ describe('track catalog and acoustic-profile HTTP contract', () => {
     expect(profile.status).toBe(200);
     expect(profile.body).toEqual({
       trackId: 't_2001', title: 'Night Drive', artist: 'Nova Circuit',
-      durationSeconds: 224,
-      acoustic: { bpm: 124, camelotKey: '8A', energy: 0.78, valence: 0.65 },
+      durationSeconds: 190, audioAssetUrl: '/audio/city-lights-at-night-demo.mp3',
+      acoustic: { bpm: 89, camelotKey: '5A', energy: 0.4763426781, valence: 0.4707313478 },
+      acousticEvidence: expect.objectContaining({ license: 'CC0-1.0', sourceTrackId: 'City lights at night', assetSha256: '47587641db646708facb4e636564ad0e4ff9970db86950c38425aad3b86b4b91' }),
       timeline: expect.arrayContaining([expect.objectContaining({ ts: 12, type: 'sample_credit' })]),
     });
   });
 
-  test('exposes profile provenance for source-backed playable demo tracks', async () => {
-    for (const [trackId, url, bpm, title] of [
-      ['t_cc0_ivory_atlas', '/audio/ivory-atlas.mp3', 143, 'Ivory Atlas'],
-      ['t_cc0_faded_fortress', '/audio/faded-fortress.mp3', 142, 'Faded Fortress'],
+  test('catalog returns local audio paths and source-matched durations for the three demo substitutions', async () => {
+    const expected = [
+      ['t_2001', 'Night Drive', '/audio/city-lights-at-night-demo.mp3', 190],
+      ['t_2002', 'Blue Horizon', '/audio/fresh-start-demo.mp3', 120],
+      ['t_2003', 'Afterglow Avenue', '/audio/swaying-demo.mp3', 328],
+    ];
+    for (const [trackId, title, audioAssetUrl, durationSeconds] of expected) {
+      const response = await request(app).get(`/api/v1/tracks?q=${encodeURIComponent(title)}`);
+      expect(response.status).toBe(200);
+      expect(response.body.items).toContainEqual(expect.objectContaining({ trackId, title, audioAssetUrl, durationSeconds }));
+    }
+    for (const trackId of ['t_2002', 't_2003']) {
+      const unavailable = await request(app).get(`/api/v1/tracks/${trackId}/acoustic-profile`);
+      expect(unavailable.status).toBe(409);
+      expect(unavailable.body.error.code).toBe('ACOUSTIC_PROFILE_UNAVAILABLE');
+    }
+  });
+
+  test('catalog keeps tracks with withdrawn/unverified media but does not publish audio or acoustic claims', async () => {
+    for (const [trackId, title, durationSeconds] of [
+      ['t_cc0_ivory_atlas', 'Ivory Atlas', 180],
+      ['t_cc0_faded_fortress', 'Faded Fortress', 120],
     ]) {
       const catalog = await request(app).get(`/api/v1/tracks?q=${encodeURIComponent(title)}`);
       const item = catalog.body.items.find((track) => track.trackId === trackId);
-      expect(item).toMatchObject({ audioAssetUrl: url, durationSeconds: title === 'Ivory Atlas' ? 180 : 120, acoustic: { bpm, camelotKey: '8A' } });
+      expect(item).toMatchObject({ audioAssetUrl: null, durationSeconds, acoustic: null, acousticEvidence: null });
       const profile = await request(app).get(`/api/v1/tracks/${trackId}/acoustic-profile`);
-      expect(profile.status).toBe(200);
-      expect(profile.body.acousticEvidence).toMatchObject({ license: 'CC0-1.0', sourceTrackId: expect.any(String), assetSha256: expect.any(String) });
+      expect(profile.status).toBe(409);
+      expect(profile.body.error.code).toBe('ACOUSTIC_PROFILE_UNAVAILABLE');
     }
   });
 
@@ -290,7 +314,7 @@ describe('track catalog and acoustic-profile HTTP contract', () => {
     expect((await request(app).get('/api/v1/tracks/t_cc0_thoughtness/acoustic-profile')).body.acoustic).toEqual(created.body.acoustic);
     const { matchSegueCandidate } = await import('../src/services/acousticMatcher.js');
     expect(matchSegueCandidate(tracks.get('t_2001'), tracks.get('t_cc0_thoughtness')).eligible).toBe(false);
-    expect(matchSegueCandidate(tracks.get('t_2001'), tracks.get('t_cc0_thoughtness')).reasonCode).toBe('CAMELOT_INCOMPATIBLE');
+    expect(matchSegueCandidate(tracks.get('t_2001'), tracks.get('t_cc0_thoughtness')).reasonCode).toBe('BPM_INCOMPATIBLE');
     const updated = await request(app).put('/api/v1/tracks/t_cc0_thoughtness/acoustic-profile')
       .set('Authorization', `Bearer ${token}`)
       .send({ acoustic: { bpm: 126, camelotKey: '9A', energy: 0.7, valence: 0.8 } });
@@ -370,7 +394,7 @@ describe('authenticated interaction collection and private recommendations', () 
 
   test('records co-listener links only from member reports of the current track in the same live Lounge', async () => {
     const a = await request(app).post('/api/v1/interactions').set('Authorization', `Bearer ${tokenA}`).send({ trackId: 't_2001', playedSeconds: 100, completed: false, liked: true, loungeId: 'lg_123456789abc' });
-    const b = await request(app).post('/api/v1/interactions').set('Authorization', `Bearer ${tokenB}`).send({ trackId: 't_2001', playedSeconds: 200, completed: false, liked: true, loungeId: 'lg_123456789abc' });
+    const b = await request(app).post('/api/v1/interactions').set('Authorization', `Bearer ${tokenB}`).send({ trackId: 't_2001', playedSeconds: 180, completed: false, liked: true, loungeId: 'lg_123456789abc' });
     expect(a.status).toBe(201);
     expect(b.status).toBe(201);
     expect(b.body.coListenerCount).toBe(1);
@@ -383,12 +407,12 @@ describe('authenticated interaction collection and private recommendations', () 
   });
 
   test('recommendation reads are scoped to the authenticated user and validate limits', async () => {
-    await request(app).post('/api/v1/interactions').set('Authorization', `Bearer ${tokenA}`).send({ trackId: 't_2001', playedSeconds: 224, completed: true, liked: true });
-    await request(app).post('/api/v1/interactions').set('Authorization', `Bearer ${tokenA}`).send({ trackId: 't_2002', playedSeconds: 208, completed: true, liked: true });
+    await request(app).post('/api/v1/interactions').set('Authorization', `Bearer ${tokenA}`).send({ trackId: 't_2001', playedSeconds: 190, completed: true, liked: true });
+    await request(app).post('/api/v1/interactions').set('Authorization', `Bearer ${tokenA}`).send({ trackId: 't_cc0_ivory_atlas', playedSeconds: 180, completed: true, liked: true });
     const response = await request(app).get('/api/v1/recommendations?limit=2').set('Authorization', `Bearer ${tokenA}`);
     expect(response.status).toBe(200);
-    expect(response.body.strategy).toBe('content_based');
-    expect(response.body.items).toHaveLength(2);
+    expect(response.body.strategy).toBe('cold_start_empty');
+    expect(response.body.items).toHaveLength(0);
     expect(JSON.stringify(response.body)).not.toContain(userA);
     expect(JSON.stringify(response.body)).not.toContain(userB);
     expect((await request(app).get(`/api/v1/recommendations?userId=${userB}`).set('Authorization', `Bearer ${tokenA}`)).status).toBe(400);
@@ -435,4 +459,3 @@ describe('DJ Lounge creation contract', () => {
     expect((await request(app).post('/api/v1/lounges').set('Authorization', `Bearer ${hostToken}`).send({ ...payload, seedTrackId: 't_9999' })).status).toBe(404);
   });
 });
-

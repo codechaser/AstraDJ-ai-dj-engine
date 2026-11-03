@@ -1,0 +1,1021 @@
+{
+  "schemaVersion": 1,
+  "runId": "runtime-mvxaa4s4-e12935dd",
+  "status": "running",
+  "createdAt": "2026-11-01T03:41:55.387Z",
+  "manifest": {
+    "benchmark": "AstraDJ runtime performance and Soundclash diagnostics",
+    "runId": "runtime-mvxaa4s4-e12935dd",
+    "startedAt": "2026-11-01T03:41:55.254Z",
+    "startingHead": "2e74782d074f0ec26c0b380f58184f45c5c0fba7",
+    "worktree": {
+      "dirtyAtStart": true,
+      "statusEntryCount": 100
+    },
+    "runtime": {
+      "node": "v24.22.2",
+      "platform": "win32-x64",
+      "cpuModel": "Intel(R) Core(TM) i5-8350U CPU @ 1.70GHz",
+      "logicalCpuCount": 8,
+      "totalMemoryGiB": 7.88,
+      "freeMemoryGiBAtStart": 0.72,
+      "expectedApiProcesses": 2,
+      "expectedSockets": 51,
+      "browserStressLaunched": false
+    },
+    "database": {
+      "configuredTarget": {
+        "configured": true,
+        "parseable": true,
+        "protocol": "mongodb:",
+        "hostname": "127.0.0.1",
+        "database": "astradj_test_base",
+        "loopback": true
+      },
+      "generatedIsolatedDatabase": "astradj_test_runtimebench_bbb87e5baef2490a992a342f2008dfc7",
+      "uriRecorded": false,
+      "requiredHostScope": "loopback",
+      "requiredNamespace": "astradj_test_*"
+    },
+    "configuration": {
+      "apiSamplesPerProcessPerConcurrency": 500,
+      "apiConcurrencyPerProcess": [
+        1,
+        10,
+        25
+      ],
+      "queueSamplesPerConcurrency": 100,
+      "queueConcurrency": [
+        1,
+        5,
+        10,
+        20
+      ],
+      "segueSamples": 20,
+      "soundclashVoters": 20,
+      "warmupRequestsPerProcess": 25,
+      "normalRateLimitsEnabled": true
+    },
+    "prdTargets": {
+      "apiP95Ms": 200,
+      "segueTransitionP95Ms": 3000,
+      "queueSyncDriftMs": 100,
+      "websocketFanoutMs": 500
+    },
+    "method": {
+      "percentiles": "nearest-rank",
+      "api": "Loopback GET /api/v1/tracks?limit=10; Server-Timing is app-path duration; Mongo subquery spans are not instrumented.",
+      "segue": "Authenticated Host outro-trigger and playback.ended commands using source-evidenced seed pair; no browser or actual audio.",
+      "soundclash": "Authenticated Listener submissions with {trackId}; inspect durable snapshot, outbox and projected QueueEvent after ack/timeout.",
+      "rateLimits": "Production limiter remains enabled; only isolated database counters reset between workload batches."
+    },
+    "stagePlan": [
+      "database_guard_and_connect",
+      "seed_fixture",
+      "start_api_processes",
+      "connect_and_join_clients",
+      "api_catalog_reads",
+      "segue_measurement",
+      "queue_mutations",
+      "outbox_stage_observations",
+      "soundclash_submit_first",
+      "soundclash_submit_second",
+      "soundclash_vote_wave",
+      "soundclash_resolution",
+      "gateway_restart_recovery",
+      "final_reconciliation",
+      "cleanup"
+    ]
+  },
+  "stagePlan": [
+    {
+      "name": "database_guard_and_connect",
+      "status": "completed"
+    },
+    {
+      "name": "seed_fixture",
+      "status": "completed"
+    },
+    {
+      "name": "start_api_processes",
+      "status": "completed"
+    },
+    {
+      "name": "connect_and_join_clients",
+      "status": "completed"
+    },
+    {
+      "name": "api_catalog_reads",
+      "status": "completed"
+    },
+    {
+      "name": "segue_measurement",
+      "status": "pending"
+    },
+    {
+      "name": "queue_mutations",
+      "status": "pending"
+    },
+    {
+      "name": "outbox_stage_observations",
+      "status": "pending"
+    },
+    {
+      "name": "soundclash_submit_first",
+      "status": "pending"
+    },
+    {
+      "name": "soundclash_submit_second",
+      "status": "pending"
+    },
+    {
+      "name": "soundclash_vote_wave",
+      "status": "pending"
+    },
+    {
+      "name": "soundclash_resolution",
+      "status": "pending"
+    },
+    {
+      "name": "gateway_restart_recovery",
+      "status": "pending"
+    },
+    {
+      "name": "final_reconciliation",
+      "status": "pending"
+    },
+    {
+      "name": "cleanup",
+      "status": "pending"
+    }
+  ],
+  "stages": [
+    {
+      "name": "database_guard_and_connect",
+      "status": "completed",
+      "startedAt": "2026-11-01T03:41:55.396Z",
+      "endedAt": "2026-11-01T03:41:55.463Z",
+      "durationMs": 66.73,
+      "result": {
+        "guardPassed": true,
+        "configuredHostname": "127.0.0.1",
+        "generatedDatabaseName": "astradj_test_runtimebench_bbb87e5baef2490a992a342f2008dfc7",
+        "topology": "standalone",
+        "mongoVersion": "8.2.5",
+        "freeMemoryGiB": 0.72
+      }
+    },
+    {
+      "name": "seed_fixture",
+      "status": "completed",
+      "startedAt": "2026-11-01T03:41:55.473Z",
+      "endedAt": "2026-11-01T03:41:56.163Z",
+      "durationMs": 690.273,
+      "result": {
+        "usersCreated": 50,
+        "roleCounts": {
+          "Host": 1,
+          "Co-DJ": 25,
+          "Listener": 24
+        },
+        "realSeedTracks": 7,
+        "syntheticQueueTracks": 450,
+        "syntheticTracksHaveAcousticProfiles": false,
+        "loungeId": "lg_8e574e487bc5a846",
+        "initialNowPlayingTrackId": "t_cc0_ivory_atlas",
+        "initialNextUpTrackId": "t_cc0_faded_fortress",
+        "seguePair": [
+          {
+            "trackId": "t_cc0_ivory_atlas",
+            "bpm": 143,
+            "camelotKey": "8A",
+            "source": "https://kaino.dev/api/library/music/creator-workout-01",
+            "license": "CC0-1.0"
+          },
+          {
+            "trackId": "t_cc0_faded_fortress",
+            "bpm": 142,
+            "camelotKey": "8A",
+            "source": "https://kaino.dev/api/library/music/indie-rock-07",
+            "license": "CC0-1.0"
+          }
+        ],
+        "soundclashCandidates": [
+          "t_cc0_thoughtness",
+          "t_cc0_chill_beat"
+        ]
+      }
+    },
+    {
+      "name": "start_api_processes",
+      "status": "completed",
+      "startedAt": "2026-11-01T03:41:56.175Z",
+      "endedAt": "2026-11-01T03:42:03.433Z",
+      "durationMs": 7257.99,
+      "result": {
+        "processCount": 2,
+        "processStartup": [
+          {
+            "pid": 21580,
+            "port": 58427,
+            "startupMs": 3175.579
+          },
+          {
+            "pid": 29044,
+            "port": 58428,
+            "startupMs": 4039.294
+          }
+        ]
+      }
+    },
+    {
+      "name": "connect_and_join_clients",
+      "status": "completed",
+      "startedAt": "2026-11-01T03:42:03.449Z",
+      "endedAt": "2026-11-01T03:42:05.805Z",
+      "durationMs": 2356.754,
+      "result": {
+        "socketConnections": 51,
+        "distinctParticipantAccounts": 50,
+        "joinedAcks": 51,
+        "hostSocketsAcrossProcesses": 2,
+        "coDjAccounts": 25,
+        "listenerAccounts": 24
+      }
+    },
+    {
+      "name": "api_catalog_reads",
+      "status": "completed",
+      "startedAt": "2026-11-01T03:42:05.834Z",
+      "endedAt": "2026-11-01T03:42:18.186Z",
+      "durationMs": 12352.336,
+      "result": {
+        "endpoint": "GET /api/v1/tracks?limit=10",
+        "warmupRequests": 25,
+        "configuredSamplesPerProcessPerLevel": 500,
+        "levels": [
+          {
+            "concurrencyPerProcess": 1,
+            "aggregate": {
+              "requests": 1000,
+              "successes": 1000,
+              "failures": 0,
+              "timeouts": 0,
+              "errorRatePercent": 0,
+              "responseLatencyMs": {
+                "samples": 1000,
+                "p50Ms": 8.838,
+                "p95Ms": 18.031,
+                "p99Ms": 26.372,
+                "maxMs": 37.033
+              },
+              "successLatencyMs": {
+                "samples": 1000,
+                "p50Ms": 8.838,
+                "p95Ms": 18.031,
+                "p99Ms": 26.372,
+                "maxMs": 37.033
+              },
+              "serverAppPathLatencyMs": {
+                "samples": 1000,
+                "p50Ms": 6.612,
+                "p95Ms": 13.575,
+                "p99Ms": 18.697,
+                "maxMs": 27.905
+              }
+            },
+            "perProcess": [
+              {
+                "processOrdinal": 1,
+                "requests": 500,
+                "successes": 500,
+                "failures": 0,
+                "timeouts": 0,
+                "errorRatePercent": 0,
+                "httpStatusCounts": {
+                  "200": 500
+                },
+                "responseLatencyMs": {
+                  "samples": 500,
+                  "p50Ms": 8.838,
+                  "p95Ms": 18.323,
+                  "p99Ms": 26.773,
+                  "maxMs": 32.975
+                },
+                "successLatencyMs": {
+                  "samples": 500,
+                  "p50Ms": 8.838,
+                  "p95Ms": 18.323,
+                  "p99Ms": 26.773,
+                  "maxMs": 32.975
+                },
+                "failedLatencyMs": {
+                  "samples": 0,
+                  "p50Ms": null,
+                  "p95Ms": null,
+                  "p99Ms": null,
+                  "maxMs": null
+                },
+                "serverAppPathLatencyMs": {
+                  "samples": 500,
+                  "p50Ms": 6.6,
+                  "p95Ms": 14.071,
+                  "p99Ms": 19.141,
+                  "maxMs": 27.905
+                },
+                "requestsPerSecond": 98.61
+              },
+              {
+                "processOrdinal": 2,
+                "requests": 500,
+                "successes": 500,
+                "failures": 0,
+                "timeouts": 0,
+                "errorRatePercent": 0,
+                "httpStatusCounts": {
+                  "200": 500
+                },
+                "responseLatencyMs": {
+                  "samples": 500,
+                  "p50Ms": 8.834,
+                  "p95Ms": 17.392,
+                  "p99Ms": 25.049,
+                  "maxMs": 37.033
+                },
+                "successLatencyMs": {
+                  "samples": 500,
+                  "p50Ms": 8.834,
+                  "p95Ms": 17.392,
+                  "p99Ms": 25.049,
+                  "maxMs": 37.033
+                },
+                "failedLatencyMs": {
+                  "samples": 0,
+                  "p50Ms": null,
+                  "p95Ms": null,
+                  "p99Ms": null,
+                  "maxMs": null
+                },
+                "serverAppPathLatencyMs": {
+                  "samples": 500,
+                  "p50Ms": 6.612,
+                  "p95Ms": 12.801,
+                  "p99Ms": 18.518,
+                  "maxMs": 26.05
+                },
+                "requestsPerSecond": 100.15
+              }
+            ],
+            "note": "Normal rate limiting remained active; only disposable Mongo counters were cleared between batches. DB subquery spans are not instrumented."
+          },
+          {
+            "concurrencyPerProcess": 10,
+            "aggregate": {
+              "requests": 1000,
+              "successes": 1000,
+              "failures": 0,
+              "timeouts": 0,
+              "errorRatePercent": 0,
+              "responseLatencyMs": {
+                "samples": 1000,
+                "p50Ms": 55.731,
+                "p95Ms": 111.912,
+                "p99Ms": 130.21,
+                "maxMs": 147.592
+              },
+              "successLatencyMs": {
+                "samples": 1000,
+                "p50Ms": 55.731,
+                "p95Ms": 111.912,
+                "p99Ms": 130.21,
+                "maxMs": 147.592
+              },
+              "serverAppPathLatencyMs": {
+                "samples": 1000,
+                "p50Ms": 44.381,
+                "p95Ms": 79.776,
+                "p99Ms": 98.987,
+                "maxMs": 107.099
+              }
+            },
+            "perProcess": [
+              {
+                "processOrdinal": 1,
+                "requests": 500,
+                "successes": 500,
+                "failures": 0,
+                "timeouts": 0,
+                "errorRatePercent": 0,
+                "httpStatusCounts": {
+                  "200": 500
+                },
+                "responseLatencyMs": {
+                  "samples": 500,
+                  "p50Ms": 55.837,
+                  "p95Ms": 112.313,
+                  "p99Ms": 130.21,
+                  "maxMs": 146.058
+                },
+                "successLatencyMs": {
+                  "samples": 500,
+                  "p50Ms": 55.837,
+                  "p95Ms": 112.313,
+                  "p99Ms": 130.21,
+                  "maxMs": 146.058
+                },
+                "failedLatencyMs": {
+                  "samples": 0,
+                  "p50Ms": null,
+                  "p95Ms": null,
+                  "p99Ms": null,
+                  "maxMs": null
+                },
+                "serverAppPathLatencyMs": {
+                  "samples": 500,
+                  "p50Ms": 44.562,
+                  "p95Ms": 79.284,
+                  "p99Ms": 101.441,
+                  "maxMs": 107.099
+                },
+                "requestsPerSecond": 139.26
+              },
+              {
+                "processOrdinal": 2,
+                "requests": 500,
+                "successes": 500,
+                "failures": 0,
+                "timeouts": 0,
+                "errorRatePercent": 0,
+                "httpStatusCounts": {
+                  "200": 500
+                },
+                "responseLatencyMs": {
+                  "samples": 500,
+                  "p50Ms": 55.656,
+                  "p95Ms": 109.654,
+                  "p99Ms": 130.084,
+                  "maxMs": 147.592
+                },
+                "successLatencyMs": {
+                  "samples": 500,
+                  "p50Ms": 55.656,
+                  "p95Ms": 109.654,
+                  "p99Ms": 130.084,
+                  "maxMs": 147.592
+                },
+                "failedLatencyMs": {
+                  "samples": 0,
+                  "p50Ms": null,
+                  "p95Ms": null,
+                  "p99Ms": null,
+                  "maxMs": null
+                },
+                "serverAppPathLatencyMs": {
+                  "samples": 500,
+                  "p50Ms": 43.846,
+                  "p95Ms": 79.776,
+                  "p99Ms": 95.181,
+                  "maxMs": 100.732
+                },
+                "requestsPerSecond": 140.05
+              }
+            ],
+            "note": "Normal rate limiting remained active; only disposable Mongo counters were cleared between batches. DB subquery spans are not instrumented."
+          },
+          {
+            "concurrencyPerProcess": 25,
+            "aggregate": {
+              "requests": 1000,
+              "successes": 1000,
+              "failures": 0,
+              "timeouts": 0,
+              "errorRatePercent": 0,
+              "responseLatencyMs": {
+                "samples": 1000,
+                "p50Ms": 131.085,
+                "p95Ms": 178.006,
+                "p99Ms": 194.341,
+                "maxMs": 203.492
+              },
+              "successLatencyMs": {
+                "samples": 1000,
+                "p50Ms": 131.085,
+                "p95Ms": 178.006,
+                "p99Ms": 194.341,
+                "maxMs": 203.492
+              },
+              "serverAppPathLatencyMs": {
+                "samples": 1000,
+                "p50Ms": 104.529,
+                "p95Ms": 142.75,
+                "p99Ms": 153.761,
+                "maxMs": 184.723
+              }
+            },
+            "perProcess": [
+              {
+                "processOrdinal": 1,
+                "requests": 500,
+                "successes": 500,
+                "failures": 0,
+                "timeouts": 0,
+                "errorRatePercent": 0,
+                "httpStatusCounts": {
+                  "200": 500
+                },
+                "responseLatencyMs": {
+                  "samples": 500,
+                  "p50Ms": 132.72,
+                  "p95Ms": 179.791,
+                  "p99Ms": 196.89,
+                  "maxMs": 203.492
+                },
+                "successLatencyMs": {
+                  "samples": 500,
+                  "p50Ms": 132.72,
+                  "p95Ms": 179.791,
+                  "p99Ms": 196.89,
+                  "maxMs": 203.492
+                },
+                "failedLatencyMs": {
+                  "samples": 0,
+                  "p50Ms": null,
+                  "p95Ms": null,
+                  "p99Ms": null,
+                  "maxMs": null
+                },
+                "serverAppPathLatencyMs": {
+                  "samples": 500,
+                  "p50Ms": 106.263,
+                  "p95Ms": 146.538,
+                  "p99Ms": 154.107,
+                  "maxMs": 182.8
+                },
+                "requestsPerSecond": 156.61
+              },
+              {
+                "processOrdinal": 2,
+                "requests": 500,
+                "successes": 500,
+                "failures": 0,
+                "timeouts": 0,
+                "errorRatePercent": 0,
+                "httpStatusCounts": {
+                  "200": 500
+                },
+                "responseLatencyMs": {
+                  "samples": 500,
+                  "p50Ms": 129.913,
+                  "p95Ms": 174.048,
+                  "p99Ms": 191.176,
+                  "maxMs": 202.557
+                },
+                "successLatencyMs": {
+                  "samples": 500,
+                  "p50Ms": 129.913,
+                  "p95Ms": 174.048,
+                  "p99Ms": 191.176,
+                  "maxMs": 202.557
+                },
+                "failedLatencyMs": {
+                  "samples": 0,
+                  "p50Ms": null,
+                  "p95Ms": null,
+                  "p99Ms": null,
+                  "maxMs": null
+                },
+                "serverAppPathLatencyMs": {
+                  "samples": 500,
+                  "p50Ms": 103.004,
+                  "p95Ms": 139.232,
+                  "p99Ms": 152.672,
+                  "maxMs": 184.723
+                },
+                "requestsPerSecond": 159.09
+              }
+            ],
+            "note": "Normal rate limiting remained active; only disposable Mongo counters were cleared between batches. DB subquery spans are not instrumented."
+          }
+        ]
+      }
+    }
+  ],
+  "measurements": {
+    "database_guard_and_connect": {
+      "guardPassed": true,
+      "configuredHostname": "127.0.0.1",
+      "generatedDatabaseName": "astradj_test_runtimebench_bbb87e5baef2490a992a342f2008dfc7",
+      "topology": "standalone",
+      "mongoVersion": "8.2.5",
+      "freeMemoryGiB": 0.72
+    },
+    "seed_fixture": {
+      "usersCreated": 50,
+      "roleCounts": {
+        "Host": 1,
+        "Co-DJ": 25,
+        "Listener": 24
+      },
+      "realSeedTracks": 7,
+      "syntheticQueueTracks": 450,
+      "syntheticTracksHaveAcousticProfiles": false,
+      "loungeId": "lg_8e574e487bc5a846",
+      "initialNowPlayingTrackId": "t_cc0_ivory_atlas",
+      "initialNextUpTrackId": "t_cc0_faded_fortress",
+      "seguePair": [
+        {
+          "trackId": "t_cc0_ivory_atlas",
+          "bpm": 143,
+          "camelotKey": "8A",
+          "source": "https://kaino.dev/api/library/music/creator-workout-01",
+          "license": "CC0-1.0"
+        },
+        {
+          "trackId": "t_cc0_faded_fortress",
+          "bpm": 142,
+          "camelotKey": "8A",
+          "source": "https://kaino.dev/api/library/music/indie-rock-07",
+          "license": "CC0-1.0"
+        }
+      ],
+      "soundclashCandidates": [
+        "t_cc0_thoughtness",
+        "t_cc0_chill_beat"
+      ]
+    },
+    "start_api_processes": {
+      "processCount": 2,
+      "processStartup": [
+        {
+          "pid": 21580,
+          "port": 58427,
+          "startupMs": 3175.579
+        },
+        {
+          "pid": 29044,
+          "port": 58428,
+          "startupMs": 4039.294
+        }
+      ]
+    },
+    "connect_and_join_clients": {
+      "socketConnections": 51,
+      "distinctParticipantAccounts": 50,
+      "joinedAcks": 51,
+      "hostSocketsAcrossProcesses": 2,
+      "coDjAccounts": 25,
+      "listenerAccounts": 24
+    },
+    "api_catalog_reads": {
+      "endpoint": "GET /api/v1/tracks?limit=10",
+      "warmupRequests": 25,
+      "configuredSamplesPerProcessPerLevel": 500,
+      "levels": [
+        {
+          "concurrencyPerProcess": 1,
+          "aggregate": {
+            "requests": 1000,
+            "successes": 1000,
+            "failures": 0,
+            "timeouts": 0,
+            "errorRatePercent": 0,
+            "responseLatencyMs": {
+              "samples": 1000,
+              "p50Ms": 8.838,
+              "p95Ms": 18.031,
+              "p99Ms": 26.372,
+              "maxMs": 37.033
+            },
+            "successLatencyMs": {
+              "samples": 1000,
+              "p50Ms": 8.838,
+              "p95Ms": 18.031,
+              "p99Ms": 26.372,
+              "maxMs": 37.033
+            },
+            "serverAppPathLatencyMs": {
+              "samples": 1000,
+              "p50Ms": 6.612,
+              "p95Ms": 13.575,
+              "p99Ms": 18.697,
+              "maxMs": 27.905
+            }
+          },
+          "perProcess": [
+            {
+              "processOrdinal": 1,
+              "requests": 500,
+              "successes": 500,
+              "failures": 0,
+              "timeouts": 0,
+              "errorRatePercent": 0,
+              "httpStatusCounts": {
+                "200": 500
+              },
+              "responseLatencyMs": {
+                "samples": 500,
+                "p50Ms": 8.838,
+                "p95Ms": 18.323,
+                "p99Ms": 26.773,
+                "maxMs": 32.975
+              },
+              "successLatencyMs": {
+                "samples": 500,
+                "p50Ms": 8.838,
+                "p95Ms": 18.323,
+                "p99Ms": 26.773,
+                "maxMs": 32.975
+              },
+              "failedLatencyMs": {
+                "samples": 0,
+                "p50Ms": null,
+                "p95Ms": null,
+                "p99Ms": null,
+                "maxMs": null
+              },
+              "serverAppPathLatencyMs": {
+                "samples": 500,
+                "p50Ms": 6.6,
+                "p95Ms": 14.071,
+                "p99Ms": 19.141,
+                "maxMs": 27.905
+              },
+              "requestsPerSecond": 98.61
+            },
+            {
+              "processOrdinal": 2,
+              "requests": 500,
+              "successes": 500,
+              "failures": 0,
+              "timeouts": 0,
+              "errorRatePercent": 0,
+              "httpStatusCounts": {
+                "200": 500
+              },
+              "responseLatencyMs": {
+                "samples": 500,
+                "p50Ms": 8.834,
+                "p95Ms": 17.392,
+                "p99Ms": 25.049,
+                "maxMs": 37.033
+              },
+              "successLatencyMs": {
+                "samples": 500,
+                "p50Ms": 8.834,
+                "p95Ms": 17.392,
+                "p99Ms": 25.049,
+                "maxMs": 37.033
+              },
+              "failedLatencyMs": {
+                "samples": 0,
+                "p50Ms": null,
+                "p95Ms": null,
+                "p99Ms": null,
+                "maxMs": null
+              },
+              "serverAppPathLatencyMs": {
+                "samples": 500,
+                "p50Ms": 6.612,
+                "p95Ms": 12.801,
+                "p99Ms": 18.518,
+                "maxMs": 26.05
+              },
+              "requestsPerSecond": 100.15
+            }
+          ],
+          "note": "Normal rate limiting remained active; only disposable Mongo counters were cleared between batches. DB subquery spans are not instrumented."
+        },
+        {
+          "concurrencyPerProcess": 10,
+          "aggregate": {
+            "requests": 1000,
+            "successes": 1000,
+            "failures": 0,
+            "timeouts": 0,
+            "errorRatePercent": 0,
+            "responseLatencyMs": {
+              "samples": 1000,
+              "p50Ms": 55.731,
+              "p95Ms": 111.912,
+              "p99Ms": 130.21,
+              "maxMs": 147.592
+            },
+            "successLatencyMs": {
+              "samples": 1000,
+              "p50Ms": 55.731,
+              "p95Ms": 111.912,
+              "p99Ms": 130.21,
+              "maxMs": 147.592
+            },
+            "serverAppPathLatencyMs": {
+              "samples": 1000,
+              "p50Ms": 44.381,
+              "p95Ms": 79.776,
+              "p99Ms": 98.987,
+              "maxMs": 107.099
+            }
+          },
+          "perProcess": [
+            {
+              "processOrdinal": 1,
+              "requests": 500,
+              "successes": 500,
+              "failures": 0,
+              "timeouts": 0,
+              "errorRatePercent": 0,
+              "httpStatusCounts": {
+                "200": 500
+              },
+              "responseLatencyMs": {
+                "samples": 500,
+                "p50Ms": 55.837,
+                "p95Ms": 112.313,
+                "p99Ms": 130.21,
+                "maxMs": 146.058
+              },
+              "successLatencyMs": {
+                "samples": 500,
+                "p50Ms": 55.837,
+                "p95Ms": 112.313,
+                "p99Ms": 130.21,
+                "maxMs": 146.058
+              },
+              "failedLatencyMs": {
+                "samples": 0,
+                "p50Ms": null,
+                "p95Ms": null,
+                "p99Ms": null,
+                "maxMs": null
+              },
+              "serverAppPathLatencyMs": {
+                "samples": 500,
+                "p50Ms": 44.562,
+                "p95Ms": 79.284,
+                "p99Ms": 101.441,
+                "maxMs": 107.099
+              },
+              "requestsPerSecond": 139.26
+            },
+            {
+              "processOrdinal": 2,
+              "requests": 500,
+              "successes": 500,
+              "failures": 0,
+              "timeouts": 0,
+              "errorRatePercent": 0,
+              "httpStatusCounts": {
+                "200": 500
+              },
+              "responseLatencyMs": {
+                "samples": 500,
+                "p50Ms": 55.656,
+                "p95Ms": 109.654,
+                "p99Ms": 130.084,
+                "maxMs": 147.592
+              },
+              "successLatencyMs": {
+                "samples": 500,
+                "p50Ms": 55.656,
+                "p95Ms": 109.654,
+                "p99Ms": 130.084,
+                "maxMs": 147.592
+              },
+              "failedLatencyMs": {
+                "samples": 0,
+                "p50Ms": null,
+                "p95Ms": null,
+                "p99Ms": null,
+                "maxMs": null
+              },
+              "serverAppPathLatencyMs": {
+                "samples": 500,
+                "p50Ms": 43.846,
+                "p95Ms": 79.776,
+                "p99Ms": 95.181,
+                "maxMs": 100.732
+              },
+              "requestsPerSecond": 140.05
+            }
+          ],
+          "note": "Normal rate limiting remained active; only disposable Mongo counters were cleared between batches. DB subquery spans are not instrumented."
+        },
+        {
+          "concurrencyPerProcess": 25,
+          "aggregate": {
+            "requests": 1000,
+            "successes": 1000,
+            "failures": 0,
+            "timeouts": 0,
+            "errorRatePercent": 0,
+            "responseLatencyMs": {
+              "samples": 1000,
+              "p50Ms": 131.085,
+              "p95Ms": 178.006,
+              "p99Ms": 194.341,
+              "maxMs": 203.492
+            },
+            "successLatencyMs": {
+              "samples": 1000,
+              "p50Ms": 131.085,
+              "p95Ms": 178.006,
+              "p99Ms": 194.341,
+              "maxMs": 203.492
+            },
+            "serverAppPathLatencyMs": {
+              "samples": 1000,
+              "p50Ms": 104.529,
+              "p95Ms": 142.75,
+              "p99Ms": 153.761,
+              "maxMs": 184.723
+            }
+          },
+          "perProcess": [
+            {
+              "processOrdinal": 1,
+              "requests": 500,
+              "successes": 500,
+              "failures": 0,
+              "timeouts": 0,
+              "errorRatePercent": 0,
+              "httpStatusCounts": {
+                "200": 500
+              },
+              "responseLatencyMs": {
+                "samples": 500,
+                "p50Ms": 132.72,
+                "p95Ms": 179.791,
+                "p99Ms": 196.89,
+                "maxMs": 203.492
+              },
+              "successLatencyMs": {
+                "samples": 500,
+                "p50Ms": 132.72,
+                "p95Ms": 179.791,
+                "p99Ms": 196.89,
+                "maxMs": 203.492
+              },
+              "failedLatencyMs": {
+                "samples": 0,
+                "p50Ms": null,
+                "p95Ms": null,
+                "p99Ms": null,
+                "maxMs": null
+              },
+              "serverAppPathLatencyMs": {
+                "samples": 500,
+                "p50Ms": 106.263,
+                "p95Ms": 146.538,
+                "p99Ms": 154.107,
+                "maxMs": 182.8
+              },
+              "requestsPerSecond": 156.61
+            },
+            {
+              "processOrdinal": 2,
+              "requests": 500,
+              "successes": 500,
+              "failures": 0,
+              "timeouts": 0,
+              "errorRatePercent": 0,
+              "httpStatusCounts": {
+                "200": 500
+              },
+              "responseLatencyMs": {
+                "samples": 500,
+                "p50Ms": 129.913,
+                "p95Ms": 174.048,
+                "p99Ms": 191.176,
+                "maxMs": 202.557
+              },
+              "successLatencyMs": {
+                "samples": 500,
+                "p50Ms": 129.913,
+                "p95Ms": 174.048,
+                "p99Ms": 191.176,
+                "maxMs": 202.557
+              },
+              "failedLatencyMs": {
+                "samples": 0,
+                "p50Ms": null,
+                "p95Ms": null,
+                "p99Ms": null,
+                "maxMs": null
+              },
+              "serverAppPathLatencyMs": {
+                "samples": 500,
+                "p50Ms": 103.004,
+                "p95Ms": 139.232,
+                "p99Ms": 152.672,
+                "maxMs": 184.723
+              },
+              "requestsPerSecond": 159.09
+            }
+          ],
+          "note": "Normal rate limiting remained active; only disposable Mongo counters were cleared between batches. DB subquery spans are not instrumented."
+        }
+      ]
+    }
+  },
+  "snapshotReason": "api_catalog_reads-completed",
+  "snapshotAt": "2026-11-01T03:42:18.202Z"
+}

@@ -1,0 +1,37 @@
+{
+  "runId": "runtime-mvxaa4s4-e12935dd",
+  "name": "final_reconciliation",
+  "status": "completed",
+  "startedAt": "2026-11-01T03:43:14.617Z",
+  "endedAt": "2026-11-01T03:43:14.645Z",
+  "durationMs": 28.015,
+  "result": {
+    "revision": 494,
+    "currentTrackId": "t_cc0_ivory_atlas",
+    "queueStateItems": 412,
+    "addEventRows": 429,
+    "duplicateAddIds": 17,
+    "addEventsMissingFromFinalQueue": 9,
+    "segueTransitionEvents": 20,
+    "totalQueueEvents": 494,
+    "soundclashEvents": {
+      "soundclash.submitted": 2,
+      "soundclash.opened": 1,
+      "soundclash.voted": 20,
+      "soundclash.tied": 1,
+      "soundclash.resolved": 1
+    },
+    "finalSoundclashStatus": "resolved",
+    "outboxBacklog": 0,
+    "queueLoadReconciliation": {
+      "successfulAdds": 400,
+      "persistedAddEvents": 400,
+      "duplicateLogicalEvents": 0,
+      "successfulAddsMissingFromEventLog": 0,
+      "successfulAddsMissingFromQueueState": 0,
+      "outboxBacklog": 0,
+      "connectedClientsResynchronized": 51,
+      "connectedClientsExpected": 51
+    }
+  }
+}

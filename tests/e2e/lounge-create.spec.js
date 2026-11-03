@@ -1,23 +1,17 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test } from '@playwright/test';
+import mongoose from '../../server/node_modules/mongoose/index.js';
+import { DJLounge } from '../../server/src/models/DJLounge.js';
+import { QueueEvent } from '../../server/src/models/QueueEvent.js';
+import { registerListener, signInHost } from './lounge-e2e-helpers.js';
 
-async function signInHost(page) {
-  await page.goto('/profile', { waitUntil: 'domcontentloaded' });
-  await page.getByLabel('Email').fill(process.env.ASTRADJ_E2E_HOST_EMAIL);
-  await page.getByLabel('Password').fill(process.env.ASTRADJ_E2E_HOST_PASSWORD);
-  await page.getByRole('button', { name: 'Sign In' }).click();
-  await expect(page.getByRole('heading', { name: 'AstraDJ E2E Host' })).toBeVisible();
-}
+test.beforeAll(async () => {
+  await mongoose.connect(process.env.MONGODB_URI, { serverSelectionTimeoutMS: 5000 });
+});
 
-async function registerListener(page, displayName) {
-  await page.goto('/profile', { waitUntil: 'domcontentloaded' });
-  await page.getByRole('button', { name: 'Create account' }).click();
-  await page.getByLabel('Display name').fill(displayName);
-  await page.getByLabel('Email').fill(`listener-${randomUUID()}@example.invalid`);
-  await page.getByLabel('Password').fill(`Listener!${randomUUID()}123`);
-  await page.getByRole('button', { name: 'Create Account' }).click();
-  await expect(page.getByRole('heading', { name: displayName })).toBeVisible();
-}
+test.afterAll(async () => {
+  if (mongoose.connection.readyState !== 0) await mongoose.disconnect();
+});
 
 test('Host creates a Lounge from the catalog and another authenticated listener joins by invite', async ({ browser }) => {
   const hostContext = await browser.newContext();
@@ -49,21 +43,14 @@ test('Host creates a Lounge from the catalog and another authenticated listener 
     seedTrackId: 't_2001', vibeProfile: 'After Work House', maxParticipants: 12,
     bpmTolerancePct: 6, soundclashEnabled: false, aiVerbosity: 'high',
   });
-  const mongoose = (await import('../../server/node_modules/mongoose/index.js')).default;
-  const { DJLounge } = await import('../../server/src/models/DJLounge.js');
-  await mongoose.connect(process.env.MONGODB_URI, { serverSelectionTimeoutMS: 5000 });
-  try {
-    const storedLounge = await DJLounge.findOne({ loungeId: created.loungeId }).lean();
-    expect(storedLounge).toMatchObject({
-      loungeId: created.loungeId,
-      inviteCode: created.inviteCode,
-      currentTrackId: 't_2001',
-      vibeProfile: 'After Work House',
-      settings: { maxParticipants: 12, bpmTolerancePct: 6, soundclashEnabled: false, aiVerbosity: 'high' },
-    });
-  } finally {
-    await mongoose.disconnect();
-  }
+  const storedLounge = await DJLounge.findOne({ loungeId: created.loungeId }).lean();
+  expect(storedLounge).toMatchObject({
+    loungeId: created.loungeId,
+    inviteCode: created.inviteCode,
+    currentTrackId: 't_2001',
+    vibeProfile: 'After Work House',
+    settings: { maxParticipants: 12, bpmTolerancePct: 6, soundclashEnabled: false, aiVerbosity: 'high' },
+  });
   await expect(hostPage.getByText(`Lounge created. Invite code: ${created.inviteCode}`)).toBeVisible();
   await expect(hostPage.getByText('Live', { exact: true })).toBeVisible();
   await expect(hostPage.getByRole('main').getByText('Night Drive', { exact: true })).toBeVisible();
@@ -103,19 +90,14 @@ test('Host creates a Lounge from the catalog and another authenticated listener 
   await expect(listenerPage.getByText('Ended', { exact: true })).toBeVisible();
   await expect(listenerPage.getByText(/Lounge session ended\./)).toBeVisible();
 
-  await mongoose.connect(process.env.MONGODB_URI, { serverSelectionTimeoutMS: 5000 });
-  try {
-    const storedEndedLounge = await DJLounge.findOne({ loungeId: created.loungeId }).lean();
-    expect(storedEndedLounge).toMatchObject({ status: 'ended', hostUserId: expect.anything(), endedAt: expect.any(Date), startedAt: expect.any(Date) });
-    expect(storedEndedLounge.participantIds).toHaveLength(2);
-    expect(storedEndedLounge.sessionSummary).toMatchObject({
-      durationSeconds: expect.any(Number), queueEventCount: 0, soundclashBattles: 0,
-      chatMessageCount: 0, sentimentTimeline: [], peakConcurrentParticipants: 2, aiDjQuestionCount: 0, unavailableMetrics: {},
-    });
-    expect(await DJLounge.countDocuments({ loungeId: created.loungeId, status: 'ended' })).toBe(1);
-  } finally {
-    await mongoose.disconnect();
-  }
+  const storedEndedLounge = await DJLounge.findOne({ loungeId: created.loungeId }).lean();
+  expect(storedEndedLounge).toMatchObject({ status: 'ended', hostUserId: expect.anything(), endedAt: expect.any(Date), startedAt: expect.any(Date) });
+  expect(storedEndedLounge.participantIds).toHaveLength(2);
+  expect(storedEndedLounge.sessionSummary).toMatchObject({
+    durationSeconds: expect.any(Number), queueEventCount: 0, soundclashBattles: 0,
+    chatMessageCount: 0, sentimentTimeline: [], peakConcurrentParticipants: 2, aiDjQuestionCount: 0, unavailableMetrics: {},
+  });
+  expect(await DJLounge.countDocuments({ loungeId: created.loungeId, status: 'ended' })).toBe(1);
 
   await hostPage.goto('/profile', { waitUntil: 'domcontentloaded' });
   await expect(hostPage.getByRole('heading', { name: 'Lounge History' })).toBeVisible();
@@ -140,90 +122,17 @@ test('Host creates a Lounge from the catalog and another authenticated listener 
   console.info(`[auth-e2e] outsider registration status=${registered.status()} displayName=${registrationResult.user?.displayName ?? 'none'} error=${registrationResult.error?.code ?? 'none'}`);
   expect(registered.status()).toBe(201);
   await expect(outsiderPage.getByRole('heading', { name: 'Unrelated Account' })).toBeVisible();
-  await outsiderPage.goto('/');
+  await outsiderPage.goto('/', { waitUntil: 'domcontentloaded' });
   await outsiderPage.getByRole('link', { name: 'Live', exact: true }).click();
   await outsiderPage.getByRole('textbox', { name: 'Lounge invite code' }).fill(created.inviteCode);
   await outsiderPage.getByRole('button', { name: 'Join Lounge' }).click();
   await expect(outsiderPage.getByText('The Lounge invite code is invalid or expired')).toBeVisible();
-  await outsiderPage.goto('/profile');
+  await outsiderPage.goto('/profile', { waitUntil: 'domcontentloaded' });
   await expect(outsiderPage.getByText('No ended Lounge sessions yet.')).toBeVisible();
   expect(pageErrors).toEqual([]);
   await outsiderContext.close();
   await listenerContext.close();
   await hostContext.close();
-});
-
-test('real accelerated media playback triggers a grounded Lounge segue and advances on its natural ended event', async ({ page }) => {
-  test.setTimeout(45_000);
-  await signInHost(page);
-  await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await page.getByRole('link', { name: 'Live', exact: true }).click();
-  await page.getByRole('combobox', { name: 'Starting track' }).selectOption('t_cc0_ivory_atlas');
-  await page.getByRole('button', { name: 'Create Lounge' }).click();
-  await expect(page.getByText('Live', { exact: true })).toBeVisible();
-  const addTrack = page.getByRole('combobox', { name: 'Choose a catalog track to add' });
-  await addTrack.selectOption('t_cc0_faded_fortress');
-  await page.getByRole('button', { name: 'Add to queue' }).click();
-  await expect(page.getByRole('main').getByText('Faded Fortress', { exact: true })).toBeVisible();
-
-  const { loungeId } = await page.evaluate(() => JSON.parse(sessionStorage.getItem('astradj.activeLounge')));
-  const mongoose = (await import('../../server/node_modules/mongoose/index.js')).default;
-  const [{ DJLounge }, { QueueEvent }] = await Promise.all([
-    import('../../server/src/models/DJLounge.js'), import('../../server/src/models/QueueEvent.js'),
-  ]);
-  await mongoose.connect(process.env.MONGODB_URI, { serverSelectionTimeoutMS: 5000 });
-  try {
-    // Open Mongo before accelerated playback so the test observes the persisted
-    // preparation during the short real-media outro window, not after the track ends.
-    const audio = page.locator('audio');
-    await expect.poll(() => audio.evaluate((element) => element.readyState)).toBeGreaterThanOrEqual(1);
-    await audio.evaluate((element) => {
-      element.playbackRate = 4; // Accelerates real media time; the test seeks near the outro to keep the real-media run short.
-      window.__outroBoundaryAt = null;
-      window.__endedFromRealMedia = false;
-      window.__naturalEndedAt = null;
-      element.addEventListener('loadedmetadata', () => { window.__outroBoundaryAt = null; });
-      element.addEventListener('timeupdate', () => {
-        if (window.__outroBoundaryAt === null && element.duration - element.currentTime <= 12) window.__outroBoundaryAt = performance.now();
-      });
-      element.addEventListener('ended', () => { window.__endedFromRealMedia = true; window.__naturalEndedAt = { currentTime: element.currentTime, duration: element.duration }; }, { once: true });
-      element.currentTime = Math.max(0, element.duration - 14);
-    });
-    await page.getByRole('button', { name: 'Play', exact: true }).click();
-    const announcement = page.locator('.ai-grounded-result').getByText(/AstraDJ transition/);
-    await expect(announcement).toBeVisible({ timeout: 30_000 });
-    const triggerToDecisionMs = await page.evaluate(() => performance.now() - window.__outroBoundaryAt);
-    expect(triggerToDecisionMs).toBeLessThan(3000);
-    console.log(`[segue-e2e] browser trigger-to-announcement ${triggerToDecisionMs.toFixed(1)} ms; playbackRate=4x; seek-to-14s-before-end; sample=1`);
-    const preparedPlayback = await audio.evaluate((element) => ({ currentSrc: element.currentSrc, currentTime: element.currentTime, duration: element.duration, paused: element.paused }));
-    expect(preparedPlayback.currentSrc).toContain('/audio/ivory-atlas.mp3');
-    expect(preparedPlayback.duration - preparedPlayback.currentTime).toBeLessThanOrEqual(12);
-    expect(preparedPlayback.paused).toBe(false);
-
-    await expect.poll(async () => {
-      const lounge = await DJLounge.findOne({ loungeId }).lean();
-      return lounge?.pendingSegue?.fromTrackId === 't_cc0_ivory_atlas'
-        && lounge?.pendingSegue?.trackId === 't_cc0_faded_fortress'
-        && lounge?.currentTrackId === 't_cc0_ivory_atlas';
-    }, { timeout: 3000, intervals: [25, 50, 100] }).toBe(true);
-    expect(await page.evaluate(() => window.__endedFromRealMedia)).toBe(false);
-    const preparedLounge = await DJLounge.findOne({ loungeId }).lean();
-    expect(preparedLounge.pendingSegue).toMatchObject({ fromTrackId: 't_cc0_ivory_atlas', trackId: 't_cc0_faded_fortress' });
-
-    await expect.poll(() => page.evaluate(() => window.__endedFromRealMedia), { timeout: 30_000 }).toBe(true);
-    const naturalBoundary = await page.evaluate(() => window.__naturalEndedAt);
-    expect(naturalBoundary.duration - naturalBoundary.currentTime).toBeLessThanOrEqual(0.1);
-    await expect.poll(() => audio.evaluate((element) => element.currentSrc), { timeout: 10_000 }).toContain('/audio/faded-fortress.mp3');
-    await expect.poll(() => audio.evaluate((element) => !element.paused && element.currentTime > 0.2), { timeout: 10_000 }).toBe(true);
-    const persisted = await DJLounge.findOne({ loungeId }).lean();
-    const transitions = await QueueEvent.find({ loungeId, type: 'track.transitioned' }).lean();
-    expect(persisted.currentTrackId).toBe('t_cc0_faded_fortress');
-    expect(persisted.pendingSegue).toBeUndefined();
-    expect(transitions).toHaveLength(1);
-    expect(transitions[0].payload).toMatchObject({ fromTrackId: 't_cc0_ivory_atlas', trackId: 't_cc0_faded_fortress' });
-  } finally {
-    await mongoose.disconnect();
-  }
 });
 
 test('two Listener submissions automatically open a persisted Soundclash and live vote totals match Mongo', async ({ browser, page }) => {
@@ -265,9 +174,6 @@ test('two Listener submissions automatically open a persisted Soundclash and liv
   await expect(thoughtnessCandidate).toContainText('1 votes');
   await expect(listeners[1].locator('.soundclash-candidate').filter({ hasText: 'Thoughtness' })).toContainText('1 votes');
 
-  const mongoose = (await import('../../server/node_modules/mongoose/index.js')).default;
-  const { QueueEvent } = await import('../../server/src/models/QueueEvent.js');
-  await mongoose.connect(process.env.MONGODB_URI, { serverSelectionTimeoutMS: 5000 });
   try {
     const events = await QueueEvent.find({ loungeId }).sort({ seq: 1 }).lean();
     expect(events.map(({ type }) => type)).toEqual(expect.arrayContaining(['soundclash.submitted', 'soundclash.opened', 'soundclash.voted']));
@@ -277,7 +183,6 @@ test('two Listener submissions automatically open a persisted Soundclash and liv
     const vote = events.find(({ type }) => type === 'soundclash.voted');
     expect(vote).toMatchObject({ payload: { battleId: opened.payload.battleId, trackId: 't_cc0_thoughtness' } });
   } finally {
-    await mongoose.disconnect();
     await Promise.all(listenerContexts.map((context) => context.close()));
   }
 });

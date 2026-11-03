@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Check, Music2, Search, Save } from 'lucide-react';
 import { searchTracks, updateTrackAcousticProfile } from '../api/client.js';
+import { TrackArtwork } from './CatalogArtwork.jsx';
 
 const camelotKeys = Array.from({ length: 12 }, (_, index) => index + 1).flatMap((number) => [`${number}A`, `${number}B`]);
 const emptyProfile = { bpm: '', camelotKey: '', energy: '', valence: '' };
@@ -78,7 +79,7 @@ export default function AdminAcousticProfilePage({ user, sessionStatus = 'ready'
         {catalogState === 'loading' && <p className="integration-status" role="status">Loading catalog…</p>}
         {catalogState === 'error' && <p className="integration-error" role="alert">{catalogError}</p>}
         {catalogState === 'ready' && tracks.length === 0 && <p className="integration-status">No tracks match this search.</p>}
-        {catalogState === 'ready' && tracks.length > 0 && <div className="admin-track-list">{tracks.map((track) => <button type="button" key={track.trackId} className={`admin-track-option ${selected?.trackId === track.trackId ? 'selected' : ''}`} onClick={() => selectTrack(track)}><span className="catalog-cover"/><span><b>{track.title}</b><small>{track.artist} · {track.trackId}</small></span><small className={track.acoustic ? 'profile-present' : 'profile-missing'}>{track.acoustic ? 'Profile saved' : 'Profile missing'}</small></button>)}</div>}
+        {catalogState === 'ready' && tracks.length > 0 && <div className="admin-track-list">{tracks.map((track) => <button type="button" key={track.trackId} className={`admin-track-option ${selected?.trackId === track.trackId ? 'selected' : ''}`} onClick={() => selectTrack(track)}><TrackArtwork track={track}/><span><b>{track.title}</b><small>{track.artist} · {track.trackId}</small></span><small className={track.acoustic ? 'profile-present' : 'profile-missing'}>{track.acoustic ? 'Profile saved' : 'Profile missing'}</small></button>)}</div>}
       </div>
       <div className="panel admin-profile-editor">
         <h2>Profile details</h2>

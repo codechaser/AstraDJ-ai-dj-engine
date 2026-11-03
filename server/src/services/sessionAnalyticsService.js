@@ -63,7 +63,7 @@ export function buildSessionAnalytics({ lounge, queueEvents = [], metricEvents =
   };
   const summary = {
     durationSeconds,
-    queueEventCount: sessionEvents.length,
+    queueEventCount: sessionEvents.filter((event) => !event.type.startsWith('chat.')).length,
     soundclashBattles: battleMetricComplete ? new Set(battleIds).size : null,
     chatMessageCount: sessionMessages.length,
     sentimentTimeline: timeline,

@@ -1,5 +1,20 @@
 import mongoose from 'mongoose';
 
+const activeParticipantLeaseSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  leaseId: { type: String, required: true },
+  expiresAt: { type: Date, required: true },
+}, { _id: false, versionKey: false });
+
+const gatewayPresenceSchema = new mongoose.Schema({
+  gatewayId: { type: String, required: true },
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  generation: { type: String, required: true },
+  socketCount: { type: Number, required: true, min: 1 },
+  heartbeatAt: { type: Date, required: true },
+  expiresAt: { type: Date, required: true },
+}, { _id: false, versionKey: false });
+
 const loungeSchema = new mongoose.Schema({
   loungeId: { type: String, required: true, unique: true, match: /^lg_[A-Za-z0-9_-]{8,64}$/ },
   inviteCode: { type: String, required: true, unique: true, uppercase: true, match: /^SP-[A-Z2-9]{4}$/ },
@@ -19,6 +34,12 @@ const loungeSchema = new mongoose.Schema({
     votes: { type: Map, of: String, default: () => new Map() },
   },
   status: { type: String, enum: ['scheduled', 'live', 'ended'], default: 'scheduled', required: true },
+  // Per-process leases represent current distinct participants. Historical
+  // participantIds remains the membership/privacy-history source.
+  activeParticipantLeases: { type: [activeParticipantLeaseSchema], default: [] },
+  // Authenticated live socket presence is separate from both historical
+  // membership and capacity seats. Expired rows are ignored using MongoDB time.
+  gatewayPresences: { type: [gatewayPresenceSchema], default: [] },
   participantIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   createdAt: { type: Date, default: Date.now },
   startedAt: { type: Date, default: null },

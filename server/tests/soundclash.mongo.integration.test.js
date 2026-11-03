@@ -28,6 +28,11 @@ liveTest('Mongo Soundclash persists votes, auto-opens, restores after service re
     await Track.create(['t_9301', 't_9302', 't_9303', 't_9304'].map((trackId) => ({
       trackId, title: `Soundclash ${trackId}`, artist: 'Test Fixture', durationSeconds: 180, acoustic: null, timeline: [],
     })));
+    // Direct service calls stand in for commands from a live gateway; seed
+    // the shared Host-presence lease enforced by the production command path.
+    await queueRepository.upsertGatewayPresence(loungeId, {
+      gatewayId: 'soundclash-integration-host', userId: hostId, generation: 'soundclash-host-session', socketCount: 1,
+    });
     const firstQueueService = createQueueService(queueRepository);
     firstSoundclash = createSoundclashService({ repository: queueRepository, queueService: firstQueueService, voteDurationMs: 1200 });
     const lounge = await queueRepository.findLoungeById(loungeId);

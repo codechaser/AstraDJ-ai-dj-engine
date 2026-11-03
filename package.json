@@ -7,10 +7,11 @@
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test tests/frontend-api.test.js tests/outro-playback.test.js",
+    "test": "node --test tests/frontend-api.test.js tests/outro-playback.test.js tests/queue-revision.test.js",
     "test:e2e:audio": "node scripts/run-audio-e2e.mjs",
     "test:e2e:lounge": "node scripts/run-audio-e2e.mjs --lounge",
     "test:e2e:settings": "node scripts/run-audio-e2e.mjs --settings",
+    "test:e2e:billing": "node scripts/run-audio-e2e.mjs --billing",
     "test:e2e:catalog": "node scripts/run-audio-e2e.mjs --catalog",
     "test:e2e:admin-acoustic": "node scripts/run-audio-e2e.mjs --admin-acoustic"
   },
@@ -21,7 +22,7 @@
     "react-dom": "latest",
     "react-router-dom": "latest",
     "socket.io-client": "^4.8.4",
-    "vite": "latest"
+    "vite": "8.3.5"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1",

@@ -6,9 +6,12 @@ import { requireAuth, requireRole } from '../middleware/auth.js';
 import { validateRequest } from '../middleware/validateRequest.js';
 import { aiQuestionValidation, createLoungeValidation, segueValidation } from '../middleware/validation.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { rateLimit, rateLimitPolicies } from '../middleware/rateLimit.js';
+import { meterAuthorizedLoungeAiDj } from '../middleware/aiDjEntitlement.js';
+import { enforcePlanLoungeCapacity } from '../middleware/aiDjEntitlement.js';
 
 const router = Router();
-router.post('/', requireAuth, requireRole('Host'), createLoungeValidation, validateRequest, asyncHandler(createLounge));
-router.post('/:id/ai/segue', requireAuth, segueValidation, validateRequest, asyncHandler(requestSegue));
-router.post('/:id/ai/ask', requireAuth, aiQuestionValidation, validateRequest, asyncHandler(askTrackQuestion));
+router.post('/', requireAuth, rateLimit(rateLimitPolicies.loungeCreate), requireRole('Host'), createLoungeValidation, validateRequest, enforcePlanLoungeCapacity, asyncHandler(createLounge));
+router.post('/:id/ai/segue', requireAuth, rateLimit(rateLimitPolicies.segue), segueValidation, validateRequest, meterAuthorizedLoungeAiDj, asyncHandler(requestSegue));
+router.post('/:id/ai/ask', requireAuth, aiQuestionValidation, validateRequest, meterAuthorizedLoungeAiDj, asyncHandler(askTrackQuestion));
 export default router;

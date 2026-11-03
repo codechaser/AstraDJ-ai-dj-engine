@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { getActiveLounge, getLoungeAnalytics, saveActiveLounge } from '../api/client.js';
 import { subscribeToLoungeEvents } from '../api/loungeEvents.js';
 import { applySoundclashEvent, displayAnalyticsMetric, shouldShowAiDjCommentary, tiedCandidateIds, uniqueChatMessages } from '../api/uiData.js';
@@ -9,6 +9,7 @@ export default function LoungeCollaborationPanel({ socket, loungeId, status, use
   const [messages, setMessages] = useState([]);
   const [sentiment, setSentiment] = useState(null);
   const [body, setBody] = useState('');
+  const chatSubmission = useRef(null);
   const [chatState, setChatState] = useState('idle');
   const [chatError, setChatError] = useState('');
   const [battle, setBattle] = useState(initialBattle ?? null);
@@ -23,6 +24,7 @@ export default function LoungeCollaborationPanel({ socket, loungeId, status, use
 
   useEffect(() => {
     setMessages([]); setSentiment(null); setBody(''); setChatError(''); setChatState('idle');
+    chatSubmission.current = null;
     setBattle(initialBattle ?? null); setBattleError(''); setAnnouncement(null);
     setAnalytics(null); setAnalyticsState(loungeId ? 'loading' : 'idle'); setAnalyticsError('');
   }, [loungeId]);
@@ -52,7 +54,11 @@ export default function LoungeCollaborationPanel({ socket, loungeId, status, use
     setChatState('loading'); setChatError('');
     socket.emit('lounge.chat.history', { limit: 50 }, (ack) => {
       if (!active) return;
-      if (ack?.ok) { setMessages((current) => uniqueChatMessages([...current, ...(ack.messages ?? [])])); setChatState('ready'); }
+      if (ack?.ok) {
+        setMessages((current) => uniqueChatMessages([...current, ...(ack.messages ?? [])]));
+        if (ack.sentiment) setSentiment(ack.sentiment);
+        setChatState('ready');
+      }
       else { setChatError(errorMessage(ack)); setChatState('error'); }
     });
     return () => { active = false; };
@@ -86,8 +92,12 @@ export default function LoungeCollaborationPanel({ socket, loungeId, status, use
     event.preventDefault();
     const cleanBody = body.trim();
     if (!cleanBody || chatState === 'sending') return;
+    if (chatSubmission.current?.body !== cleanBody) {
+      chatSubmission.current = { body: cleanBody, clientMessageId: globalThis.crypto?.randomUUID?.() };
+    }
     setChatState('sending'); setChatError('');
-    command('lounge.chat.message', { body: cleanBody }, (ack) => {
+    const payload = { body: cleanBody, ...(chatSubmission.current.clientMessageId ? { clientMessageId: chatSubmission.current.clientMessageId } : {}) };
+    command('lounge.chat.message', payload, (ack) => {
       if (ack?.ok) {
         if (ack.message) setMessages((current) => uniqueChatMessages([...current, ack.message]));
         if (ack.sentiment) {
@@ -95,7 +105,7 @@ export default function LoungeCollaborationPanel({ socket, loungeId, status, use
           const saved = getActiveLounge();
           if (saved?.loungeId === loungeId) saveActiveLounge({ ...saved, sentiment: ack.sentiment });
         }
-        setBody(''); setChatState('ready');
+        setBody(''); setChatState('ready'); chatSubmission.current = null;
       } else { setChatError(errorMessage(ack)); setChatState('ready'); }
     });
   }
@@ -125,7 +135,9 @@ export default function LoungeCollaborationPanel({ socket, loungeId, status, use
         {chatState === 'loading' && <div className="integration-status">Loading Lounge history…</div>}
         {chatState === 'error' && <div className="integration-error" role="alert">{chatError}</div>}
         {chatState === 'ready' && messages.length === 0 && <div className="integration-status">No Lounge messages yet.</div>}
-        {messages.map((message) => <div className="lounge-chat-message" key={message.messageId}><b>{String(message.userId) === String(user?.id) ? 'You' : `Member ${String(message.userId).slice(-4)}`}</b><span>{message.body}</span><small>{new Date(message.tsSeconds * 1000).toLocaleTimeString()}</small></div>)}
+        <div role="list" aria-label="Lounge chat messages">
+          {messages.map((message) => <div className="lounge-chat-message" role="listitem" key={message.messageId}><b>{String(message.userId) === String(user?.id) ? 'You' : `Member ${String(message.userId).slice(-4)}`}</b><span>{message.body}</span><small>{new Date(message.tsSeconds * 1000).toLocaleTimeString()}</small></div>)}
+        </div>
       </div>
       <form className="lounge-chat-form" onSubmit={sendMessage}><input aria-label="Chat message" value={body} onChange={(event) => setBody(event.target.value)} maxLength={500} placeholder="Send a message to the Lounge…" disabled={status !== 'connected' || chatState === 'sending'}/><button className="btn-outline" disabled={!body.trim() || status !== 'connected' || chatState === 'sending'}>{chatState === 'sending' ? 'Sending…' : 'Send'}</button></form>
       {chatError && chatState !== 'error' && <p className="integration-error" role="alert">{chatError}</p>}

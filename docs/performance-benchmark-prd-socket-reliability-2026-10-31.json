@@ -1,0 +1,913 @@
+{
+  "benchmark": "AstraDJ PRD acceptance microbenchmark",
+  "generatedAt": "2026-10-31T17:39:45.705Z",
+  "runtime": {
+    "node": "v24.22.2",
+    "platform": "win32-x64"
+  },
+  "acousticCompatibility": {
+    "decisions": 20,
+    "invalidSelections": 0,
+    "compliancePercent": 100,
+    "weightErrors": 0
+  },
+  "sentiment": {
+    "language": "English and Hinglish transliteration",
+    "PRDTargetPercent": 85,
+    "legacyLexiconAwareDiagnostic": {
+      "datasetSize": 40,
+      "classBalance": {
+        "positive": 13,
+        "neutral": 14,
+        "negative": 13
+      },
+      "origin": "synthetic and manually labeled after reviewing the original lexicon; diagnostic/regression fixture, not independent validation",
+      "originalBaseline": {
+        "sampleCount": 40,
+        "accuracy": 0.8,
+        "correct": 32,
+        "confusionMatrix": {
+          "positive": {
+            "positive": 10,
+            "neutral": 2,
+            "negative": 1
+          },
+          "neutral": {
+            "positive": 1,
+            "neutral": 13,
+            "negative": 0
+          },
+          "negative": {
+            "positive": 1,
+            "neutral": 3,
+            "negative": 9
+          }
+        },
+        "perClass": {
+          "positive": {
+            "precision": 0.8333,
+            "recall": 0.7692,
+            "f1": 0.8,
+            "support": 13
+          },
+          "neutral": {
+            "precision": 0.7222,
+            "recall": 0.9286,
+            "f1": 0.8125,
+            "support": 14
+          },
+          "negative": {
+            "precision": 0.9,
+            "recall": 0.6923,
+            "f1": 0.7826,
+            "support": 13
+          }
+        },
+        "challengeCases": {
+          "ambiguous": {
+            "total": 0,
+            "correct": 0,
+            "accuracy": null
+          },
+          "mixed": {
+            "total": 0,
+            "correct": 0,
+            "accuracy": null
+          }
+        }
+      },
+      "currentClassifier": {
+        "sampleCount": 40,
+        "accuracy": 0.9,
+        "correct": 36,
+        "confusionMatrix": {
+          "positive": {
+            "positive": 13,
+            "neutral": 0,
+            "negative": 0
+          },
+          "neutral": {
+            "positive": 0,
+            "neutral": 13,
+            "negative": 1
+          },
+          "negative": {
+            "positive": 1,
+            "neutral": 2,
+            "negative": 10
+          }
+        },
+        "perClass": {
+          "positive": {
+            "precision": 0.9286,
+            "recall": 1,
+            "f1": 0.963,
+            "support": 13
+          },
+          "neutral": {
+            "precision": 0.8667,
+            "recall": 0.9286,
+            "f1": 0.8966,
+            "support": 14
+          },
+          "negative": {
+            "precision": 0.9091,
+            "recall": 0.7692,
+            "f1": 0.8333,
+            "support": 13
+          }
+        },
+        "challengeCases": {
+          "ambiguous": {
+            "total": 0,
+            "correct": 0,
+            "accuracy": null
+          },
+          "mixed": {
+            "total": 0,
+            "correct": 0,
+            "accuracy": null
+          }
+        }
+      }
+    },
+    "separatelyAuthoredEvaluation": {
+      "datasetSize": 90,
+      "classBalance": {
+        "positive": 30,
+        "neutral": 30,
+        "negative": 30
+      },
+      "origin": "developer-authored synthetic English examples labeled before scoring; one-shot held-out evaluation, not real-user data",
+      "labelingGuide": "docs/sentiment-evaluation.md",
+      "baselineBeforeRuleChanges": {
+        "sampleCount": 90,
+        "accuracy": 0.5667,
+        "correct": 51,
+        "confusionMatrix": {
+          "positive": {
+            "positive": 16,
+            "neutral": 14,
+            "negative": 0
+          },
+          "neutral": {
+            "positive": 1,
+            "neutral": 29,
+            "negative": 0
+          },
+          "negative": {
+            "positive": 3,
+            "neutral": 21,
+            "negative": 6
+          }
+        },
+        "perClass": {
+          "positive": {
+            "precision": 0.8,
+            "recall": 0.5333,
+            "f1": 0.64,
+            "support": 30
+          },
+          "neutral": {
+            "precision": 0.4531,
+            "recall": 0.9667,
+            "f1": 0.617,
+            "support": 30
+          },
+          "negative": {
+            "precision": 1,
+            "recall": 0.2,
+            "f1": 0.3333,
+            "support": 30
+          }
+        },
+        "challengeCases": {
+          "ambiguous": {
+            "total": 5,
+            "correct": 4,
+            "accuracy": 0.8
+          },
+          "mixed": {
+            "total": 6,
+            "correct": 2,
+            "accuracy": 0.3333
+          }
+        }
+      },
+      "frozenClassifier": {
+        "sampleCount": 90,
+        "accuracy": 0.8667,
+        "correct": 78,
+        "confusionMatrix": {
+          "positive": {
+            "positive": 23,
+            "neutral": 6,
+            "negative": 1
+          },
+          "neutral": {
+            "positive": 0,
+            "neutral": 30,
+            "negative": 0
+          },
+          "negative": {
+            "positive": 0,
+            "neutral": 5,
+            "negative": 25
+          }
+        },
+        "perClass": {
+          "positive": {
+            "precision": 1,
+            "recall": 0.7667,
+            "f1": 0.8679,
+            "support": 30
+          },
+          "neutral": {
+            "precision": 0.7317,
+            "recall": 1,
+            "f1": 0.8451,
+            "support": 30
+          },
+          "negative": {
+            "precision": 0.9615,
+            "recall": 0.8333,
+            "f1": 0.8929,
+            "support": 30
+          }
+        },
+        "challengeCases": {
+          "ambiguous": {
+            "total": 5,
+            "correct": 5,
+            "accuracy": 1
+          },
+          "mixed": {
+            "total": 6,
+            "correct": 6,
+            "accuracy": 1
+          }
+        }
+      },
+      "meetsTarget": true,
+      "limitation": "Small synthetic evaluation set; accuracy does not establish production or real-user performance."
+    },
+    "independent2026Evaluation": {
+      "datasetSize": 90,
+      "classBalance": {
+        "positive": 30,
+        "neutral": 30,
+        "negative": 30
+      },
+      "fixtureSha256": "832b0f5ca1fbd62e67b293ddb09ecb33646c97b18cbc86201ec85f7a52519fcb",
+      "origin": "developer-authored synthetic English/Hinglish examples, manually labeled before classifier changes; not real-user data",
+      "labelingGuide": "docs/sentiment-evaluation.md",
+      "developmentSetSize": 36,
+      "developmentBaseline": {
+        "sampleCount": 36,
+        "accuracy": 0.5556,
+        "correct": 20,
+        "confusionMatrix": {
+          "positive": {
+            "positive": 7,
+            "neutral": 5,
+            "negative": 0
+          },
+          "neutral": {
+            "positive": 2,
+            "neutral": 10,
+            "negative": 0
+          },
+          "negative": {
+            "positive": 0,
+            "neutral": 9,
+            "negative": 3
+          }
+        },
+        "perClass": {
+          "positive": {
+            "precision": 0.7778,
+            "recall": 0.5833,
+            "f1": 0.6667,
+            "support": 12
+          },
+          "neutral": {
+            "precision": 0.4167,
+            "recall": 0.8333,
+            "f1": 0.5556,
+            "support": 12
+          },
+          "negative": {
+            "precision": 1,
+            "recall": 0.25,
+            "f1": 0.4,
+            "support": 12
+          }
+        },
+        "challengeCases": {
+          "ambiguous": {
+            "total": 2,
+            "correct": 2,
+            "accuracy": 1
+          },
+          "mixed": {
+            "total": 2,
+            "correct": 1,
+            "accuracy": 0.5
+          }
+        }
+      },
+      "developmentUpdated": {
+        "sampleCount": 36,
+        "accuracy": 1,
+        "correct": 36,
+        "confusionMatrix": {
+          "positive": {
+            "positive": 12,
+            "neutral": 0,
+            "negative": 0
+          },
+          "neutral": {
+            "positive": 0,
+            "neutral": 12,
+            "negative": 0
+          },
+          "negative": {
+            "positive": 0,
+            "neutral": 0,
+            "negative": 12
+          }
+        },
+        "perClass": {
+          "positive": {
+            "precision": 1,
+            "recall": 1,
+            "f1": 1,
+            "support": 12
+          },
+          "neutral": {
+            "precision": 1,
+            "recall": 1,
+            "f1": 1,
+            "support": 12
+          },
+          "negative": {
+            "precision": 1,
+            "recall": 1,
+            "f1": 1,
+            "support": 12
+          }
+        },
+        "challengeCases": {
+          "ambiguous": {
+            "total": 2,
+            "correct": 2,
+            "accuracy": 1
+          },
+          "mixed": {
+            "total": 2,
+            "correct": 2,
+            "accuracy": 1
+          }
+        }
+      },
+      "preChangeFrozenClassifier": {
+        "sampleCount": 90,
+        "accuracy": 0.5333,
+        "correct": 48,
+        "confusionMatrix": {
+          "positive": {
+            "positive": 14,
+            "neutral": 16,
+            "negative": 0
+          },
+          "neutral": {
+            "positive": 3,
+            "neutral": 27,
+            "negative": 0
+          },
+          "negative": {
+            "positive": 1,
+            "neutral": 22,
+            "negative": 7
+          }
+        },
+        "perClass": {
+          "positive": {
+            "precision": 0.7778,
+            "recall": 0.4667,
+            "f1": 0.5833,
+            "support": 30
+          },
+          "neutral": {
+            "precision": 0.4154,
+            "recall": 0.9,
+            "f1": 0.5684,
+            "support": 30
+          },
+          "negative": {
+            "precision": 1,
+            "recall": 0.2333,
+            "f1": 0.3784,
+            "support": 30
+          }
+        },
+        "challengeCases": {
+          "ambiguous": {
+            "total": 5,
+            "correct": 3,
+            "accuracy": 0.6
+          },
+          "mixed": {
+            "total": 1,
+            "correct": 1,
+            "accuracy": 1
+          }
+        }
+      },
+      "updatedClassifier": {
+        "sampleCount": 90,
+        "accuracy": 0.7667,
+        "correct": 69,
+        "confusionMatrix": {
+          "positive": {
+            "positive": 26,
+            "neutral": 4,
+            "negative": 0
+          },
+          "neutral": {
+            "positive": 5,
+            "neutral": 25,
+            "negative": 0
+          },
+          "negative": {
+            "positive": 1,
+            "neutral": 11,
+            "negative": 18
+          }
+        },
+        "perClass": {
+          "positive": {
+            "precision": 0.8125,
+            "recall": 0.8667,
+            "f1": 0.8387,
+            "support": 30
+          },
+          "neutral": {
+            "precision": 0.625,
+            "recall": 0.8333,
+            "f1": 0.7143,
+            "support": 30
+          },
+          "negative": {
+            "precision": 1,
+            "recall": 0.6,
+            "f1": 0.75,
+            "support": 30
+          }
+        },
+        "challengeCases": {
+          "ambiguous": {
+            "total": 5,
+            "correct": 3,
+            "accuracy": 0.6
+          },
+          "mixed": {
+            "total": 1,
+            "correct": 1,
+            "accuracy": 1
+          }
+        }
+      },
+      "meetsTarget": false,
+      "limitation": "One small synthetic one-author holdout; useful for regression discovery, not representative production accuracy evidence."
+    }
+  },
+  "recommendation": {
+    "profiles": 3,
+    "totalTrainingInteractions": 6,
+    "candidateCount": 30,
+    "totalHeldOutRelevantLabels": 9,
+    "denominator": 15,
+    "acoustic": {
+      "hits": 9,
+      "precisionAt5": 0.6
+    },
+    "popularity": {
+      "hits": 0,
+      "precisionAt5": 0
+    },
+    "perUser": [
+      {
+        "userId": "eval-a",
+        "trainingTrackCount": 2,
+        "candidateCount": 10,
+        "heldOutRelevantCount": 3,
+        "acoustic": {
+          "precision": 0.6,
+          "hits": 3,
+          "denominator": 5,
+          "recommended": 5
+        },
+        "popularity": {
+          "precision": 0,
+          "hits": 0,
+          "denominator": 5,
+          "recommended": 5
+        }
+      },
+      {
+        "userId": "eval-b",
+        "trainingTrackCount": 2,
+        "candidateCount": 10,
+        "heldOutRelevantCount": 3,
+        "acoustic": {
+          "precision": 0.6,
+          "hits": 3,
+          "denominator": 5,
+          "recommended": 5
+        },
+        "popularity": {
+          "precision": 0,
+          "hits": 0,
+          "denominator": 5,
+          "recommended": 5
+        }
+      },
+      {
+        "userId": "eval-c",
+        "trainingTrackCount": 2,
+        "candidateCount": 10,
+        "heldOutRelevantCount": 3,
+        "acoustic": {
+          "precision": 0.6,
+          "hits": 3,
+          "denominator": 5,
+          "recommended": 5
+        },
+        "popularity": {
+          "precision": 0,
+          "hits": 0,
+          "denominator": 5,
+          "recommended": 5
+        }
+      }
+    ],
+    "limitations": "Synthetic one-shot profiles and manually selected acoustic-neighbor labels; no real interaction ground truth or statistical inference."
+  },
+  "segueLatency": {
+    "iterations": 250,
+    "timing": "in-process service wall time; fake repository; deterministic fallback; excludes MongoDB, socket transport and an outro scheduler",
+    "p50Ms": 0.079,
+    "p95Ms": 0.236,
+    "maxMs": 3.405
+  },
+  "socketQueueLoad": {
+    "status": "PASS_LOCAL_SYNTHETIC_ONLY",
+    "loungeCount": 1,
+    "participants": 50,
+    "rounds": 20,
+    "mutationAttempts": 20,
+    "successfulMutations": 20,
+    "acknowledgedMutations": 20,
+    "rejectedMutations": 0,
+    "mutationTimeouts": 0,
+    "serverRecordedQueueEvents": 20,
+    "missingServerEvents": 0,
+    "duplicateLogicalEvents": 0,
+    "expectedClientReceipts": 1000,
+    "observedClientReceipts": 1000,
+    "rawClientQueueUpdateReceipts": 1000,
+    "missingClientReceipts": 0,
+    "duplicateClientReceipts": 0,
+    "queueStateHashComparisons": 1000,
+    "queueStateHashMismatches": 0,
+    "queueStateDivergences": 0,
+    "outOfOrderClientReceipts": 0,
+    "finalClientDivergences": 0,
+    "finalQueue": {
+      "revision": 20,
+      "trackCount": 21,
+      "stateHash": "d00c4fbb680612a1464bfeb4895474765aa65d05115925aa2c1651537efae624",
+      "missingQueueItems": 0,
+      "matchesExpectedOrder": true
+    },
+    "latencyMs": {
+      "clientArrivalSpread": {
+        "samples": 20,
+        "p50Ms": 2.312,
+        "p95Ms": 3.352,
+        "p99Ms": 3.474,
+        "maxMs": 3.474
+      },
+      "serverReceiptToLastClientReceipt": {
+        "samples": 20,
+        "p50Ms": 4.636,
+        "p95Ms": 5.606,
+        "p99Ms": 8.782,
+        "maxMs": 8.782
+      },
+      "commandStartToLastClientReceipt": {
+        "samples": 20,
+        "p50Ms": 4.942,
+        "p95Ms": 7.306,
+        "p99Ms": 9.333,
+        "maxMs": 9.333
+      },
+      "commandAcknowledgementRoundTrip": {
+        "samples": 20,
+        "p50Ms": 2.665,
+        "p95Ms": 5.149,
+        "p99Ms": 5.996,
+        "maxMs": 5.996
+      },
+      "serverProcessing": {
+        "samples": 20,
+        "p50Ms": 1.894,
+        "p95Ms": 2.45,
+        "p99Ms": 4.713,
+        "maxMs": 4.713
+      }
+    },
+    "environment": {
+      "topology": "one Node process, one Lounge, authenticated localhost Socket.IO WebSocket clients, in-memory queue repository; no MongoDB or browser rendering",
+      "runtime": "v24.22.2",
+      "platform": "win32-x64",
+      "cpuModel": "Intel(R) Core(TM) i5-8350U CPU @ 1.70GHz",
+      "logicalCpuCount": 8,
+      "durationMs": 477.563,
+      "cpuUserMs": 422,
+      "cpuSystemMs": 125,
+      "memoryStartBytes": 99745792,
+      "memoryEndBytes": 113950720,
+      "rateLimiter": "In-memory fixed-window test dependency enforces the same configured policies; production Mongo rate limiter is unchanged.",
+      "rateLimitChecks": 120,
+      "writerRoles": [
+        "Host",
+        "Co-DJ"
+      ]
+    },
+    "workloadNotes": "Queue writes are sequential within the single Lounge. This measures local Socket.IO receipt spread, not concurrent multi-process, MongoDB, or rendered UI synchronization.",
+    "perRound": [
+      {
+        "round": 0,
+        "trackId": "t_bench_000",
+        "accepted": true,
+        "expectedClients": 50,
+        "receivedClients": 50,
+        "duplicateReceipts": 0,
+        "queueRevision": 1,
+        "queueHashMatchesAcrossClients": true,
+        "serverProcessingMs": 4.713,
+        "serverReceiptToLastClientReceiptMs": 8.782,
+        "commandStartToLastClientReceiptMs": 9.333
+      },
+      {
+        "round": 1,
+        "trackId": "t_bench_001",
+        "accepted": true,
+        "expectedClients": 50,
+        "receivedClients": 50,
+        "duplicateReceipts": 0,
+        "queueRevision": 2,
+        "queueHashMatchesAcrossClients": true,
+        "serverProcessingMs": 2.186,
+        "serverReceiptToLastClientReceiptMs": 5.076,
+        "commandStartToLastClientReceiptMs": 5.49
+      },
+      {
+        "round": 2,
+        "trackId": "t_bench_002",
+        "accepted": true,
+        "expectedClients": 50,
+        "receivedClients": 50,
+        "duplicateReceipts": 0,
+        "queueRevision": 3,
+        "queueHashMatchesAcrossClients": true,
+        "serverProcessingMs": 1.777,
+        "serverReceiptToLastClientReceiptMs": 4.477,
+        "commandStartToLastClientReceiptMs": 4.811
+      },
+      {
+        "round": 3,
+        "trackId": "t_bench_003",
+        "accepted": true,
+        "expectedClients": 50,
+        "receivedClients": 50,
+        "duplicateReceipts": 0,
+        "queueRevision": 4,
+        "queueHashMatchesAcrossClients": true,
+        "serverProcessingMs": 1.758,
+        "serverReceiptToLastClientReceiptMs": 4.855,
+        "commandStartToLastClientReceiptMs": 5.138
+      },
+      {
+        "round": 4,
+        "trackId": "t_bench_004",
+        "accepted": true,
+        "expectedClients": 50,
+        "receivedClients": 50,
+        "duplicateReceipts": 0,
+        "queueRevision": 5,
+        "queueHashMatchesAcrossClients": true,
+        "serverProcessingMs": 1.894,
+        "serverReceiptToLastClientReceiptMs": 4.503,
+        "commandStartToLastClientReceiptMs": 4.788
+      },
+      {
+        "round": 5,
+        "trackId": "t_bench_005",
+        "accepted": true,
+        "expectedClients": 50,
+        "receivedClients": 50,
+        "duplicateReceipts": 0,
+        "queueRevision": 6,
+        "queueHashMatchesAcrossClients": true,
+        "serverProcessingMs": 1.836,
+        "serverReceiptToLastClientReceiptMs": 5.606,
+        "commandStartToLastClientReceiptMs": 5.891
+      },
+      {
+        "round": 6,
+        "trackId": "t_bench_006",
+        "accepted": true,
+        "expectedClients": 50,
+        "receivedClients": 50,
+        "duplicateReceipts": 0,
+        "queueRevision": 7,
+        "queueHashMatchesAcrossClients": true,
+        "serverProcessingMs": 1.9,
+        "serverReceiptToLastClientReceiptMs": 4.396,
+        "commandStartToLastClientReceiptMs": 4.942
+      },
+      {
+        "round": 7,
+        "trackId": "t_bench_007",
+        "accepted": true,
+        "expectedClients": 50,
+        "receivedClients": 50,
+        "duplicateReceipts": 0,
+        "queueRevision": 8,
+        "queueHashMatchesAcrossClients": true,
+        "serverProcessingMs": 1.824,
+        "serverReceiptToLastClientReceiptMs": 4.201,
+        "commandStartToLastClientReceiptMs": 4.502
+      },
+      {
+        "round": 8,
+        "trackId": "t_bench_008",
+        "accepted": true,
+        "expectedClients": 50,
+        "receivedClients": 50,
+        "duplicateReceipts": 0,
+        "queueRevision": 9,
+        "queueHashMatchesAcrossClients": true,
+        "serverProcessingMs": 2.042,
+        "serverReceiptToLastClientReceiptMs": 4.701,
+        "commandStartToLastClientReceiptMs": 5.039
+      },
+      {
+        "round": 9,
+        "trackId": "t_bench_009",
+        "accepted": true,
+        "expectedClients": 50,
+        "receivedClients": 50,
+        "duplicateReceipts": 0,
+        "queueRevision": 10,
+        "queueHashMatchesAcrossClients": true,
+        "serverProcessingMs": 1.862,
+        "serverReceiptToLastClientReceiptMs": 4.388,
+        "commandStartToLastClientReceiptMs": 4.679
+      },
+      {
+        "round": 10,
+        "trackId": "t_bench_010",
+        "accepted": true,
+        "expectedClients": 50,
+        "receivedClients": 50,
+        "duplicateReceipts": 0,
+        "queueRevision": 11,
+        "queueHashMatchesAcrossClients": true,
+        "serverProcessingMs": 1.979,
+        "serverReceiptToLastClientReceiptMs": 5.132,
+        "commandStartToLastClientReceiptMs": 5.474
+      },
+      {
+        "round": 11,
+        "trackId": "t_bench_011",
+        "accepted": true,
+        "expectedClients": 50,
+        "receivedClients": 50,
+        "duplicateReceipts": 0,
+        "queueRevision": 12,
+        "queueHashMatchesAcrossClients": true,
+        "serverProcessingMs": 1.852,
+        "serverReceiptToLastClientReceiptMs": 4.574,
+        "commandStartToLastClientReceiptMs": 4.942
+      },
+      {
+        "round": 12,
+        "trackId": "t_bench_012",
+        "accepted": true,
+        "expectedClients": 50,
+        "receivedClients": 50,
+        "duplicateReceipts": 0,
+        "queueRevision": 13,
+        "queueHashMatchesAcrossClients": true,
+        "serverProcessingMs": 1.873,
+        "serverReceiptToLastClientReceiptMs": 4.471,
+        "commandStartToLastClientReceiptMs": 4.735
+      },
+      {
+        "round": 13,
+        "trackId": "t_bench_013",
+        "accepted": true,
+        "expectedClients": 50,
+        "receivedClients": 50,
+        "duplicateReceipts": 0,
+        "queueRevision": 14,
+        "queueHashMatchesAcrossClients": true,
+        "serverProcessingMs": 1.848,
+        "serverReceiptToLastClientReceiptMs": 4.488,
+        "commandStartToLastClientReceiptMs": 4.722
+      },
+      {
+        "round": 14,
+        "trackId": "t_bench_014",
+        "accepted": true,
+        "expectedClients": 50,
+        "receivedClients": 50,
+        "duplicateReceipts": 0,
+        "queueRevision": 15,
+        "queueHashMatchesAcrossClients": true,
+        "serverProcessingMs": 1.956,
+        "serverReceiptToLastClientReceiptMs": 4.666,
+        "commandStartToLastClientReceiptMs": 5.021
+      },
+      {
+        "round": 15,
+        "trackId": "t_bench_015",
+        "accepted": true,
+        "expectedClients": 50,
+        "receivedClients": 50,
+        "duplicateReceipts": 0,
+        "queueRevision": 16,
+        "queueHashMatchesAcrossClients": true,
+        "serverProcessingMs": 1.943,
+        "serverReceiptToLastClientReceiptMs": 4.709,
+        "commandStartToLastClientReceiptMs": 4.961
+      },
+      {
+        "round": 16,
+        "trackId": "t_bench_016",
+        "accepted": true,
+        "expectedClients": 50,
+        "receivedClients": 50,
+        "duplicateReceipts": 0,
+        "queueRevision": 17,
+        "queueHashMatchesAcrossClients": true,
+        "serverProcessingMs": 2.45,
+        "serverReceiptToLastClientReceiptMs": 5.18,
+        "commandStartToLastClientReceiptMs": 5.54
+      },
+      {
+        "round": 17,
+        "trackId": "t_bench_017",
+        "accepted": true,
+        "expectedClients": 50,
+        "receivedClients": 50,
+        "duplicateReceipts": 0,
+        "queueRevision": 18,
+        "queueHashMatchesAcrossClients": true,
+        "serverProcessingMs": 2.036,
+        "serverReceiptToLastClientReceiptMs": 4.636,
+        "commandStartToLastClientReceiptMs": 7.306
+      },
+      {
+        "round": 18,
+        "trackId": "t_bench_018",
+        "accepted": true,
+        "expectedClients": 50,
+        "receivedClients": 50,
+        "duplicateReceipts": 0,
+        "queueRevision": 19,
+        "queueHashMatchesAcrossClients": true,
+        "serverProcessingMs": 1.82,
+        "serverReceiptToLastClientReceiptMs": 4.603,
+        "commandStartToLastClientReceiptMs": 4.926
+      },
+      {
+        "round": 19,
+        "trackId": "t_bench_019",
+        "accepted": true,
+        "expectedClients": 50,
+        "receivedClients": 50,
+        "duplicateReceipts": 0,
+        "queueRevision": 20,
+        "queueHashMatchesAcrossClients": true,
+        "serverProcessingMs": 1.907,
+        "serverReceiptToLastClientReceiptMs": 4.67,
+        "commandStartToLastClientReceiptMs": 4.925
+      }
+    ]
+  }
+}

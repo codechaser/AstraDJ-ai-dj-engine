@@ -5,6 +5,7 @@ import {
   matchSegueCandidate,
   rankSegueCandidates,
 } from '../src/services/acousticMatcher.js';
+import { seedTracks } from '../src/seed/tracks.js';
 
 const track = (trackId, bpm, camelotKey, energy = 0.5, valence = 0.5) => ({
   trackId,
@@ -100,15 +101,12 @@ describe('segue eligibility and scoring', () => {
     expect(ranked.rejected.map((item) => item.match.reasonCode)).toEqual(['BPM_INCOMPATIBLE', 'CAMELOT_INCOMPATIBLE']);
   });
 
-  test('source-backed CC0 pair passes the existing tempo and Camelot hard rules', () => {
-    const ivoryAtlas = { trackId: 't_cc0_ivory_atlas', acoustic: { bpm: 143, camelotKey: '8A', energy: 0.8203068972, valence: 0.7740629911 } };
-    const fadedFortress = { trackId: 't_cc0_faded_fortress', acoustic: { bpm: 142, camelotKey: '8A', energy: 0.6857643127, valence: 0.68199718 } };
-    const incompatibleTempo = { trackId: 't_bad_tempo', acoustic: { bpm: 170, camelotKey: '8A', energy: 0.5, valence: 0.5 } };
-    const incompatibleKey = { trackId: 't_bad_key', acoustic: { bpm: 142, camelotKey: '9B', energy: 0.5, valence: 0.5 } };
-    const ranked = rankSegueCandidates(ivoryAtlas, [fadedFortress, incompatibleTempo, incompatibleKey]);
-    expect(ranked.eligible.map(({ track }) => track.trackId)).toEqual(['t_cc0_faded_fortress']);
-    expect(ranked.eligible[0].match).toMatchObject({ bpmDeltaPct: 0.7, bpmRelation: 'direct', camelotRelation: 'same' });
-    expect(ranked.rejected.map(({ match }) => match.reasonCode)).toEqual(['BPM_INCOMPATIBLE', 'CAMELOT_INCOMPATIBLE']);
+  test('unverified seed profiles cannot make a catalog track segue-eligible', () => {
+    const current = seedTracks.find((item) => item.trackId === 't_cc0_ivory_atlas');
+    const candidate = seedTracks.find((item) => item.trackId === 't_cc0_faded_fortress');
+    expect(current).toMatchObject({ audioAssetUrl: null, acoustic: null, acousticEvidence: null });
+    expect(candidate).toMatchObject({ audioAssetUrl: null, acoustic: null, acousticEvidence: null });
+    expect(rankSegueCandidates(current, [candidate]).eligible).toHaveLength(0);
   });
 
   test('keeps 20 simulated decisions within BPM and Camelot rules', () => {

@@ -1,0 +1,199 @@
+{
+  "runId": "runtime-mvxae1y6-293be5ab",
+  "name": "queue_mutations",
+  "status": "completed",
+  "startedAt": "2026-11-01T03:45:18.278Z",
+  "endedAt": "2026-11-01T03:45:35.297Z",
+  "durationMs": 17019.844,
+  "result": {
+    "levels": [
+      {
+        "concurrency": 1,
+        "attempted": 100,
+        "successful": 100,
+        "errors": 0,
+        "errorRatePercent": 0,
+        "ackLatency": {
+          "samples": 100,
+          "p50Ms": 17.955,
+          "p95Ms": 31.029,
+          "p99Ms": 46.836,
+          "maxMs": 47.759
+        },
+        "queueStateSyncDrift": {
+          "samples": 100,
+          "p50Ms": 17.478,
+          "p95Ms": 34.07,
+          "p99Ms": 53.286,
+          "maxMs": 56.987
+        },
+        "senderToLastClientDeliveryUpperBound": {
+          "samples": 100,
+          "p50Ms": 63.204,
+          "p95Ms": 80.572,
+          "p99Ms": 99.902,
+          "maxMs": 111.072
+        },
+        "crossProcessSenderToLastClientDelivery": {
+          "samples": 100,
+          "p50Ms": 61.361,
+          "p95Ms": 70.738,
+          "p99Ms": 99.902,
+          "maxMs": 111.072
+        },
+        "clientsMissingAnEventSnapshot": 0,
+        "lateClientEventObservationsAfter8s": 0,
+        "recipientsStillUnobservedAfter18s": 0,
+        "mutationEventsProjected": 100,
+        "duplicateLogicalEvents": 0,
+        "successfulMutationsMissingFromState": 0,
+        "outboxBacklogAtEnd": 0,
+        "mutationsPerSecond": 15.23,
+        "elapsedMs": 6566.599
+      },
+      {
+        "concurrency": 5,
+        "attempted": 100,
+        "successful": 100,
+        "errors": 0,
+        "errorRatePercent": 0,
+        "ackLatency": {
+          "samples": 100,
+          "p50Ms": 67.387,
+          "p95Ms": 125.126,
+          "p99Ms": 139.817,
+          "maxMs": 145.24
+        },
+        "queueStateSyncDrift": {
+          "samples": 100,
+          "p50Ms": 17.857,
+          "p95Ms": 42.141,
+          "p99Ms": 79.558,
+          "maxMs": 97.736
+        },
+        "senderToLastClientDeliveryUpperBound": {
+          "samples": 100,
+          "p50Ms": 103.168,
+          "p95Ms": 179.444,
+          "p99Ms": 210.625,
+          "maxMs": 213.927
+        },
+        "crossProcessSenderToLastClientDelivery": {
+          "samples": 100,
+          "p50Ms": 97.831,
+          "p95Ms": 157.001,
+          "p99Ms": 207.452,
+          "maxMs": 213.927
+        },
+        "clientsMissingAnEventSnapshot": 0,
+        "lateClientEventObservationsAfter8s": 0,
+        "recipientsStillUnobservedAfter18s": 0,
+        "mutationEventsProjected": 100,
+        "duplicateLogicalEvents": 0,
+        "successfulMutationsMissingFromState": 0,
+        "outboxBacklogAtEnd": 0,
+        "mutationsPerSecond": 32.53,
+        "elapsedMs": 3073.912
+      },
+      {
+        "concurrency": 10,
+        "attempted": 100,
+        "successful": 100,
+        "errors": 0,
+        "errorRatePercent": 0,
+        "ackLatency": {
+          "samples": 100,
+          "p50Ms": 148.572,
+          "p95Ms": 295.533,
+          "p99Ms": 338.121,
+          "maxMs": 347.876
+        },
+        "queueStateSyncDrift": {
+          "samples": 100,
+          "p50Ms": 32.789,
+          "p95Ms": 68.56,
+          "p99Ms": 70.072,
+          "maxMs": 74.954
+        },
+        "senderToLastClientDeliveryUpperBound": {
+          "samples": 100,
+          "p50Ms": 183.444,
+          "p95Ms": 318.307,
+          "p99Ms": 378.067,
+          "maxMs": 378.524
+        },
+        "crossProcessSenderToLastClientDelivery": {
+          "samples": 100,
+          "p50Ms": 179.883,
+          "p95Ms": 314.419,
+          "p99Ms": 378.067,
+          "maxMs": 378.524
+        },
+        "clientsMissingAnEventSnapshot": 0,
+        "lateClientEventObservationsAfter8s": 0,
+        "recipientsStillUnobservedAfter18s": 0,
+        "mutationEventsProjected": 100,
+        "duplicateLogicalEvents": 0,
+        "successfulMutationsMissingFromState": 0,
+        "outboxBacklogAtEnd": 0,
+        "mutationsPerSecond": 32.9,
+        "elapsedMs": 3039.369
+      },
+      {
+        "concurrency": 20,
+        "attempted": 100,
+        "successful": 100,
+        "errors": 0,
+        "errorRatePercent": 0,
+        "ackLatency": {
+          "samples": 100,
+          "p50Ms": 282.985,
+          "p95Ms": 534.893,
+          "p99Ms": 628.222,
+          "maxMs": 648.025
+        },
+        "queueStateSyncDrift": {
+          "samples": 100,
+          "p50Ms": 42.323,
+          "p95Ms": 68.706,
+          "p99Ms": 85.31,
+          "maxMs": 105.631
+        },
+        "senderToLastClientDeliveryUpperBound": {
+          "samples": 100,
+          "p50Ms": 329.416,
+          "p95Ms": 576.655,
+          "p99Ms": 675.706,
+          "maxMs": 675.707
+        },
+        "crossProcessSenderToLastClientDelivery": {
+          "samples": 100,
+          "p50Ms": 327.221,
+          "p95Ms": 576.655,
+          "p99Ms": 627.53,
+          "maxMs": 675.707
+        },
+        "clientsMissingAnEventSnapshot": 0,
+        "lateClientEventObservationsAfter8s": 0,
+        "recipientsStillUnobservedAfter18s": 0,
+        "mutationEventsProjected": 100,
+        "duplicateLogicalEvents": 0,
+        "successfulMutationsMissingFromState": 0,
+        "outboxBacklogAtEnd": 0,
+        "mutationsPerSecond": 34.99,
+        "elapsedMs": 2857.924
+      }
+    ],
+    "queueLoadReconciliation": {
+      "successfulAdds": 400,
+      "persistedAddEvents": 400,
+      "duplicateLogicalEvents": 0,
+      "successfulAddsMissingFromEventLog": 0,
+      "successfulAddsMissingFromQueueState": 0,
+      "outboxBacklog": 0,
+      "connectedClientsResynchronized": 51,
+      "connectedClientsExpected": 51
+    },
+    "successfulTrackIdCount": 400
+  }
+}

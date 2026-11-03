@@ -1,0 +1,497 @@
+{
+  "benchmark": "AstraDJ runtime performance and coordination benchmark",
+  "generatedAt": "2026-10-28T10:01:54.667Z",
+  "durationMs": 62200.331,
+  "startedAt": "2026-10-28T10:00:52.468Z",
+  "baselineCommit": "2e74782",
+  "runId": "run-6",
+  "evaluatedWorkingTree": "queue snapshot batch hydration, contiguous queue-event fanout, incremental seq-cursor event reads, and narrow outbox projection",
+  "database": {
+    "topology": "standalone",
+    "version": "8.2.5",
+    "hostScope": "loopback only",
+    "databaseName": "astradj_test_runtimebench_3599811cf0b446a099de28f9f66356cd",
+    "cleanup": "unique astradj_test_runtimebench_<random> database dropped after report writing"
+  },
+  "runtime": {
+    "node": "v24.16.0",
+    "platform": "win32-x64",
+    "cpuModel": "Intel(R) Core(TM) i5-8350U CPU @ 1.70GHz",
+    "logicalCpuCount": 8,
+    "totalMemoryGiB": 7.88,
+    "apiProcessCount": 2,
+    "apiProcessStartupMs": [
+      1263.512,
+      1444.973
+    ],
+    "roomCapacityAccounts": 50,
+    "socketConnections": 51,
+    "hostConnectionsAcrossProcesses": 2
+  },
+  "methodology": {
+    "apiEndpoint": "GET /api/v1/tracks?limit=10",
+    "apiConcurrencyLevels": [
+      1,
+      10,
+      25
+    ],
+    "apiSamplesPerProcessPerLevel": 500,
+    "queueConcurrencyLevels": [
+      1,
+      5,
+      10,
+      20
+    ],
+    "queueSamplesPerLevel": 100,
+    "soundclashVoteCount": 20,
+    "segueSamples": 20,
+    "warmupSamplesPerApiProcess": 25,
+    "queueEventReads": "each gateway polls durable outbox recovery, then queries QueueEvent rows with seq greater than its local cursor",
+    "percentileMethod": "nearest-rank; p95/p99 precision depends on reported sample count",
+    "audioPlayback": "not used; segue lifecycle initiated by authenticated Socket.io currentTs and ended commands, so this is service/network timing, not browser playback latency",
+    "clientLocation": "same machine, loopback TCP/WebSocket",
+    "syntheticDataOnly": true
+  },
+  "prdTargets": {
+    "nonAiApiP95Ms": 200,
+    "segueDecisionP95Ms": 3000,
+    "queueStateSyncDriftMs": 100,
+    "roomFanoutFromServerReceiptMs": 500,
+    "queueDesignCapacity": 50
+  },
+  "apiCatalogRead": [
+    {
+      "concurrencyPerProcess": 1,
+      "samplesPerProcess": 500,
+      "metricsByProcess": [
+        {
+          "samples": 500,
+          "p50Ms": 3.791,
+          "p95Ms": 5.126,
+          "p99Ms": 8.57,
+          "maxMs": 11.029,
+          "errors": 0,
+          "errorRatePercent": 0,
+          "requestsPerSecond": 250.62,
+          "elapsedMs": 1995.085
+        },
+        {
+          "samples": 500,
+          "p50Ms": 3.804,
+          "p95Ms": 5.067,
+          "p99Ms": 7.866,
+          "maxMs": 9.758,
+          "errors": 0,
+          "errorRatePercent": 0,
+          "requestsPerSecond": 250.99,
+          "elapsedMs": 1992.112
+        }
+      ],
+      "totalRequests": 1000,
+      "note": "Each process received an independent sample batch; warm-up requests are excluded from reported statistics."
+    },
+    {
+      "concurrencyPerProcess": 10,
+      "samplesPerProcess": 500,
+      "metricsByProcess": [
+        {
+          "samples": 500,
+          "p50Ms": 21.887,
+          "p95Ms": 30.236,
+          "p99Ms": 39.034,
+          "maxMs": 42.262,
+          "errors": 0,
+          "errorRatePercent": 0,
+          "requestsPerSecond": 359.37,
+          "elapsedMs": 1391.319
+        },
+        {
+          "samples": 500,
+          "p50Ms": 21.438,
+          "p95Ms": 28.767,
+          "p99Ms": 33.282,
+          "maxMs": 40.749,
+          "errors": 0,
+          "errorRatePercent": 0,
+          "requestsPerSecond": 363.59,
+          "elapsedMs": 1375.161
+        }
+      ],
+      "totalRequests": 1000,
+      "note": "Each process received an independent sample batch; warm-up requests are excluded from reported statistics."
+    },
+    {
+      "concurrencyPerProcess": 25,
+      "samplesPerProcess": 500,
+      "metricsByProcess": [
+        {
+          "samples": 500,
+          "p50Ms": 54.695,
+          "p95Ms": 73.209,
+          "p99Ms": 80.668,
+          "maxMs": 94.878,
+          "errors": 0,
+          "errorRatePercent": 0,
+          "requestsPerSecond": 346.77,
+          "elapsedMs": 1441.864
+        },
+        {
+          "samples": 500,
+          "p50Ms": 54.599,
+          "p95Ms": 76.203,
+          "p99Ms": 81.97,
+          "maxMs": 88.719,
+          "errors": 0,
+          "errorRatePercent": 0,
+          "requestsPerSecond": 348.2,
+          "elapsedMs": 1435.973
+        }
+      ],
+      "totalRequests": 1000,
+      "note": "Each process received an independent sample batch; warm-up requests are excluded from reported statistics."
+    }
+  ],
+  "queueMutation": [
+    {
+      "concurrency": 1,
+      "attempted": 100,
+      "successful": 100,
+      "errors": 0,
+      "errorRatePercent": 0,
+      "ackLatency": {
+        "samples": 100,
+        "p50Ms": 17.23,
+        "p95Ms": 43.11,
+        "p99Ms": 48.068,
+        "maxMs": 49.135
+      },
+      "queueStateSyncDrift": {
+        "samples": 100,
+        "p50Ms": 17.024,
+        "p95Ms": 34.846,
+        "p99Ms": 42.639,
+        "maxMs": 51.558
+      },
+      "senderToLastClientDeliveryUpperBound": {
+        "samples": 100,
+        "p50Ms": 63.122,
+        "p95Ms": 93.105,
+        "p99Ms": 98.489,
+        "maxMs": 116.581
+      },
+      "crossProcessSenderToLastClientDelivery": {
+        "samples": 100,
+        "p50Ms": 61.582,
+        "p95Ms": 78.327,
+        "p99Ms": 87.873,
+        "maxMs": 116.581
+      },
+      "clientsMissingAnEventSnapshot": 0,
+      "lateClientEventObservationsAfter8s": 0,
+      "recipientsStillUnobservedAfter18s": 0,
+      "mutationEventsProjected": 100,
+      "duplicateLogicalEvents": 0,
+      "successfulMutationsMissingFromState": 0,
+      "outboxBacklogAtEnd": 0,
+      "mutationsPerSecond": 14.51,
+      "elapsedMs": 6891.888
+    },
+    {
+      "concurrency": 5,
+      "attempted": 100,
+      "successful": 100,
+      "errors": 0,
+      "errorRatePercent": 0,
+      "ackLatency": {
+        "samples": 100,
+        "p50Ms": 68.734,
+        "p95Ms": 135.414,
+        "p99Ms": 163.471,
+        "maxMs": 176.828
+      },
+      "queueStateSyncDrift": {
+        "samples": 100,
+        "p50Ms": 25.947,
+        "p95Ms": 51.456,
+        "p99Ms": 70.44,
+        "maxMs": 70.44
+      },
+      "senderToLastClientDeliveryUpperBound": {
+        "samples": 100,
+        "p50Ms": 107.546,
+        "p95Ms": 172.61,
+        "p99Ms": 191.989,
+        "maxMs": 220.593
+      },
+      "crossProcessSenderToLastClientDelivery": {
+        "samples": 100,
+        "p50Ms": 97.969,
+        "p95Ms": 166.41,
+        "p99Ms": 189.076,
+        "maxMs": 220.593
+      },
+      "clientsMissingAnEventSnapshot": 0,
+      "lateClientEventObservationsAfter8s": 0,
+      "recipientsStillUnobservedAfter18s": 0,
+      "mutationEventsProjected": 100,
+      "duplicateLogicalEvents": 0,
+      "successfulMutationsMissingFromState": 0,
+      "outboxBacklogAtEnd": 0,
+      "mutationsPerSecond": 33.28,
+      "elapsedMs": 3005.257
+    },
+    {
+      "concurrency": 10,
+      "attempted": 100,
+      "successful": 100,
+      "errors": 0,
+      "errorRatePercent": 0,
+      "ackLatency": {
+        "samples": 100,
+        "p50Ms": 122.453,
+        "p95Ms": 218.763,
+        "p99Ms": 237.607,
+        "maxMs": 244.856
+      },
+      "queueStateSyncDrift": {
+        "samples": 100,
+        "p50Ms": 30.927,
+        "p95Ms": 58.866,
+        "p99Ms": 84.47,
+        "maxMs": 84.47
+      },
+      "senderToLastClientDeliveryUpperBound": {
+        "samples": 100,
+        "p50Ms": 159.537,
+        "p95Ms": 254.687,
+        "p99Ms": 277.675,
+        "maxMs": 277.678
+      },
+      "crossProcessSenderToLastClientDelivery": {
+        "samples": 100,
+        "p50Ms": 150.213,
+        "p95Ms": 247.312,
+        "p99Ms": 273.703,
+        "maxMs": 277.678
+      },
+      "clientsMissingAnEventSnapshot": 0,
+      "lateClientEventObservationsAfter8s": 0,
+      "recipientsStillUnobservedAfter18s": 0,
+      "mutationEventsProjected": 100,
+      "duplicateLogicalEvents": 0,
+      "successfulMutationsMissingFromState": 0,
+      "outboxBacklogAtEnd": 0,
+      "mutationsPerSecond": 41.74,
+      "elapsedMs": 2396.058
+    },
+    {
+      "concurrency": 20,
+      "attempted": 100,
+      "successful": 100,
+      "errors": 0,
+      "errorRatePercent": 0,
+      "ackLatency": {
+        "samples": 100,
+        "p50Ms": 311.367,
+        "p95Ms": 599.743,
+        "p99Ms": 761.801,
+        "maxMs": 817.4
+      },
+      "queueStateSyncDrift": {
+        "samples": 100,
+        "p50Ms": 41.048,
+        "p95Ms": 71.743,
+        "p99Ms": 86.158,
+        "maxMs": 87.128
+      },
+      "senderToLastClientDeliveryUpperBound": {
+        "samples": 100,
+        "p50Ms": 348.626,
+        "p95Ms": 601.844,
+        "p99Ms": 800.904,
+        "maxMs": 846.411
+      },
+      "crossProcessSenderToLastClientDelivery": {
+        "samples": 100,
+        "p50Ms": 347.07,
+        "p95Ms": 600.067,
+        "p99Ms": 779.918,
+        "maxMs": 839.666
+      },
+      "clientsMissingAnEventSnapshot": 0,
+      "lateClientEventObservationsAfter8s": 0,
+      "recipientsStillUnobservedAfter18s": 0,
+      "mutationEventsProjected": 100,
+      "duplicateLogicalEvents": 0,
+      "successfulMutationsMissingFromState": 0,
+      "outboxBacklogAtEnd": 0,
+      "mutationsPerSecond": 31.29,
+      "elapsedMs": 3195.447
+    }
+  ],
+  "outboxStageObservations": {
+    "samples": 10,
+    "observationIntervalMs": 1,
+    "commitObservedAfterSend": {
+      "samples": 10,
+      "p50Ms": 43.497,
+      "p95Ms": 64.738,
+      "p99Ms": 64.738,
+      "maxMs": 64.738
+    },
+    "projectionObservedAfterCommit": {
+      "samples": 10,
+      "p50Ms": 4.285,
+      "p95Ms": 14.817,
+      "p99Ms": 14.817,
+      "maxMs": 14.817
+    },
+    "acknowledgementObservedAfterProjection": {
+      "samples": 10,
+      "p50Ms": 8.314,
+      "p95Ms": 20.99,
+      "p99Ms": 20.99,
+      "maxMs": 20.99
+    },
+    "measurements": [
+      {
+        "commandAckMs": 57.862,
+        "commitObservedAfterSendMs": 44.21,
+        "projectionObservedAfterCommitMs": 7.386,
+        "acknowledgementObservedAfterProjectionMs": 0.005,
+        "observationIntervalMs": 1
+      },
+      {
+        "commandAckMs": 73.702,
+        "commitObservedAfterSendMs": 64.738,
+        "projectionObservedAfterCommitMs": 4.691,
+        "acknowledgementObservedAfterProjectionMs": 0.007,
+        "observationIntervalMs": 1
+      },
+      {
+        "commandAckMs": 73.08,
+        "commitObservedAfterSendMs": 54.14,
+        "projectionObservedAfterCommitMs": 4.331,
+        "acknowledgementObservedAfterProjectionMs": 16.146,
+        "observationIntervalMs": 1
+      },
+      {
+        "commandAckMs": 64.279,
+        "commitObservedAfterSendMs": 43.497,
+        "projectionObservedAfterCommitMs": 10.643,
+        "acknowledgementObservedAfterProjectionMs": 0.005,
+        "observationIntervalMs": 1
+      },
+      {
+        "commandAckMs": 73.937,
+        "commitObservedAfterSendMs": 59.746,
+        "projectionObservedAfterCommitMs": 14.817,
+        "acknowledgementObservedAfterProjectionMs": 0.006,
+        "observationIntervalMs": 1
+      },
+      {
+        "commandAckMs": 59.774,
+        "commitObservedAfterSendMs": 37.301,
+        "projectionObservedAfterCommitMs": 3.424,
+        "acknowledgementObservedAfterProjectionMs": 8.314,
+        "observationIntervalMs": 1
+      },
+      {
+        "commandAckMs": 78.063,
+        "commitObservedAfterSendMs": 32.418,
+        "projectionObservedAfterCommitMs": 4.07,
+        "acknowledgementObservedAfterProjectionMs": 16.968,
+        "observationIntervalMs": 1
+      },
+      {
+        "commandAckMs": 53.752,
+        "commitObservedAfterSendMs": 32.963,
+        "projectionObservedAfterCommitMs": 4.01,
+        "acknowledgementObservedAfterProjectionMs": 17.312,
+        "observationIntervalMs": 1
+      },
+      {
+        "commandAckMs": 71.055,
+        "commitObservedAfterSendMs": 42.468,
+        "projectionObservedAfterCommitMs": 4.05,
+        "acknowledgementObservedAfterProjectionMs": 20.99,
+        "observationIntervalMs": 1
+      },
+      {
+        "commandAckMs": 70.715,
+        "commitObservedAfterSendMs": 50.414,
+        "projectionObservedAfterCommitMs": 4.285,
+        "acknowledgementObservedAfterProjectionMs": 16.483,
+        "observationIntervalMs": 1
+      }
+    ],
+    "note": "Commit/projection/ack timings are observed by polling the actual Mongo documents from a separate test client; each is an upper-bound observation with up to one polling interval plus query time, not internal span instrumentation."
+  },
+  "segue": {
+    "samplesRequested": 20,
+    "preparationAck": {
+      "samples": 20,
+      "p50Ms": 64.777,
+      "p95Ms": 109.341,
+      "p99Ms": 110.35,
+      "maxMs": 110.35
+    },
+    "socketAnnouncementFromTrigger": {
+      "samples": 20,
+      "p50Ms": 96.439,
+      "p95Ms": 128.948,
+      "p99Ms": 151.707,
+      "maxMs": 151.707
+    },
+    "failed": [],
+    "note": "Authenticated two-process Socket.io request and committed announcement observed by the peer process; no browser media or accelerated playback. The sample is a service decision proxy, not the PRD browser-rendered boundary-to-script measurement."
+  },
+  "soundclash": {
+    "concurrentVoters": 20,
+    "successfulVotes": 20,
+    "voteAckLatency": {
+      "samples": 20,
+      "p50Ms": 286.051,
+      "p95Ms": 492.55,
+      "p99Ms": 512.693,
+      "maxMs": 512.693
+    },
+    "concurrentVoteWaveMs": 521.188,
+    "voteFanoutFromDeadlineMs": 84.431,
+    "tiedResolutionAckMs": 38.866,
+    "resolutionBroadcastFromCommandMs": 77.525,
+    "resolutionEventCount": 1,
+    "resolvedPersisted": true
+  },
+  "recovery": {
+    "passed": true,
+    "connectedClientsRecovered": 25,
+    "restoredRevision": 475,
+    "queueItems": 422,
+    "restartAndResyncMs": 2808.907
+  },
+  "correctness": {
+    "queueAddedSamples": 400,
+    "queueMutationErrors": 0,
+    "queueLoadReconciliation": {
+      "successfulAdds": 400,
+      "persistedAddEvents": 400,
+      "duplicateLogicalEvents": 0,
+      "successfulAddsMissingFromEventLog": 0,
+      "successfulAddsMissingFromQueueState": 0,
+      "outboxBacklog": 0,
+      "connectedClientsResynchronized": 51,
+      "connectedClientsExpected": 51
+    },
+    "finalQueueAddedEventRows": 400,
+    "finalQueueStateItems": 422,
+    "totalQueueEvents": 475,
+    "queueStateItems": 422,
+    "outboxBacklogAtEnd": 0,
+    "databaseIsolated": true
+  },
+  "interpretation": {
+    "productionClaim": false,
+    "note": "Local MongoDB and loopback tests do not establish cloud/network performance or production capacity. PRD targets are only verified for the measured local workload when sample size and measurement boundaries are adequate; all small-sample or proxy metrics must remain unverified."
+  }
+}

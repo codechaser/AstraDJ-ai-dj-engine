@@ -13,3 +13,7 @@ server/coverage/
 npm-debug.log*
 yarn-debug.log*
 .DS_Store
+__pycache__/
+*.py[cod]
+.vite/
+**/*GitHub Copilot Chat.md

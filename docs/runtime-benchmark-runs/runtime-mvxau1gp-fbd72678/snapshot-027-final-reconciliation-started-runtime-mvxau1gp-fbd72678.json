@@ -1,0 +1,3052 @@
+{
+  "schemaVersion": 1,
+  "runId": "runtime-mvxau1gp-fbd72678",
+  "status": "running",
+  "createdAt": "2026-11-01T03:57:24.201Z",
+  "manifest": {
+    "benchmark": "AstraDJ runtime performance and Soundclash diagnostics",
+    "runId": "runtime-mvxau1gp-fbd72678",
+    "startedAt": "2026-11-01T03:57:24.074Z",
+    "startingHead": "2e74782d074f0ec26c0b380f58184f45c5c0fba7",
+    "worktree": {
+      "dirtyAtStart": true,
+      "statusEntryCount": 101,
+      "indexHtmlSha256AtStart": "6f039e9d735547f95bbc38631ab9d4ceda28e007ce0beb6d32bd48fee753d1ee"
+    },
+    "runtime": {
+      "node": "v24.22.2",
+      "platform": "win32-x64",
+      "cpuModel": "Intel(R) Core(TM) i5-8350U CPU @ 1.70GHz",
+      "logicalCpuCount": 8,
+      "totalMemoryGiB": 7.88,
+      "freeMemoryGiBAtStart": 1.64,
+      "expectedApiProcesses": 2,
+      "expectedSockets": 51,
+      "browserStressLaunched": false
+    },
+    "database": {
+      "configuredTarget": {
+        "configured": true,
+        "parseable": true,
+        "protocol": "mongodb:",
+        "hostname": "127.0.0.1",
+        "database": "astradj_test_base",
+        "loopback": true
+      },
+      "generatedIsolatedDatabase": "astradj_test_runtimebench_074089eb2f6a46c4afefbc00ae2b637e",
+      "uriRecorded": false,
+      "requiredHostScope": "loopback",
+      "requiredNamespace": "astradj_test_*"
+    },
+    "configuration": {
+      "apiSamplesPerProcessPerConcurrency": 500,
+      "apiConcurrencyPerProcess": [
+        1,
+        10,
+        25
+      ],
+      "queueSamplesPerConcurrency": 100,
+      "queueConcurrency": [
+        1,
+        5,
+        10,
+        20
+      ],
+      "segueSamples": 20,
+      "soundclashVoters": 20,
+      "warmupRequestsPerProcess": 25,
+      "normalRateLimitsEnabled": true
+    },
+    "prdTargets": {
+      "apiP95Ms": 200,
+      "segueTransitionP95Ms": 3000,
+      "queueSyncDriftMs": 100,
+      "websocketFanoutMs": 500
+    },
+    "method": {
+      "percentiles": "nearest-rank",
+      "api": "Loopback GET /api/v1/tracks?limit=10; Server-Timing is app-path duration; Mongo subquery spans are not instrumented.",
+      "segue": "Authenticated Host outro-trigger and playback.ended commands using source-evidenced seed pair; no browser or actual audio.",
+      "soundclash": "Authenticated Listener submissions with {trackId}; inspect durable snapshot, outbox and projected QueueEvent after ack/timeout.",
+      "rateLimits": "Production limiter remains enabled; only isolated database counters reset between workload batches."
+    },
+    "stagePlan": [
+      "database_guard_and_connect",
+      "seed_fixture",
+      "start_api_processes",
+      "connect_and_join_clients",
+      "api_catalog_reads",
+      "segue_measurement",
+      "queue_mutations",
+      "outbox_stage_observations",
+      "soundclash_submit_first",
+      "soundclash_submit_second",
+      "soundclash_vote_wave",
+      "soundclash_resolution",
+      "gateway_restart_recovery",
+      "final_reconciliation",
+      "cleanup"
+    ]
+  },
+  "stagePlan": [
+    {
+      "name": "database_guard_and_connect",
+      "status": "completed"
+    },
+    {
+      "name": "seed_fixture",
+      "status": "completed"
+    },
+    {
+      "name": "start_api_processes",
+      "status": "completed"
+    },
+    {
+      "name": "connect_and_join_clients",
+      "status": "completed"
+    },
+    {
+      "name": "api_catalog_reads",
+      "status": "completed"
+    },
+    {
+      "name": "segue_measurement",
+      "status": "completed"
+    },
+    {
+      "name": "queue_mutations",
+      "status": "completed"
+    },
+    {
+      "name": "outbox_stage_observations",
+      "status": "completed"
+    },
+    {
+      "name": "soundclash_submit_first",
+      "status": "completed"
+    },
+    {
+      "name": "soundclash_submit_second",
+      "status": "completed"
+    },
+    {
+      "name": "soundclash_vote_wave",
+      "status": "completed"
+    },
+    {
+      "name": "soundclash_resolution",
+      "status": "completed"
+    },
+    {
+      "name": "gateway_restart_recovery",
+      "status": "completed"
+    },
+    {
+      "name": "final_reconciliation",
+      "status": "running"
+    },
+    {
+      "name": "cleanup",
+      "status": "pending"
+    }
+  ],
+  "stages": [
+    {
+      "name": "database_guard_and_connect",
+      "status": "completed",
+      "startedAt": "2026-11-01T03:57:24.209Z",
+      "endedAt": "2026-11-01T03:57:24.272Z",
+      "durationMs": 63.758,
+      "result": {
+        "guardPassed": true,
+        "configuredHostname": "127.0.0.1",
+        "generatedDatabaseName": "astradj_test_runtimebench_074089eb2f6a46c4afefbc00ae2b637e",
+        "topology": "standalone",
+        "mongoVersion": "8.2.5",
+        "freeMemoryGiB": 1.62
+      }
+    },
+    {
+      "name": "seed_fixture",
+      "status": "completed",
+      "startedAt": "2026-11-01T03:57:24.284Z",
+      "endedAt": "2026-11-01T03:57:24.844Z",
+      "durationMs": 560.37,
+      "result": {
+        "usersCreated": 50,
+        "roleCounts": {
+          "Host": 1,
+          "Co-DJ": 25,
+          "Listener": 24
+        },
+        "realSeedTracks": 7,
+        "syntheticQueueTracks": 450,
+        "syntheticTracksHaveAcousticProfiles": false,
+        "loungeId": "lg_f0a0c0b2302e2fd3",
+        "initialNowPlayingTrackId": "t_cc0_ivory_atlas",
+        "initialNextUpTrackId": "t_cc0_faded_fortress",
+        "seguePair": [
+          {
+            "trackId": "t_cc0_ivory_atlas",
+            "bpm": 143,
+            "camelotKey": "8A",
+            "source": "https://kaino.dev/api/library/music/creator-workout-01",
+            "license": "CC0-1.0"
+          },
+          {
+            "trackId": "t_cc0_faded_fortress",
+            "bpm": 142,
+            "camelotKey": "8A",
+            "source": "https://kaino.dev/api/library/music/indie-rock-07",
+            "license": "CC0-1.0"
+          }
+        ],
+        "soundclashCandidates": [
+          "t_cc0_thoughtness",
+          "t_cc0_chill_beat"
+        ]
+      }
+    },
+    {
+      "name": "start_api_processes",
+      "status": "completed",
+      "startedAt": "2026-11-01T03:57:24.854Z",
+      "endedAt": "2026-11-01T03:57:29.514Z",
+      "durationMs": 4659.222,
+      "result": {
+        "processCount": 2,
+        "processStartup": [
+          {
+            "pid": 33356,
+            "port": 58110,
+            "startupMs": 2594.487
+          },
+          {
+            "pid": 31088,
+            "port": 58111,
+            "startupMs": 2017.393
+          }
+        ]
+      }
+    },
+    {
+      "name": "connect_and_join_clients",
+      "status": "completed",
+      "startedAt": "2026-11-01T03:57:29.524Z",
+      "endedAt": "2026-11-01T03:57:31.082Z",
+      "durationMs": 1557.322,
+      "result": {
+        "socketConnections": 51,
+        "distinctParticipantAccounts": 50,
+        "joinedAcks": 51,
+        "hostSocketsAcrossProcesses": 2,
+        "coDjAccounts": 25,
+        "listenerAccounts": 24
+      }
+    },
+    {
+      "name": "api_catalog_reads",
+      "status": "completed",
+      "startedAt": "2026-11-01T03:57:31.093Z",
+      "endedAt": "2026-11-01T03:57:39.692Z",
+      "durationMs": 8598.99,
+      "result": {
+        "endpoint": "GET /api/v1/tracks?limit=10",
+        "warmupRequests": 25,
+        "configuredSamplesPerProcessPerLevel": 500,
+        "levels": [
+          {
+            "concurrencyPerProcess": 1,
+            "aggregate": {
+              "requests": 1000,
+              "successes": 1000,
+              "failures": 0,
+              "timeouts": 0,
+              "errorRatePercent": 0,
+              "responseLatencyMs": {
+                "samples": 1000,
+                "p50Ms": 6.97,
+                "p95Ms": 9.733,
+                "p99Ms": 12.036,
+                "maxMs": 24.607
+              },
+              "successLatencyMs": {
+                "samples": 1000,
+                "p50Ms": 6.97,
+                "p95Ms": 9.733,
+                "p99Ms": 12.036,
+                "maxMs": 24.607
+              },
+              "serverAppPathLatencyMs": {
+                "samples": 1000,
+                "p50Ms": 5.179,
+                "p95Ms": 7.292,
+                "p99Ms": 8.624,
+                "maxMs": 13.214
+              }
+            },
+            "perProcess": [
+              {
+                "processOrdinal": 1,
+                "requests": 500,
+                "successes": 500,
+                "failures": 0,
+                "timeouts": 0,
+                "errorRatePercent": 0,
+                "httpStatusCounts": {
+                  "200": 500
+                },
+                "responseLatencyMs": {
+                  "samples": 500,
+                  "p50Ms": 6.959,
+                  "p95Ms": 9.803,
+                  "p99Ms": 12.104,
+                  "maxMs": 17.375
+                },
+                "successLatencyMs": {
+                  "samples": 500,
+                  "p50Ms": 6.959,
+                  "p95Ms": 9.803,
+                  "p99Ms": 12.104,
+                  "maxMs": 17.375
+                },
+                "failedLatencyMs": {
+                  "samples": 0,
+                  "p50Ms": null,
+                  "p95Ms": null,
+                  "p99Ms": null,
+                  "maxMs": null
+                },
+                "serverAppPathLatencyMs": {
+                  "samples": 500,
+                  "p50Ms": 5.185,
+                  "p95Ms": 7.311,
+                  "p99Ms": 8.673,
+                  "maxMs": 11.348
+                },
+                "requestsPerSecond": 136.12
+              },
+              {
+                "processOrdinal": 2,
+                "requests": 500,
+                "successes": 500,
+                "failures": 0,
+                "timeouts": 0,
+                "errorRatePercent": 0,
+                "httpStatusCounts": {
+                  "200": 500
+                },
+                "responseLatencyMs": {
+                  "samples": 500,
+                  "p50Ms": 6.992,
+                  "p95Ms": 9.593,
+                  "p99Ms": 11.02,
+                  "maxMs": 24.607
+                },
+                "successLatencyMs": {
+                  "samples": 500,
+                  "p50Ms": 6.992,
+                  "p95Ms": 9.593,
+                  "p99Ms": 11.02,
+                  "maxMs": 24.607
+                },
+                "failedLatencyMs": {
+                  "samples": 0,
+                  "p50Ms": null,
+                  "p95Ms": null,
+                  "p99Ms": null,
+                  "maxMs": null
+                },
+                "serverAppPathLatencyMs": {
+                  "samples": 500,
+                  "p50Ms": 5.161,
+                  "p95Ms": 7.245,
+                  "p99Ms": 8.364,
+                  "maxMs": 13.214
+                },
+                "requestsPerSecond": 137.8
+              }
+            ],
+            "note": "Normal rate limiting remained active; only disposable Mongo counters were cleared between batches. DB subquery spans are not instrumented."
+          },
+          {
+            "concurrencyPerProcess": 10,
+            "aggregate": {
+              "requests": 1000,
+              "successes": 1000,
+              "failures": 0,
+              "timeouts": 0,
+              "errorRatePercent": 0,
+              "responseLatencyMs": {
+                "samples": 1000,
+                "p50Ms": 38.462,
+                "p95Ms": 54.079,
+                "p99Ms": 62.203,
+                "maxMs": 69.478
+              },
+              "successLatencyMs": {
+                "samples": 1000,
+                "p50Ms": 38.462,
+                "p95Ms": 54.079,
+                "p99Ms": 62.203,
+                "maxMs": 69.478
+              },
+              "serverAppPathLatencyMs": {
+                "samples": 1000,
+                "p50Ms": 30.609,
+                "p95Ms": 40.616,
+                "p99Ms": 46.88,
+                "maxMs": 52.439
+              }
+            },
+            "perProcess": [
+              {
+                "processOrdinal": 1,
+                "requests": 500,
+                "successes": 500,
+                "failures": 0,
+                "timeouts": 0,
+                "errorRatePercent": 0,
+                "httpStatusCounts": {
+                  "200": 500
+                },
+                "responseLatencyMs": {
+                  "samples": 500,
+                  "p50Ms": 38.592,
+                  "p95Ms": 57.608,
+                  "p99Ms": 63.4,
+                  "maxMs": 69.478
+                },
+                "successLatencyMs": {
+                  "samples": 500,
+                  "p50Ms": 38.592,
+                  "p95Ms": 57.608,
+                  "p99Ms": 63.4,
+                  "maxMs": 69.478
+                },
+                "failedLatencyMs": {
+                  "samples": 0,
+                  "p50Ms": null,
+                  "p95Ms": null,
+                  "p99Ms": null,
+                  "maxMs": null
+                },
+                "serverAppPathLatencyMs": {
+                  "samples": 500,
+                  "p50Ms": 30.455,
+                  "p95Ms": 44.216,
+                  "p99Ms": 47.777,
+                  "maxMs": 52.439
+                },
+                "requestsPerSecond": 215.23
+              },
+              {
+                "processOrdinal": 2,
+                "requests": 500,
+                "successes": 500,
+                "failures": 0,
+                "timeouts": 0,
+                "errorRatePercent": 0,
+                "httpStatusCounts": {
+                  "200": 500
+                },
+                "responseLatencyMs": {
+                  "samples": 500,
+                  "p50Ms": 38.289,
+                  "p95Ms": 51.809,
+                  "p99Ms": 56.026,
+                  "maxMs": 64.887
+                },
+                "successLatencyMs": {
+                  "samples": 500,
+                  "p50Ms": 38.289,
+                  "p95Ms": 51.809,
+                  "p99Ms": 56.026,
+                  "maxMs": 64.887
+                },
+                "failedLatencyMs": {
+                  "samples": 0,
+                  "p50Ms": null,
+                  "p95Ms": null,
+                  "p99Ms": null,
+                  "maxMs": null
+                },
+                "serverAppPathLatencyMs": {
+                  "samples": 500,
+                  "p50Ms": 30.726,
+                  "p95Ms": 39.469,
+                  "p99Ms": 41.579,
+                  "maxMs": 44.812
+                },
+                "requestsPerSecond": 218.08
+              }
+            ],
+            "note": "Normal rate limiting remained active; only disposable Mongo counters were cleared between batches. DB subquery spans are not instrumented."
+          },
+          {
+            "concurrencyPerProcess": 25,
+            "aggregate": {
+              "requests": 1000,
+              "successes": 1000,
+              "failures": 0,
+              "timeouts": 0,
+              "errorRatePercent": 0,
+              "responseLatencyMs": {
+                "samples": 1000,
+                "p50Ms": 93.849,
+                "p95Ms": 115.499,
+                "p99Ms": 123.184,
+                "maxMs": 132.808
+              },
+              "successLatencyMs": {
+                "samples": 1000,
+                "p50Ms": 93.849,
+                "p95Ms": 115.499,
+                "p99Ms": 123.184,
+                "maxMs": 132.808
+              },
+              "serverAppPathLatencyMs": {
+                "samples": 1000,
+                "p50Ms": 76.015,
+                "p95Ms": 91.528,
+                "p99Ms": 97.656,
+                "maxMs": 127.768
+              }
+            },
+            "perProcess": [
+              {
+                "processOrdinal": 1,
+                "requests": 500,
+                "successes": 500,
+                "failures": 0,
+                "timeouts": 0,
+                "errorRatePercent": 0,
+                "httpStatusCounts": {
+                  "200": 500
+                },
+                "responseLatencyMs": {
+                  "samples": 500,
+                  "p50Ms": 94.368,
+                  "p95Ms": 118.415,
+                  "p99Ms": 123.468,
+                  "maxMs": 132.577
+                },
+                "successLatencyMs": {
+                  "samples": 500,
+                  "p50Ms": 94.368,
+                  "p95Ms": 118.415,
+                  "p99Ms": 123.468,
+                  "maxMs": 132.577
+                },
+                "failedLatencyMs": {
+                  "samples": 0,
+                  "p50Ms": null,
+                  "p95Ms": null,
+                  "p99Ms": null,
+                  "maxMs": null
+                },
+                "serverAppPathLatencyMs": {
+                  "samples": 500,
+                  "p50Ms": 77.059,
+                  "p95Ms": 91.757,
+                  "p99Ms": 112.322,
+                  "maxMs": 117.587
+                },
+                "requestsPerSecond": 220.27
+              },
+              {
+                "processOrdinal": 2,
+                "requests": 500,
+                "successes": 500,
+                "failures": 0,
+                "timeouts": 0,
+                "errorRatePercent": 0,
+                "httpStatusCounts": {
+                  "200": 500
+                },
+                "responseLatencyMs": {
+                  "samples": 500,
+                  "p50Ms": 93.411,
+                  "p95Ms": 111.496,
+                  "p99Ms": 119.141,
+                  "maxMs": 132.808
+                },
+                "successLatencyMs": {
+                  "samples": 500,
+                  "p50Ms": 93.411,
+                  "p95Ms": 111.496,
+                  "p99Ms": 119.141,
+                  "maxMs": 132.808
+                },
+                "failedLatencyMs": {
+                  "samples": 0,
+                  "p50Ms": null,
+                  "p95Ms": null,
+                  "p99Ms": null,
+                  "maxMs": null
+                },
+                "serverAppPathLatencyMs": {
+                  "samples": 500,
+                  "p50Ms": 74.971,
+                  "p95Ms": 90.733,
+                  "p99Ms": 97.339,
+                  "maxMs": 127.768
+                },
+                "requestsPerSecond": 224.81
+              }
+            ],
+            "note": "Normal rate limiting remained active; only disposable Mongo counters were cleared between batches. DB subquery spans are not instrumented."
+          }
+        ]
+      }
+    },
+    {
+      "name": "segue_measurement",
+      "status": "completed",
+      "startedAt": "2026-11-01T03:57:39.726Z",
+      "endedAt": "2026-11-01T03:57:41.660Z",
+      "durationMs": 1933.796,
+      "result": {
+        "samplesRequested": 20,
+        "samplesSelected": 20,
+        "selectionAndScriptPreparationAckMs": {
+          "samples": 20,
+          "p50Ms": 31.683,
+          "p95Ms": 45.359,
+          "p99Ms": 47.764,
+          "maxMs": 47.764
+        },
+        "triggerToPeerSocketAnnouncementMs": {
+          "samples": 20,
+          "p50Ms": 62.095,
+          "p95Ms": 93.863,
+          "p99Ms": 98.099,
+          "maxMs": 98.099
+        },
+        "endedCommandToPeerSocketAnnouncementMs": {
+          "samples": 20,
+          "p50Ms": 29.644,
+          "p95Ms": 52.694,
+          "p99Ms": 63.312,
+          "maxMs": 63.312
+        },
+        "serviceSpanLatencyMs": {
+          "loungeLookupMs": {
+            "samples": 20,
+            "p50Ms": 1.946,
+            "p95Ms": 2.656,
+            "p99Ms": 2.973,
+            "maxMs": 2.973
+          },
+          "currentTrackLookupMs": {
+            "samples": 20,
+            "p50Ms": 1.397,
+            "p95Ms": 2.116,
+            "p99Ms": 2.171,
+            "maxMs": 2.171
+          },
+          "candidateRetrievalMs": {
+            "samples": 20,
+            "p50Ms": 1.441,
+            "p95Ms": 2.206,
+            "p99Ms": 2.701,
+            "maxMs": 2.701
+          },
+          "acousticEligibilityAndRankingMs": {
+            "samples": 20,
+            "p50Ms": 0.073,
+            "p95Ms": 0.591,
+            "p99Ms": 0.769,
+            "maxMs": 0.769
+          },
+          "transitionScriptAndReferenceValidationMs": {
+            "samples": 20,
+            "p50Ms": 0.179,
+            "p95Ms": 0.942,
+            "p99Ms": 1.294,
+            "maxMs": 1.294
+          },
+          "totalServiceMs": {
+            "samples": 20,
+            "p50Ms": 5.153,
+            "p95Ms": 7.477,
+            "p99Ms": 9.322,
+            "maxMs": 9.322
+          }
+        },
+        "selectedTrackIds": [
+          "t_cc0_faded_fortress",
+          "t_cc0_ivory_atlas",
+          "t_cc0_faded_fortress",
+          "t_cc0_ivory_atlas",
+          "t_cc0_faded_fortress",
+          "t_cc0_ivory_atlas",
+          "t_cc0_faded_fortress",
+          "t_cc0_ivory_atlas",
+          "t_cc0_faded_fortress",
+          "t_cc0_ivory_atlas",
+          "t_cc0_faded_fortress",
+          "t_cc0_ivory_atlas",
+          "t_cc0_faded_fortress",
+          "t_cc0_ivory_atlas",
+          "t_cc0_faded_fortress",
+          "t_cc0_ivory_atlas",
+          "t_cc0_faded_fortress",
+          "t_cc0_ivory_atlas",
+          "t_cc0_faded_fortress",
+          "t_cc0_ivory_atlas"
+        ],
+        "pairTrackIds": [
+          "t_cc0_ivory_atlas",
+          "t_cc0_faded_fortress"
+        ],
+        "pairMetadataEvidence": {
+          "t_cc0_ivory_atlas": {
+            "source": "https://kaino.dev/api/library/music/creator-workout-01",
+            "license": "CC0-1.0",
+            "bpm": 143,
+            "camelotKey": "8A"
+          },
+          "t_cc0_faded_fortress": {
+            "source": "https://kaino.dev/api/library/music/indie-rock-07",
+            "license": "CC0-1.0",
+            "bpm": 142,
+            "camelotKey": "8A"
+          }
+        },
+        "matchReasons": [
+          {
+            "bpmDeltaPct": 0.7,
+            "bpmRelation": "direct",
+            "camelotRelation": "same",
+            "energyFit": 0.865,
+            "harmonicCloseness": 1,
+            "targetEnergy": 0.82,
+            "recencyScore": 1,
+            "score": 0.9596,
+            "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+          },
+          {
+            "bpmDeltaPct": 0.7,
+            "bpmRelation": "direct",
+            "camelotRelation": "same",
+            "energyFit": 0.865,
+            "harmonicCloseness": 1,
+            "targetEnergy": 0.686,
+            "recencyScore": 1,
+            "score": 0.9596,
+            "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+          },
+          {
+            "bpmDeltaPct": 0.7,
+            "bpmRelation": "direct",
+            "camelotRelation": "same",
+            "energyFit": 0.865,
+            "harmonicCloseness": 1,
+            "targetEnergy": 0.82,
+            "recencyScore": 1,
+            "score": 0.9596,
+            "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+          },
+          {
+            "bpmDeltaPct": 0.7,
+            "bpmRelation": "direct",
+            "camelotRelation": "same",
+            "energyFit": 0.865,
+            "harmonicCloseness": 1,
+            "targetEnergy": 0.686,
+            "recencyScore": 1,
+            "score": 0.9596,
+            "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+          },
+          {
+            "bpmDeltaPct": 0.7,
+            "bpmRelation": "direct",
+            "camelotRelation": "same",
+            "energyFit": 0.865,
+            "harmonicCloseness": 1,
+            "targetEnergy": 0.82,
+            "recencyScore": 1,
+            "score": 0.9596,
+            "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+          },
+          {
+            "bpmDeltaPct": 0.7,
+            "bpmRelation": "direct",
+            "camelotRelation": "same",
+            "energyFit": 0.865,
+            "harmonicCloseness": 1,
+            "targetEnergy": 0.686,
+            "recencyScore": 1,
+            "score": 0.9596,
+            "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+          },
+          {
+            "bpmDeltaPct": 0.7,
+            "bpmRelation": "direct",
+            "camelotRelation": "same",
+            "energyFit": 0.865,
+            "harmonicCloseness": 1,
+            "targetEnergy": 0.82,
+            "recencyScore": 1,
+            "score": 0.9596,
+            "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+          },
+          {
+            "bpmDeltaPct": 0.7,
+            "bpmRelation": "direct",
+            "camelotRelation": "same",
+            "energyFit": 0.865,
+            "harmonicCloseness": 1,
+            "targetEnergy": 0.686,
+            "recencyScore": 1,
+            "score": 0.9596,
+            "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+          },
+          {
+            "bpmDeltaPct": 0.7,
+            "bpmRelation": "direct",
+            "camelotRelation": "same",
+            "energyFit": 0.865,
+            "harmonicCloseness": 1,
+            "targetEnergy": 0.82,
+            "recencyScore": 1,
+            "score": 0.9596,
+            "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+          },
+          {
+            "bpmDeltaPct": 0.7,
+            "bpmRelation": "direct",
+            "camelotRelation": "same",
+            "energyFit": 0.865,
+            "harmonicCloseness": 1,
+            "targetEnergy": 0.686,
+            "recencyScore": 1,
+            "score": 0.9596,
+            "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+          },
+          {
+            "bpmDeltaPct": 0.7,
+            "bpmRelation": "direct",
+            "camelotRelation": "same",
+            "energyFit": 0.865,
+            "harmonicCloseness": 1,
+            "targetEnergy": 0.82,
+            "recencyScore": 1,
+            "score": 0.9596,
+            "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+          },
+          {
+            "bpmDeltaPct": 0.7,
+            "bpmRelation": "direct",
+            "camelotRelation": "same",
+            "energyFit": 0.865,
+            "harmonicCloseness": 1,
+            "targetEnergy": 0.686,
+            "recencyScore": 1,
+            "score": 0.9596,
+            "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+          },
+          {
+            "bpmDeltaPct": 0.7,
+            "bpmRelation": "direct",
+            "camelotRelation": "same",
+            "energyFit": 0.865,
+            "harmonicCloseness": 1,
+            "targetEnergy": 0.82,
+            "recencyScore": 1,
+            "score": 0.9596,
+            "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+          },
+          {
+            "bpmDeltaPct": 0.7,
+            "bpmRelation": "direct",
+            "camelotRelation": "same",
+            "energyFit": 0.865,
+            "harmonicCloseness": 1,
+            "targetEnergy": 0.686,
+            "recencyScore": 1,
+            "score": 0.9596,
+            "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+          },
+          {
+            "bpmDeltaPct": 0.7,
+            "bpmRelation": "direct",
+            "camelotRelation": "same",
+            "energyFit": 0.865,
+            "harmonicCloseness": 1,
+            "targetEnergy": 0.82,
+            "recencyScore": 1,
+            "score": 0.9596,
+            "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+          },
+          {
+            "bpmDeltaPct": 0.7,
+            "bpmRelation": "direct",
+            "camelotRelation": "same",
+            "energyFit": 0.865,
+            "harmonicCloseness": 1,
+            "targetEnergy": 0.686,
+            "recencyScore": 1,
+            "score": 0.9596,
+            "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+          },
+          {
+            "bpmDeltaPct": 0.7,
+            "bpmRelation": "direct",
+            "camelotRelation": "same",
+            "energyFit": 0.865,
+            "harmonicCloseness": 1,
+            "targetEnergy": 0.82,
+            "recencyScore": 1,
+            "score": 0.9596,
+            "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+          },
+          {
+            "bpmDeltaPct": 0.7,
+            "bpmRelation": "direct",
+            "camelotRelation": "same",
+            "energyFit": 0.865,
+            "harmonicCloseness": 1,
+            "targetEnergy": 0.686,
+            "recencyScore": 1,
+            "score": 0.9596,
+            "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+          },
+          {
+            "bpmDeltaPct": 0.7,
+            "bpmRelation": "direct",
+            "camelotRelation": "same",
+            "energyFit": 0.865,
+            "harmonicCloseness": 1,
+            "targetEnergy": 0.82,
+            "recencyScore": 1,
+            "score": 0.9596,
+            "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+          },
+          {
+            "bpmDeltaPct": 0.7,
+            "bpmRelation": "direct",
+            "camelotRelation": "same",
+            "energyFit": 0.865,
+            "harmonicCloseness": 1,
+            "targetEnergy": 0.686,
+            "recencyScore": 1,
+            "score": 0.9596,
+            "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+          }
+        ],
+        "transitions": [
+          {
+            "currentTrackId": "t_cc0_ivory_atlas",
+            "selectedTrackId": "t_cc0_faded_fortress",
+            "bpmRelation": "direct",
+            "bpmDeltaPct": 0.7,
+            "camelotRelation": "same",
+            "provider": "deterministic_fallback",
+            "sourceReferenceCount": 10
+          },
+          {
+            "currentTrackId": "t_cc0_faded_fortress",
+            "selectedTrackId": "t_cc0_ivory_atlas",
+            "bpmRelation": "direct",
+            "bpmDeltaPct": 0.7,
+            "camelotRelation": "same",
+            "provider": "deterministic_fallback",
+            "sourceReferenceCount": 10
+          },
+          {
+            "currentTrackId": "t_cc0_ivory_atlas",
+            "selectedTrackId": "t_cc0_faded_fortress",
+            "bpmRelation": "direct",
+            "bpmDeltaPct": 0.7,
+            "camelotRelation": "same",
+            "provider": "deterministic_fallback",
+            "sourceReferenceCount": 10
+          },
+          {
+            "currentTrackId": "t_cc0_faded_fortress",
+            "selectedTrackId": "t_cc0_ivory_atlas",
+            "bpmRelation": "direct",
+            "bpmDeltaPct": 0.7,
+            "camelotRelation": "same",
+            "provider": "deterministic_fallback",
+            "sourceReferenceCount": 10
+          },
+          {
+            "currentTrackId": "t_cc0_ivory_atlas",
+            "selectedTrackId": "t_cc0_faded_fortress",
+            "bpmRelation": "direct",
+            "bpmDeltaPct": 0.7,
+            "camelotRelation": "same",
+            "provider": "deterministic_fallback",
+            "sourceReferenceCount": 10
+          },
+          {
+            "currentTrackId": "t_cc0_faded_fortress",
+            "selectedTrackId": "t_cc0_ivory_atlas",
+            "bpmRelation": "direct",
+            "bpmDeltaPct": 0.7,
+            "camelotRelation": "same",
+            "provider": "deterministic_fallback",
+            "sourceReferenceCount": 10
+          },
+          {
+            "currentTrackId": "t_cc0_ivory_atlas",
+            "selectedTrackId": "t_cc0_faded_fortress",
+            "bpmRelation": "direct",
+            "bpmDeltaPct": 0.7,
+            "camelotRelation": "same",
+            "provider": "deterministic_fallback",
+            "sourceReferenceCount": 10
+          },
+          {
+            "currentTrackId": "t_cc0_faded_fortress",
+            "selectedTrackId": "t_cc0_ivory_atlas",
+            "bpmRelation": "direct",
+            "bpmDeltaPct": 0.7,
+            "camelotRelation": "same",
+            "provider": "deterministic_fallback",
+            "sourceReferenceCount": 10
+          },
+          {
+            "currentTrackId": "t_cc0_ivory_atlas",
+            "selectedTrackId": "t_cc0_faded_fortress",
+            "bpmRelation": "direct",
+            "bpmDeltaPct": 0.7,
+            "camelotRelation": "same",
+            "provider": "deterministic_fallback",
+            "sourceReferenceCount": 10
+          },
+          {
+            "currentTrackId": "t_cc0_faded_fortress",
+            "selectedTrackId": "t_cc0_ivory_atlas",
+            "bpmRelation": "direct",
+            "bpmDeltaPct": 0.7,
+            "camelotRelation": "same",
+            "provider": "deterministic_fallback",
+            "sourceReferenceCount": 10
+          },
+          {
+            "currentTrackId": "t_cc0_ivory_atlas",
+            "selectedTrackId": "t_cc0_faded_fortress",
+            "bpmRelation": "direct",
+            "bpmDeltaPct": 0.7,
+            "camelotRelation": "same",
+            "provider": "deterministic_fallback",
+            "sourceReferenceCount": 10
+          },
+          {
+            "currentTrackId": "t_cc0_faded_fortress",
+            "selectedTrackId": "t_cc0_ivory_atlas",
+            "bpmRelation": "direct",
+            "bpmDeltaPct": 0.7,
+            "camelotRelation": "same",
+            "provider": "deterministic_fallback",
+            "sourceReferenceCount": 10
+          },
+          {
+            "currentTrackId": "t_cc0_ivory_atlas",
+            "selectedTrackId": "t_cc0_faded_fortress",
+            "bpmRelation": "direct",
+            "bpmDeltaPct": 0.7,
+            "camelotRelation": "same",
+            "provider": "deterministic_fallback",
+            "sourceReferenceCount": 10
+          },
+          {
+            "currentTrackId": "t_cc0_faded_fortress",
+            "selectedTrackId": "t_cc0_ivory_atlas",
+            "bpmRelation": "direct",
+            "bpmDeltaPct": 0.7,
+            "camelotRelation": "same",
+            "provider": "deterministic_fallback",
+            "sourceReferenceCount": 10
+          },
+          {
+            "currentTrackId": "t_cc0_ivory_atlas",
+            "selectedTrackId": "t_cc0_faded_fortress",
+            "bpmRelation": "direct",
+            "bpmDeltaPct": 0.7,
+            "camelotRelation": "same",
+            "provider": "deterministic_fallback",
+            "sourceReferenceCount": 10
+          },
+          {
+            "currentTrackId": "t_cc0_faded_fortress",
+            "selectedTrackId": "t_cc0_ivory_atlas",
+            "bpmRelation": "direct",
+            "bpmDeltaPct": 0.7,
+            "camelotRelation": "same",
+            "provider": "deterministic_fallback",
+            "sourceReferenceCount": 10
+          },
+          {
+            "currentTrackId": "t_cc0_ivory_atlas",
+            "selectedTrackId": "t_cc0_faded_fortress",
+            "bpmRelation": "direct",
+            "bpmDeltaPct": 0.7,
+            "camelotRelation": "same",
+            "provider": "deterministic_fallback",
+            "sourceReferenceCount": 10
+          },
+          {
+            "currentTrackId": "t_cc0_faded_fortress",
+            "selectedTrackId": "t_cc0_ivory_atlas",
+            "bpmRelation": "direct",
+            "bpmDeltaPct": 0.7,
+            "camelotRelation": "same",
+            "provider": "deterministic_fallback",
+            "sourceReferenceCount": 10
+          },
+          {
+            "currentTrackId": "t_cc0_ivory_atlas",
+            "selectedTrackId": "t_cc0_faded_fortress",
+            "bpmRelation": "direct",
+            "bpmDeltaPct": 0.7,
+            "camelotRelation": "same",
+            "provider": "deterministic_fallback",
+            "sourceReferenceCount": 10
+          },
+          {
+            "currentTrackId": "t_cc0_faded_fortress",
+            "selectedTrackId": "t_cc0_ivory_atlas",
+            "bpmRelation": "direct",
+            "bpmDeltaPct": 0.7,
+            "camelotRelation": "same",
+            "provider": "deterministic_fallback",
+            "sourceReferenceCount": 10
+          }
+        ],
+        "latencyLimitations": "The Host uses authenticated Socket.IO commands with currentTs inside the configured outro window. Opt-in spans cover Lounge lookup, current-track lookup, candidate retrieval, acoustic eligibility/ranking and transition-script/reference generation. The harness then sends lounge.playback.ended directly; no browser media element or React render is part of these timings. Peer Socket.IO arrival is not browser render latency."
+      }
+    },
+    {
+      "name": "queue_mutations",
+      "status": "completed",
+      "startedAt": "2026-11-01T03:57:41.672Z",
+      "endedAt": "2026-11-01T03:57:56.805Z",
+      "durationMs": 15132.197,
+      "result": {
+        "levels": [
+          {
+            "concurrency": 1,
+            "attempted": 100,
+            "successful": 100,
+            "errors": 0,
+            "errorRatePercent": 0,
+            "ackLatency": {
+              "samples": 100,
+              "p50Ms": 18.405,
+              "p95Ms": 23.177,
+              "p99Ms": 24.654,
+              "maxMs": 45.2
+            },
+            "queueStateSyncDrift": {
+              "samples": 100,
+              "p50Ms": 16.914,
+              "p95Ms": 19.357,
+              "p99Ms": 31.539,
+              "maxMs": 33.731
+            },
+            "senderToLastClientDeliveryUpperBound": {
+              "samples": 100,
+              "p50Ms": 62.585,
+              "p95Ms": 66.302,
+              "p99Ms": 86.632,
+              "maxMs": 100.103
+            },
+            "crossProcessSenderToLastClientDelivery": {
+              "samples": 100,
+              "p50Ms": 59.967,
+              "p95Ms": 65.237,
+              "p99Ms": 83.729,
+              "maxMs": 100.103
+            },
+            "clientsMissingAnEventSnapshot": 0,
+            "lateClientEventObservationsAfter8s": 0,
+            "recipientsStillUnobservedAfter18s": 0,
+            "mutationEventsProjected": 100,
+            "duplicateLogicalEvents": 0,
+            "successfulMutationsMissingFromState": 0,
+            "outboxBacklogAtEnd": 0,
+            "mutationsPerSecond": 15.75,
+            "elapsedMs": 6349.551
+          },
+          {
+            "concurrency": 5,
+            "attempted": 100,
+            "successful": 100,
+            "errors": 0,
+            "errorRatePercent": 0,
+            "ackLatency": {
+              "samples": 100,
+              "p50Ms": 51.81,
+              "p95Ms": 99.019,
+              "p99Ms": 106.28,
+              "maxMs": 119.488
+            },
+            "queueStateSyncDrift": {
+              "samples": 100,
+              "p50Ms": 22.363,
+              "p95Ms": 42.596,
+              "p99Ms": 53.428,
+              "maxMs": 64.469
+            },
+            "senderToLastClientDeliveryUpperBound": {
+              "samples": 100,
+              "p50Ms": 86.59,
+              "p95Ms": 139.098,
+              "p99Ms": 165.942,
+              "maxMs": 175.813
+            },
+            "crossProcessSenderToLastClientDelivery": {
+              "samples": 100,
+              "p50Ms": 80.121,
+              "p95Ms": 133.331,
+              "p99Ms": 165.942,
+              "maxMs": 175.813
+            },
+            "clientsMissingAnEventSnapshot": 0,
+            "lateClientEventObservationsAfter8s": 0,
+            "recipientsStillUnobservedAfter18s": 0,
+            "mutationEventsProjected": 100,
+            "duplicateLogicalEvents": 0,
+            "successfulMutationsMissingFromState": 0,
+            "outboxBacklogAtEnd": 0,
+            "mutationsPerSecond": 37.46,
+            "elapsedMs": 2669.82
+          },
+          {
+            "concurrency": 10,
+            "attempted": 100,
+            "successful": 100,
+            "errors": 0,
+            "errorRatePercent": 0,
+            "ackLatency": {
+              "samples": 100,
+              "p50Ms": 122.131,
+              "p95Ms": 226.09,
+              "p99Ms": 228.075,
+              "maxMs": 240.654
+            },
+            "queueStateSyncDrift": {
+              "samples": 100,
+              "p50Ms": 33.126,
+              "p95Ms": 50.074,
+              "p99Ms": 57.264,
+              "maxMs": 58.534
+            },
+            "senderToLastClientDeliveryUpperBound": {
+              "samples": 100,
+              "p50Ms": 156.602,
+              "p95Ms": 263.826,
+              "p99Ms": 271.303,
+              "maxMs": 278.533
+            },
+            "crossProcessSenderToLastClientDelivery": {
+              "samples": 100,
+              "p50Ms": 150.769,
+              "p95Ms": 261.857,
+              "p99Ms": 271.303,
+              "maxMs": 278.533
+            },
+            "clientsMissingAnEventSnapshot": 0,
+            "lateClientEventObservationsAfter8s": 0,
+            "recipientsStillUnobservedAfter18s": 0,
+            "mutationEventsProjected": 100,
+            "duplicateLogicalEvents": 0,
+            "successfulMutationsMissingFromState": 0,
+            "outboxBacklogAtEnd": 0,
+            "mutationsPerSecond": 39.16,
+            "elapsedMs": 2553.481
+          },
+          {
+            "concurrency": 20,
+            "attempted": 100,
+            "successful": 100,
+            "errors": 0,
+            "errorRatePercent": 0,
+            "ackLatency": {
+              "samples": 100,
+              "p50Ms": 288.185,
+              "p95Ms": 500.297,
+              "p99Ms": 524.104,
+              "maxMs": 560.304
+            },
+            "queueStateSyncDrift": {
+              "samples": 100,
+              "p50Ms": 44.723,
+              "p95Ms": 84.902,
+              "p99Ms": 107.187,
+              "maxMs": 110.321
+            },
+            "senderToLastClientDeliveryUpperBound": {
+              "samples": 100,
+              "p50Ms": 336.771,
+              "p95Ms": 538.071,
+              "p99Ms": 584.465,
+              "maxMs": 607.823
+            },
+            "crossProcessSenderToLastClientDelivery": {
+              "samples": 100,
+              "p50Ms": 322.82,
+              "p95Ms": 528.058,
+              "p99Ms": 584.451,
+              "maxMs": 584.465
+            },
+            "clientsMissingAnEventSnapshot": 0,
+            "lateClientEventObservationsAfter8s": 0,
+            "recipientsStillUnobservedAfter18s": 0,
+            "mutationEventsProjected": 100,
+            "duplicateLogicalEvents": 0,
+            "successfulMutationsMissingFromState": 0,
+            "outboxBacklogAtEnd": 0,
+            "mutationsPerSecond": 36,
+            "elapsedMs": 2777.493
+          }
+        ],
+        "queueLoadReconciliation": {
+          "successfulAdds": 400,
+          "persistedAddEvents": 400,
+          "duplicateLogicalEvents": 0,
+          "successfulAddsMissingFromEventLog": 0,
+          "successfulAddsMissingFromQueueState": 0,
+          "outboxBacklog": 0,
+          "connectedClientsResynchronized": 51,
+          "connectedClientsExpected": 51
+        },
+        "successfulTrackIdCount": 400
+      }
+    },
+    {
+      "name": "outbox_stage_observations",
+      "status": "completed",
+      "startedAt": "2026-11-01T03:57:56.815Z",
+      "endedAt": "2026-11-01T03:57:57.332Z",
+      "durationMs": 516.462,
+      "result": {
+        "samples": 10,
+        "ackMs": {
+          "samples": 10,
+          "p50Ms": 46.453,
+          "p95Ms": 58.907,
+          "p99Ms": 58.907,
+          "maxMs": 58.907
+        },
+        "commitObservedMs": {
+          "samples": 8,
+          "p50Ms": 33.948,
+          "p95Ms": 55.106,
+          "p99Ms": 55.106,
+          "maxMs": 55.106
+        },
+        "projectionAfterCommitMs": {
+          "samples": 8,
+          "p50Ms": 2.92,
+          "p95Ms": 17.852,
+          "p99Ms": 17.852,
+          "maxMs": 17.852
+        },
+        "drainAfterProjectionMs": {
+          "samples": 10,
+          "p50Ms": 0.005,
+          "p95Ms": 21.298,
+          "p99Ms": 21.298,
+          "maxMs": 21.298
+        },
+        "observations": [
+          {
+            "ackMs": 55.562,
+            "commitObservedMs": 44.299,
+            "projectionAfterCommitMs": 3.641,
+            "drainAfterProjectionMs": 0.006
+          },
+          {
+            "ackMs": 58.907,
+            "commitObservedMs": 55.106,
+            "projectionAfterCommitMs": 4.251,
+            "drainAfterProjectionMs": 8.717
+          },
+          {
+            "ackMs": 42.203,
+            "commitObservedMs": 29.632,
+            "projectionAfterCommitMs": 17.852,
+            "drainAfterProjectionMs": 0.005
+          },
+          {
+            "ackMs": 48.527,
+            "commitObservedMs": null,
+            "projectionAfterCommitMs": null,
+            "drainAfterProjectionMs": 0.004
+          },
+          {
+            "ackMs": 49.995,
+            "commitObservedMs": null,
+            "projectionAfterCommitMs": null,
+            "drainAfterProjectionMs": 0.004
+          },
+          {
+            "ackMs": 39.225,
+            "commitObservedMs": 30.426,
+            "projectionAfterCommitMs": 2.92,
+            "drainAfterProjectionMs": 9.59
+          },
+          {
+            "ackMs": 43.614,
+            "commitObservedMs": 44.722,
+            "projectionAfterCommitMs": 2.534,
+            "drainAfterProjectionMs": 0.001
+          },
+          {
+            "ackMs": 46.453,
+            "commitObservedMs": 27.48,
+            "projectionAfterCommitMs": 2.595,
+            "drainAfterProjectionMs": 21.298
+          },
+          {
+            "ackMs": 50.591,
+            "commitObservedMs": 39.468,
+            "projectionAfterCommitMs": 3.238,
+            "drainAfterProjectionMs": 9.031
+          },
+          {
+            "ackMs": 31.994,
+            "commitObservedMs": 33.948,
+            "projectionAfterCommitMs": 2.23,
+            "drainAfterProjectionMs": 0.002
+          }
+        ],
+        "note": "Milestones use 1ms polling from the benchmark process and are upper bounds including poll/query time."
+      }
+    },
+    {
+      "name": "soundclash_submit_first",
+      "status": "completed",
+      "startedAt": "2026-11-01T03:57:57.353Z",
+      "endedAt": "2026-11-01T03:57:57.465Z",
+      "durationMs": 112.564,
+      "result": {
+        "correlationId": "142181d41943947557181eac",
+        "contract": {
+          "event": "lounge.soundclash.submit",
+          "payloadKeys": [
+            "trackId"
+          ],
+          "expectedRole": "Listener",
+          "authenticated": true,
+          "joinedLounge": true
+        },
+        "acknowledgement": {
+          "received": true,
+          "ok": true,
+          "code": null,
+          "timedOut": false,
+          "latencyMs": 70.675
+        },
+        "durable": {
+          "loungeFound": true,
+          "snapshotCommitted": true,
+          "battleStatus": "collecting",
+          "candidateCount": 1,
+          "pendingOutboxEvents": 0,
+          "projectedEventCount": 1,
+          "projectedEventsForExpectedActor": 1,
+          "projectedSequenceNumbers": [
+            470
+          ]
+        },
+        "socketEvents": {
+          "hostReceipts": 2,
+          "remoteHostReceived": true,
+          "otherListenerReceivedSubmission": true
+        },
+        "serverTraceStages": [
+          {
+            "stage": "request_received"
+          },
+          {
+            "stage": "rate_limit_passed"
+          },
+          {
+            "stage": "authentication_and_membership_passed"
+          },
+          {
+            "stage": "payload_validated"
+          },
+          {
+            "stage": "host_presence_passed"
+          },
+          {
+            "stage": "service_started"
+          },
+          {
+            "stage": "service_returned"
+          },
+          {
+            "stage": "handler_completed"
+          },
+          {
+            "stage": "ack_ready",
+            "status": 200
+          },
+          {
+            "stage": "ack_callback_invoked",
+            "status": 200
+          }
+        ],
+        "processHealth": {
+          "processId": 33356,
+          "alive": true,
+          "healthStatus": 200,
+          "healthOk": true
+        }
+      }
+    },
+    {
+      "name": "soundclash_submit_second",
+      "status": "completed",
+      "startedAt": "2026-11-01T03:57:57.477Z",
+      "endedAt": "2026-11-01T03:57:57.604Z",
+      "durationMs": 127.926,
+      "result": {
+        "correlationId": "b95667315ea715bcaad2da04",
+        "contract": {
+          "event": "lounge.soundclash.submit",
+          "payloadKeys": [
+            "trackId"
+          ],
+          "expectedRole": "Listener",
+          "authenticated": true,
+          "joinedLounge": true
+        },
+        "acknowledgement": {
+          "received": true,
+          "ok": true,
+          "code": null,
+          "timedOut": false,
+          "latencyMs": 103.596
+        },
+        "durable": {
+          "loungeFound": true,
+          "snapshotCommitted": true,
+          "battleStatus": "open",
+          "candidateCount": 2,
+          "pendingOutboxEvents": 0,
+          "projectedEventCount": 1,
+          "projectedEventsForExpectedActor": 1,
+          "projectedSequenceNumbers": [
+            471
+          ]
+        },
+        "socketEvents": {
+          "hostReceipts": 2,
+          "remoteHostReceived": true,
+          "otherListenerReceivedSubmission": true
+        },
+        "serverTraceStages": [
+          {
+            "stage": "request_received"
+          },
+          {
+            "stage": "rate_limit_passed"
+          },
+          {
+            "stage": "authentication_and_membership_passed"
+          },
+          {
+            "stage": "payload_validated"
+          },
+          {
+            "stage": "host_presence_passed"
+          },
+          {
+            "stage": "service_started"
+          },
+          {
+            "stage": "service_returned"
+          },
+          {
+            "stage": "handler_completed"
+          },
+          {
+            "stage": "ack_ready",
+            "status": 200
+          },
+          {
+            "stage": "ack_callback_invoked",
+            "status": 200
+          }
+        ],
+        "processHealth": {
+          "processId": 31088,
+          "alive": true,
+          "healthStatus": 200,
+          "healthOk": true
+        }
+      }
+    },
+    {
+      "name": "soundclash_vote_wave",
+      "status": "completed",
+      "startedAt": "2026-11-01T03:57:57.630Z",
+      "endedAt": "2026-11-01T03:58:27.665Z",
+      "durationMs": 30034.183,
+      "result": {
+        "battleId": "d7b0eac7-f3c0-42a0-8671-57024eea4c99",
+        "requestedVotes": 20,
+        "successfulVotes": 20,
+        "failedVotes": 0,
+        "timeouts": 0,
+        "persistedVoteEvents": 20,
+        "distinctPersistedVoters": 20,
+        "voteAckLatencyMs": {
+          "samples": 20,
+          "p50Ms": 364.584,
+          "p95Ms": 641.934,
+          "p99Ms": 679.853,
+          "maxMs": 679.853
+        },
+        "voteWaveMs": 29955.015,
+        "tieBroadcastReceived": true
+      }
+    },
+    {
+      "name": "soundclash_resolution",
+      "status": "completed",
+      "startedAt": "2026-11-01T03:58:27.698Z",
+      "endedAt": "2026-11-01T03:58:27.896Z",
+      "durationMs": 197.35,
+      "result": {
+        "battleId": "d7b0eac7-f3c0-42a0-8671-57024eea4c99",
+        "winningTrackId": "t_cc0_thoughtness",
+        "ackMs": 68.468,
+        "peerBroadcastMs": 120.598,
+        "persistedResolutionEvents": 1,
+        "persistedStatus": "resolved"
+      }
+    },
+    {
+      "name": "gateway_restart_recovery",
+      "status": "completed",
+      "startedAt": "2026-11-01T03:58:27.908Z",
+      "endedAt": "2026-11-01T03:58:36.710Z",
+      "durationMs": 8801.419,
+      "result": {
+        "passed": true,
+        "connectedClientsRecovered": 25,
+        "restoredRevision": 494,
+        "queueItems": 412,
+        "restartAndResyncMs": 8787.393
+      }
+    },
+    {
+      "name": "final_reconciliation",
+      "status": "running",
+      "startedAt": "2026-11-01T03:58:36.728Z",
+      "startedMonotonicMs": 581243025.5782
+    }
+  ],
+  "measurements": {
+    "database_guard_and_connect": {
+      "guardPassed": true,
+      "configuredHostname": "127.0.0.1",
+      "generatedDatabaseName": "astradj_test_runtimebench_074089eb2f6a46c4afefbc00ae2b637e",
+      "topology": "standalone",
+      "mongoVersion": "8.2.5",
+      "freeMemoryGiB": 1.62
+    },
+    "seed_fixture": {
+      "usersCreated": 50,
+      "roleCounts": {
+        "Host": 1,
+        "Co-DJ": 25,
+        "Listener": 24
+      },
+      "realSeedTracks": 7,
+      "syntheticQueueTracks": 450,
+      "syntheticTracksHaveAcousticProfiles": false,
+      "loungeId": "lg_f0a0c0b2302e2fd3",
+      "initialNowPlayingTrackId": "t_cc0_ivory_atlas",
+      "initialNextUpTrackId": "t_cc0_faded_fortress",
+      "seguePair": [
+        {
+          "trackId": "t_cc0_ivory_atlas",
+          "bpm": 143,
+          "camelotKey": "8A",
+          "source": "https://kaino.dev/api/library/music/creator-workout-01",
+          "license": "CC0-1.0"
+        },
+        {
+          "trackId": "t_cc0_faded_fortress",
+          "bpm": 142,
+          "camelotKey": "8A",
+          "source": "https://kaino.dev/api/library/music/indie-rock-07",
+          "license": "CC0-1.0"
+        }
+      ],
+      "soundclashCandidates": [
+        "t_cc0_thoughtness",
+        "t_cc0_chill_beat"
+      ]
+    },
+    "start_api_processes": {
+      "processCount": 2,
+      "processStartup": [
+        {
+          "pid": 33356,
+          "port": 58110,
+          "startupMs": 2594.487
+        },
+        {
+          "pid": 31088,
+          "port": 58111,
+          "startupMs": 2017.393
+        }
+      ]
+    },
+    "connect_and_join_clients": {
+      "socketConnections": 51,
+      "distinctParticipantAccounts": 50,
+      "joinedAcks": 51,
+      "hostSocketsAcrossProcesses": 2,
+      "coDjAccounts": 25,
+      "listenerAccounts": 24
+    },
+    "api_catalog_reads": {
+      "endpoint": "GET /api/v1/tracks?limit=10",
+      "warmupRequests": 25,
+      "configuredSamplesPerProcessPerLevel": 500,
+      "levels": [
+        {
+          "concurrencyPerProcess": 1,
+          "aggregate": {
+            "requests": 1000,
+            "successes": 1000,
+            "failures": 0,
+            "timeouts": 0,
+            "errorRatePercent": 0,
+            "responseLatencyMs": {
+              "samples": 1000,
+              "p50Ms": 6.97,
+              "p95Ms": 9.733,
+              "p99Ms": 12.036,
+              "maxMs": 24.607
+            },
+            "successLatencyMs": {
+              "samples": 1000,
+              "p50Ms": 6.97,
+              "p95Ms": 9.733,
+              "p99Ms": 12.036,
+              "maxMs": 24.607
+            },
+            "serverAppPathLatencyMs": {
+              "samples": 1000,
+              "p50Ms": 5.179,
+              "p95Ms": 7.292,
+              "p99Ms": 8.624,
+              "maxMs": 13.214
+            }
+          },
+          "perProcess": [
+            {
+              "processOrdinal": 1,
+              "requests": 500,
+              "successes": 500,
+              "failures": 0,
+              "timeouts": 0,
+              "errorRatePercent": 0,
+              "httpStatusCounts": {
+                "200": 500
+              },
+              "responseLatencyMs": {
+                "samples": 500,
+                "p50Ms": 6.959,
+                "p95Ms": 9.803,
+                "p99Ms": 12.104,
+                "maxMs": 17.375
+              },
+              "successLatencyMs": {
+                "samples": 500,
+                "p50Ms": 6.959,
+                "p95Ms": 9.803,
+                "p99Ms": 12.104,
+                "maxMs": 17.375
+              },
+              "failedLatencyMs": {
+                "samples": 0,
+                "p50Ms": null,
+                "p95Ms": null,
+                "p99Ms": null,
+                "maxMs": null
+              },
+              "serverAppPathLatencyMs": {
+                "samples": 500,
+                "p50Ms": 5.185,
+                "p95Ms": 7.311,
+                "p99Ms": 8.673,
+                "maxMs": 11.348
+              },
+              "requestsPerSecond": 136.12
+            },
+            {
+              "processOrdinal": 2,
+              "requests": 500,
+              "successes": 500,
+              "failures": 0,
+              "timeouts": 0,
+              "errorRatePercent": 0,
+              "httpStatusCounts": {
+                "200": 500
+              },
+              "responseLatencyMs": {
+                "samples": 500,
+                "p50Ms": 6.992,
+                "p95Ms": 9.593,
+                "p99Ms": 11.02,
+                "maxMs": 24.607
+              },
+              "successLatencyMs": {
+                "samples": 500,
+                "p50Ms": 6.992,
+                "p95Ms": 9.593,
+                "p99Ms": 11.02,
+                "maxMs": 24.607
+              },
+              "failedLatencyMs": {
+                "samples": 0,
+                "p50Ms": null,
+                "p95Ms": null,
+                "p99Ms": null,
+                "maxMs": null
+              },
+              "serverAppPathLatencyMs": {
+                "samples": 500,
+                "p50Ms": 5.161,
+                "p95Ms": 7.245,
+                "p99Ms": 8.364,
+                "maxMs": 13.214
+              },
+              "requestsPerSecond": 137.8
+            }
+          ],
+          "note": "Normal rate limiting remained active; only disposable Mongo counters were cleared between batches. DB subquery spans are not instrumented."
+        },
+        {
+          "concurrencyPerProcess": 10,
+          "aggregate": {
+            "requests": 1000,
+            "successes": 1000,
+            "failures": 0,
+            "timeouts": 0,
+            "errorRatePercent": 0,
+            "responseLatencyMs": {
+              "samples": 1000,
+              "p50Ms": 38.462,
+              "p95Ms": 54.079,
+              "p99Ms": 62.203,
+              "maxMs": 69.478
+            },
+            "successLatencyMs": {
+              "samples": 1000,
+              "p50Ms": 38.462,
+              "p95Ms": 54.079,
+              "p99Ms": 62.203,
+              "maxMs": 69.478
+            },
+            "serverAppPathLatencyMs": {
+              "samples": 1000,
+              "p50Ms": 30.609,
+              "p95Ms": 40.616,
+              "p99Ms": 46.88,
+              "maxMs": 52.439
+            }
+          },
+          "perProcess": [
+            {
+              "processOrdinal": 1,
+              "requests": 500,
+              "successes": 500,
+              "failures": 0,
+              "timeouts": 0,
+              "errorRatePercent": 0,
+              "httpStatusCounts": {
+                "200": 500
+              },
+              "responseLatencyMs": {
+                "samples": 500,
+                "p50Ms": 38.592,
+                "p95Ms": 57.608,
+                "p99Ms": 63.4,
+                "maxMs": 69.478
+              },
+              "successLatencyMs": {
+                "samples": 500,
+                "p50Ms": 38.592,
+                "p95Ms": 57.608,
+                "p99Ms": 63.4,
+                "maxMs": 69.478
+              },
+              "failedLatencyMs": {
+                "samples": 0,
+                "p50Ms": null,
+                "p95Ms": null,
+                "p99Ms": null,
+                "maxMs": null
+              },
+              "serverAppPathLatencyMs": {
+                "samples": 500,
+                "p50Ms": 30.455,
+                "p95Ms": 44.216,
+                "p99Ms": 47.777,
+                "maxMs": 52.439
+              },
+              "requestsPerSecond": 215.23
+            },
+            {
+              "processOrdinal": 2,
+              "requests": 500,
+              "successes": 500,
+              "failures": 0,
+              "timeouts": 0,
+              "errorRatePercent": 0,
+              "httpStatusCounts": {
+                "200": 500
+              },
+              "responseLatencyMs": {
+                "samples": 500,
+                "p50Ms": 38.289,
+                "p95Ms": 51.809,
+                "p99Ms": 56.026,
+                "maxMs": 64.887
+              },
+              "successLatencyMs": {
+                "samples": 500,
+                "p50Ms": 38.289,
+                "p95Ms": 51.809,
+                "p99Ms": 56.026,
+                "maxMs": 64.887
+              },
+              "failedLatencyMs": {
+                "samples": 0,
+                "p50Ms": null,
+                "p95Ms": null,
+                "p99Ms": null,
+                "maxMs": null
+              },
+              "serverAppPathLatencyMs": {
+                "samples": 500,
+                "p50Ms": 30.726,
+                "p95Ms": 39.469,
+                "p99Ms": 41.579,
+                "maxMs": 44.812
+              },
+              "requestsPerSecond": 218.08
+            }
+          ],
+          "note": "Normal rate limiting remained active; only disposable Mongo counters were cleared between batches. DB subquery spans are not instrumented."
+        },
+        {
+          "concurrencyPerProcess": 25,
+          "aggregate": {
+            "requests": 1000,
+            "successes": 1000,
+            "failures": 0,
+            "timeouts": 0,
+            "errorRatePercent": 0,
+            "responseLatencyMs": {
+              "samples": 1000,
+              "p50Ms": 93.849,
+              "p95Ms": 115.499,
+              "p99Ms": 123.184,
+              "maxMs": 132.808
+            },
+            "successLatencyMs": {
+              "samples": 1000,
+              "p50Ms": 93.849,
+              "p95Ms": 115.499,
+              "p99Ms": 123.184,
+              "maxMs": 132.808
+            },
+            "serverAppPathLatencyMs": {
+              "samples": 1000,
+              "p50Ms": 76.015,
+              "p95Ms": 91.528,
+              "p99Ms": 97.656,
+              "maxMs": 127.768
+            }
+          },
+          "perProcess": [
+            {
+              "processOrdinal": 1,
+              "requests": 500,
+              "successes": 500,
+              "failures": 0,
+              "timeouts": 0,
+              "errorRatePercent": 0,
+              "httpStatusCounts": {
+                "200": 500
+              },
+              "responseLatencyMs": {
+                "samples": 500,
+                "p50Ms": 94.368,
+                "p95Ms": 118.415,
+                "p99Ms": 123.468,
+                "maxMs": 132.577
+              },
+              "successLatencyMs": {
+                "samples": 500,
+                "p50Ms": 94.368,
+                "p95Ms": 118.415,
+                "p99Ms": 123.468,
+                "maxMs": 132.577
+              },
+              "failedLatencyMs": {
+                "samples": 0,
+                "p50Ms": null,
+                "p95Ms": null,
+                "p99Ms": null,
+                "maxMs": null
+              },
+              "serverAppPathLatencyMs": {
+                "samples": 500,
+                "p50Ms": 77.059,
+                "p95Ms": 91.757,
+                "p99Ms": 112.322,
+                "maxMs": 117.587
+              },
+              "requestsPerSecond": 220.27
+            },
+            {
+              "processOrdinal": 2,
+              "requests": 500,
+              "successes": 500,
+              "failures": 0,
+              "timeouts": 0,
+              "errorRatePercent": 0,
+              "httpStatusCounts": {
+                "200": 500
+              },
+              "responseLatencyMs": {
+                "samples": 500,
+                "p50Ms": 93.411,
+                "p95Ms": 111.496,
+                "p99Ms": 119.141,
+                "maxMs": 132.808
+              },
+              "successLatencyMs": {
+                "samples": 500,
+                "p50Ms": 93.411,
+                "p95Ms": 111.496,
+                "p99Ms": 119.141,
+                "maxMs": 132.808
+              },
+              "failedLatencyMs": {
+                "samples": 0,
+                "p50Ms": null,
+                "p95Ms": null,
+                "p99Ms": null,
+                "maxMs": null
+              },
+              "serverAppPathLatencyMs": {
+                "samples": 500,
+                "p50Ms": 74.971,
+                "p95Ms": 90.733,
+                "p99Ms": 97.339,
+                "maxMs": 127.768
+              },
+              "requestsPerSecond": 224.81
+            }
+          ],
+          "note": "Normal rate limiting remained active; only disposable Mongo counters were cleared between batches. DB subquery spans are not instrumented."
+        }
+      ]
+    },
+    "segue_measurement": {
+      "samplesRequested": 20,
+      "samplesSelected": 20,
+      "selectionAndScriptPreparationAckMs": {
+        "samples": 20,
+        "p50Ms": 31.683,
+        "p95Ms": 45.359,
+        "p99Ms": 47.764,
+        "maxMs": 47.764
+      },
+      "triggerToPeerSocketAnnouncementMs": {
+        "samples": 20,
+        "p50Ms": 62.095,
+        "p95Ms": 93.863,
+        "p99Ms": 98.099,
+        "maxMs": 98.099
+      },
+      "endedCommandToPeerSocketAnnouncementMs": {
+        "samples": 20,
+        "p50Ms": 29.644,
+        "p95Ms": 52.694,
+        "p99Ms": 63.312,
+        "maxMs": 63.312
+      },
+      "serviceSpanLatencyMs": {
+        "loungeLookupMs": {
+          "samples": 20,
+          "p50Ms": 1.946,
+          "p95Ms": 2.656,
+          "p99Ms": 2.973,
+          "maxMs": 2.973
+        },
+        "currentTrackLookupMs": {
+          "samples": 20,
+          "p50Ms": 1.397,
+          "p95Ms": 2.116,
+          "p99Ms": 2.171,
+          "maxMs": 2.171
+        },
+        "candidateRetrievalMs": {
+          "samples": 20,
+          "p50Ms": 1.441,
+          "p95Ms": 2.206,
+          "p99Ms": 2.701,
+          "maxMs": 2.701
+        },
+        "acousticEligibilityAndRankingMs": {
+          "samples": 20,
+          "p50Ms": 0.073,
+          "p95Ms": 0.591,
+          "p99Ms": 0.769,
+          "maxMs": 0.769
+        },
+        "transitionScriptAndReferenceValidationMs": {
+          "samples": 20,
+          "p50Ms": 0.179,
+          "p95Ms": 0.942,
+          "p99Ms": 1.294,
+          "maxMs": 1.294
+        },
+        "totalServiceMs": {
+          "samples": 20,
+          "p50Ms": 5.153,
+          "p95Ms": 7.477,
+          "p99Ms": 9.322,
+          "maxMs": 9.322
+        }
+      },
+      "selectedTrackIds": [
+        "t_cc0_faded_fortress",
+        "t_cc0_ivory_atlas",
+        "t_cc0_faded_fortress",
+        "t_cc0_ivory_atlas",
+        "t_cc0_faded_fortress",
+        "t_cc0_ivory_atlas",
+        "t_cc0_faded_fortress",
+        "t_cc0_ivory_atlas",
+        "t_cc0_faded_fortress",
+        "t_cc0_ivory_atlas",
+        "t_cc0_faded_fortress",
+        "t_cc0_ivory_atlas",
+        "t_cc0_faded_fortress",
+        "t_cc0_ivory_atlas",
+        "t_cc0_faded_fortress",
+        "t_cc0_ivory_atlas",
+        "t_cc0_faded_fortress",
+        "t_cc0_ivory_atlas",
+        "t_cc0_faded_fortress",
+        "t_cc0_ivory_atlas"
+      ],
+      "pairTrackIds": [
+        "t_cc0_ivory_atlas",
+        "t_cc0_faded_fortress"
+      ],
+      "pairMetadataEvidence": {
+        "t_cc0_ivory_atlas": {
+          "source": "https://kaino.dev/api/library/music/creator-workout-01",
+          "license": "CC0-1.0",
+          "bpm": 143,
+          "camelotKey": "8A"
+        },
+        "t_cc0_faded_fortress": {
+          "source": "https://kaino.dev/api/library/music/indie-rock-07",
+          "license": "CC0-1.0",
+          "bpm": 142,
+          "camelotKey": "8A"
+        }
+      },
+      "matchReasons": [
+        {
+          "bpmDeltaPct": 0.7,
+          "bpmRelation": "direct",
+          "camelotRelation": "same",
+          "energyFit": 0.865,
+          "harmonicCloseness": 1,
+          "targetEnergy": 0.82,
+          "recencyScore": 1,
+          "score": 0.9596,
+          "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+        },
+        {
+          "bpmDeltaPct": 0.7,
+          "bpmRelation": "direct",
+          "camelotRelation": "same",
+          "energyFit": 0.865,
+          "harmonicCloseness": 1,
+          "targetEnergy": 0.686,
+          "recencyScore": 1,
+          "score": 0.9596,
+          "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+        },
+        {
+          "bpmDeltaPct": 0.7,
+          "bpmRelation": "direct",
+          "camelotRelation": "same",
+          "energyFit": 0.865,
+          "harmonicCloseness": 1,
+          "targetEnergy": 0.82,
+          "recencyScore": 1,
+          "score": 0.9596,
+          "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+        },
+        {
+          "bpmDeltaPct": 0.7,
+          "bpmRelation": "direct",
+          "camelotRelation": "same",
+          "energyFit": 0.865,
+          "harmonicCloseness": 1,
+          "targetEnergy": 0.686,
+          "recencyScore": 1,
+          "score": 0.9596,
+          "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+        },
+        {
+          "bpmDeltaPct": 0.7,
+          "bpmRelation": "direct",
+          "camelotRelation": "same",
+          "energyFit": 0.865,
+          "harmonicCloseness": 1,
+          "targetEnergy": 0.82,
+          "recencyScore": 1,
+          "score": 0.9596,
+          "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+        },
+        {
+          "bpmDeltaPct": 0.7,
+          "bpmRelation": "direct",
+          "camelotRelation": "same",
+          "energyFit": 0.865,
+          "harmonicCloseness": 1,
+          "targetEnergy": 0.686,
+          "recencyScore": 1,
+          "score": 0.9596,
+          "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+        },
+        {
+          "bpmDeltaPct": 0.7,
+          "bpmRelation": "direct",
+          "camelotRelation": "same",
+          "energyFit": 0.865,
+          "harmonicCloseness": 1,
+          "targetEnergy": 0.82,
+          "recencyScore": 1,
+          "score": 0.9596,
+          "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+        },
+        {
+          "bpmDeltaPct": 0.7,
+          "bpmRelation": "direct",
+          "camelotRelation": "same",
+          "energyFit": 0.865,
+          "harmonicCloseness": 1,
+          "targetEnergy": 0.686,
+          "recencyScore": 1,
+          "score": 0.9596,
+          "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+        },
+        {
+          "bpmDeltaPct": 0.7,
+          "bpmRelation": "direct",
+          "camelotRelation": "same",
+          "energyFit": 0.865,
+          "harmonicCloseness": 1,
+          "targetEnergy": 0.82,
+          "recencyScore": 1,
+          "score": 0.9596,
+          "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+        },
+        {
+          "bpmDeltaPct": 0.7,
+          "bpmRelation": "direct",
+          "camelotRelation": "same",
+          "energyFit": 0.865,
+          "harmonicCloseness": 1,
+          "targetEnergy": 0.686,
+          "recencyScore": 1,
+          "score": 0.9596,
+          "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+        },
+        {
+          "bpmDeltaPct": 0.7,
+          "bpmRelation": "direct",
+          "camelotRelation": "same",
+          "energyFit": 0.865,
+          "harmonicCloseness": 1,
+          "targetEnergy": 0.82,
+          "recencyScore": 1,
+          "score": 0.9596,
+          "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+        },
+        {
+          "bpmDeltaPct": 0.7,
+          "bpmRelation": "direct",
+          "camelotRelation": "same",
+          "energyFit": 0.865,
+          "harmonicCloseness": 1,
+          "targetEnergy": 0.686,
+          "recencyScore": 1,
+          "score": 0.9596,
+          "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+        },
+        {
+          "bpmDeltaPct": 0.7,
+          "bpmRelation": "direct",
+          "camelotRelation": "same",
+          "energyFit": 0.865,
+          "harmonicCloseness": 1,
+          "targetEnergy": 0.82,
+          "recencyScore": 1,
+          "score": 0.9596,
+          "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+        },
+        {
+          "bpmDeltaPct": 0.7,
+          "bpmRelation": "direct",
+          "camelotRelation": "same",
+          "energyFit": 0.865,
+          "harmonicCloseness": 1,
+          "targetEnergy": 0.686,
+          "recencyScore": 1,
+          "score": 0.9596,
+          "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+        },
+        {
+          "bpmDeltaPct": 0.7,
+          "bpmRelation": "direct",
+          "camelotRelation": "same",
+          "energyFit": 0.865,
+          "harmonicCloseness": 1,
+          "targetEnergy": 0.82,
+          "recencyScore": 1,
+          "score": 0.9596,
+          "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+        },
+        {
+          "bpmDeltaPct": 0.7,
+          "bpmRelation": "direct",
+          "camelotRelation": "same",
+          "energyFit": 0.865,
+          "harmonicCloseness": 1,
+          "targetEnergy": 0.686,
+          "recencyScore": 1,
+          "score": 0.9596,
+          "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+        },
+        {
+          "bpmDeltaPct": 0.7,
+          "bpmRelation": "direct",
+          "camelotRelation": "same",
+          "energyFit": 0.865,
+          "harmonicCloseness": 1,
+          "targetEnergy": 0.82,
+          "recencyScore": 1,
+          "score": 0.9596,
+          "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+        },
+        {
+          "bpmDeltaPct": 0.7,
+          "bpmRelation": "direct",
+          "camelotRelation": "same",
+          "energyFit": 0.865,
+          "harmonicCloseness": 1,
+          "targetEnergy": 0.686,
+          "recencyScore": 1,
+          "score": 0.9596,
+          "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+        },
+        {
+          "bpmDeltaPct": 0.7,
+          "bpmRelation": "direct",
+          "camelotRelation": "same",
+          "energyFit": 0.865,
+          "harmonicCloseness": 1,
+          "targetEnergy": 0.82,
+          "recencyScore": 1,
+          "score": 0.9596,
+          "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+        },
+        {
+          "bpmDeltaPct": 0.7,
+          "bpmRelation": "direct",
+          "camelotRelation": "same",
+          "energyFit": 0.865,
+          "harmonicCloseness": 1,
+          "targetEnergy": 0.686,
+          "recencyScore": 1,
+          "score": 0.9596,
+          "selectionReason": "same Camelot match; direct tempo at 0.7% delta; energy fit 0.865; not in the recent-track window; weighted score 0.9596 (50% harmonic, 30% energy, 20% recency)."
+        }
+      ],
+      "transitions": [
+        {
+          "currentTrackId": "t_cc0_ivory_atlas",
+          "selectedTrackId": "t_cc0_faded_fortress",
+          "bpmRelation": "direct",
+          "bpmDeltaPct": 0.7,
+          "camelotRelation": "same",
+          "provider": "deterministic_fallback",
+          "sourceReferenceCount": 10
+        },
+        {
+          "currentTrackId": "t_cc0_faded_fortress",
+          "selectedTrackId": "t_cc0_ivory_atlas",
+          "bpmRelation": "direct",
+          "bpmDeltaPct": 0.7,
+          "camelotRelation": "same",
+          "provider": "deterministic_fallback",
+          "sourceReferenceCount": 10
+        },
+        {
+          "currentTrackId": "t_cc0_ivory_atlas",
+          "selectedTrackId": "t_cc0_faded_fortress",
+          "bpmRelation": "direct",
+          "bpmDeltaPct": 0.7,
+          "camelotRelation": "same",
+          "provider": "deterministic_fallback",
+          "sourceReferenceCount": 10
+        },
+        {
+          "currentTrackId": "t_cc0_faded_fortress",
+          "selectedTrackId": "t_cc0_ivory_atlas",
+          "bpmRelation": "direct",
+          "bpmDeltaPct": 0.7,
+          "camelotRelation": "same",
+          "provider": "deterministic_fallback",
+          "sourceReferenceCount": 10
+        },
+        {
+          "currentTrackId": "t_cc0_ivory_atlas",
+          "selectedTrackId": "t_cc0_faded_fortress",
+          "bpmRelation": "direct",
+          "bpmDeltaPct": 0.7,
+          "camelotRelation": "same",
+          "provider": "deterministic_fallback",
+          "sourceReferenceCount": 10
+        },
+        {
+          "currentTrackId": "t_cc0_faded_fortress",
+          "selectedTrackId": "t_cc0_ivory_atlas",
+          "bpmRelation": "direct",
+          "bpmDeltaPct": 0.7,
+          "camelotRelation": "same",
+          "provider": "deterministic_fallback",
+          "sourceReferenceCount": 10
+        },
+        {
+          "currentTrackId": "t_cc0_ivory_atlas",
+          "selectedTrackId": "t_cc0_faded_fortress",
+          "bpmRelation": "direct",
+          "bpmDeltaPct": 0.7,
+          "camelotRelation": "same",
+          "provider": "deterministic_fallback",
+          "sourceReferenceCount": 10
+        },
+        {
+          "currentTrackId": "t_cc0_faded_fortress",
+          "selectedTrackId": "t_cc0_ivory_atlas",
+          "bpmRelation": "direct",
+          "bpmDeltaPct": 0.7,
+          "camelotRelation": "same",
+          "provider": "deterministic_fallback",
+          "sourceReferenceCount": 10
+        },
+        {
+          "currentTrackId": "t_cc0_ivory_atlas",
+          "selectedTrackId": "t_cc0_faded_fortress",
+          "bpmRelation": "direct",
+          "bpmDeltaPct": 0.7,
+          "camelotRelation": "same",
+          "provider": "deterministic_fallback",
+          "sourceReferenceCount": 10
+        },
+        {
+          "currentTrackId": "t_cc0_faded_fortress",
+          "selectedTrackId": "t_cc0_ivory_atlas",
+          "bpmRelation": "direct",
+          "bpmDeltaPct": 0.7,
+          "camelotRelation": "same",
+          "provider": "deterministic_fallback",
+          "sourceReferenceCount": 10
+        },
+        {
+          "currentTrackId": "t_cc0_ivory_atlas",
+          "selectedTrackId": "t_cc0_faded_fortress",
+          "bpmRelation": "direct",
+          "bpmDeltaPct": 0.7,
+          "camelotRelation": "same",
+          "provider": "deterministic_fallback",
+          "sourceReferenceCount": 10
+        },
+        {
+          "currentTrackId": "t_cc0_faded_fortress",
+          "selectedTrackId": "t_cc0_ivory_atlas",
+          "bpmRelation": "direct",
+          "bpmDeltaPct": 0.7,
+          "camelotRelation": "same",
+          "provider": "deterministic_fallback",
+          "sourceReferenceCount": 10
+        },
+        {
+          "currentTrackId": "t_cc0_ivory_atlas",
+          "selectedTrackId": "t_cc0_faded_fortress",
+          "bpmRelation": "direct",
+          "bpmDeltaPct": 0.7,
+          "camelotRelation": "same",
+          "provider": "deterministic_fallback",
+          "sourceReferenceCount": 10
+        },
+        {
+          "currentTrackId": "t_cc0_faded_fortress",
+          "selectedTrackId": "t_cc0_ivory_atlas",
+          "bpmRelation": "direct",
+          "bpmDeltaPct": 0.7,
+          "camelotRelation": "same",
+          "provider": "deterministic_fallback",
+          "sourceReferenceCount": 10
+        },
+        {
+          "currentTrackId": "t_cc0_ivory_atlas",
+          "selectedTrackId": "t_cc0_faded_fortress",
+          "bpmRelation": "direct",
+          "bpmDeltaPct": 0.7,
+          "camelotRelation": "same",
+          "provider": "deterministic_fallback",
+          "sourceReferenceCount": 10
+        },
+        {
+          "currentTrackId": "t_cc0_faded_fortress",
+          "selectedTrackId": "t_cc0_ivory_atlas",
+          "bpmRelation": "direct",
+          "bpmDeltaPct": 0.7,
+          "camelotRelation": "same",
+          "provider": "deterministic_fallback",
+          "sourceReferenceCount": 10
+        },
+        {
+          "currentTrackId": "t_cc0_ivory_atlas",
+          "selectedTrackId": "t_cc0_faded_fortress",
+          "bpmRelation": "direct",
+          "bpmDeltaPct": 0.7,
+          "camelotRelation": "same",
+          "provider": "deterministic_fallback",
+          "sourceReferenceCount": 10
+        },
+        {
+          "currentTrackId": "t_cc0_faded_fortress",
+          "selectedTrackId": "t_cc0_ivory_atlas",
+          "bpmRelation": "direct",
+          "bpmDeltaPct": 0.7,
+          "camelotRelation": "same",
+          "provider": "deterministic_fallback",
+          "sourceReferenceCount": 10
+        },
+        {
+          "currentTrackId": "t_cc0_ivory_atlas",
+          "selectedTrackId": "t_cc0_faded_fortress",
+          "bpmRelation": "direct",
+          "bpmDeltaPct": 0.7,
+          "camelotRelation": "same",
+          "provider": "deterministic_fallback",
+          "sourceReferenceCount": 10
+        },
+        {
+          "currentTrackId": "t_cc0_faded_fortress",
+          "selectedTrackId": "t_cc0_ivory_atlas",
+          "bpmRelation": "direct",
+          "bpmDeltaPct": 0.7,
+          "camelotRelation": "same",
+          "provider": "deterministic_fallback",
+          "sourceReferenceCount": 10
+        }
+      ],
+      "latencyLimitations": "The Host uses authenticated Socket.IO commands with currentTs inside the configured outro window. Opt-in spans cover Lounge lookup, current-track lookup, candidate retrieval, acoustic eligibility/ranking and transition-script/reference generation. The harness then sends lounge.playback.ended directly; no browser media element or React render is part of these timings. Peer Socket.IO arrival is not browser render latency."
+    },
+    "queue_mutations": {
+      "levels": [
+        {
+          "concurrency": 1,
+          "attempted": 100,
+          "successful": 100,
+          "errors": 0,
+          "errorRatePercent": 0,
+          "ackLatency": {
+            "samples": 100,
+            "p50Ms": 18.405,
+            "p95Ms": 23.177,
+            "p99Ms": 24.654,
+            "maxMs": 45.2
+          },
+          "queueStateSyncDrift": {
+            "samples": 100,
+            "p50Ms": 16.914,
+            "p95Ms": 19.357,
+            "p99Ms": 31.539,
+            "maxMs": 33.731
+          },
+          "senderToLastClientDeliveryUpperBound": {
+            "samples": 100,
+            "p50Ms": 62.585,
+            "p95Ms": 66.302,
+            "p99Ms": 86.632,
+            "maxMs": 100.103
+          },
+          "crossProcessSenderToLastClientDelivery": {
+            "samples": 100,
+            "p50Ms": 59.967,
+            "p95Ms": 65.237,
+            "p99Ms": 83.729,
+            "maxMs": 100.103
+          },
+          "clientsMissingAnEventSnapshot": 0,
+          "lateClientEventObservationsAfter8s": 0,
+          "recipientsStillUnobservedAfter18s": 0,
+          "mutationEventsProjected": 100,
+          "duplicateLogicalEvents": 0,
+          "successfulMutationsMissingFromState": 0,
+          "outboxBacklogAtEnd": 0,
+          "mutationsPerSecond": 15.75,
+          "elapsedMs": 6349.551
+        },
+        {
+          "concurrency": 5,
+          "attempted": 100,
+          "successful": 100,
+          "errors": 0,
+          "errorRatePercent": 0,
+          "ackLatency": {
+            "samples": 100,
+            "p50Ms": 51.81,
+            "p95Ms": 99.019,
+            "p99Ms": 106.28,
+            "maxMs": 119.488
+          },
+          "queueStateSyncDrift": {
+            "samples": 100,
+            "p50Ms": 22.363,
+            "p95Ms": 42.596,
+            "p99Ms": 53.428,
+            "maxMs": 64.469
+          },
+          "senderToLastClientDeliveryUpperBound": {
+            "samples": 100,
+            "p50Ms": 86.59,
+            "p95Ms": 139.098,
+            "p99Ms": 165.942,
+            "maxMs": 175.813
+          },
+          "crossProcessSenderToLastClientDelivery": {
+            "samples": 100,
+            "p50Ms": 80.121,
+            "p95Ms": 133.331,
+            "p99Ms": 165.942,
+            "maxMs": 175.813
+          },
+          "clientsMissingAnEventSnapshot": 0,
+          "lateClientEventObservationsAfter8s": 0,
+          "recipientsStillUnobservedAfter18s": 0,
+          "mutationEventsProjected": 100,
+          "duplicateLogicalEvents": 0,
+          "successfulMutationsMissingFromState": 0,
+          "outboxBacklogAtEnd": 0,
+          "mutationsPerSecond": 37.46,
+          "elapsedMs": 2669.82
+        },
+        {
+          "concurrency": 10,
+          "attempted": 100,
+          "successful": 100,
+          "errors": 0,
+          "errorRatePercent": 0,
+          "ackLatency": {
+            "samples": 100,
+            "p50Ms": 122.131,
+            "p95Ms": 226.09,
+            "p99Ms": 228.075,
+            "maxMs": 240.654
+          },
+          "queueStateSyncDrift": {
+            "samples": 100,
+            "p50Ms": 33.126,
+            "p95Ms": 50.074,
+            "p99Ms": 57.264,
+            "maxMs": 58.534
+          },
+          "senderToLastClientDeliveryUpperBound": {
+            "samples": 100,
+            "p50Ms": 156.602,
+            "p95Ms": 263.826,
+            "p99Ms": 271.303,
+            "maxMs": 278.533
+          },
+          "crossProcessSenderToLastClientDelivery": {
+            "samples": 100,
+            "p50Ms": 150.769,
+            "p95Ms": 261.857,
+            "p99Ms": 271.303,
+            "maxMs": 278.533
+          },
+          "clientsMissingAnEventSnapshot": 0,
+          "lateClientEventObservationsAfter8s": 0,
+          "recipientsStillUnobservedAfter18s": 0,
+          "mutationEventsProjected": 100,
+          "duplicateLogicalEvents": 0,
+          "successfulMutationsMissingFromState": 0,
+          "outboxBacklogAtEnd": 0,
+          "mutationsPerSecond": 39.16,
+          "elapsedMs": 2553.481
+        },
+        {
+          "concurrency": 20,
+          "attempted": 100,
+          "successful": 100,
+          "errors": 0,
+          "errorRatePercent": 0,
+          "ackLatency": {
+            "samples": 100,
+            "p50Ms": 288.185,
+            "p95Ms": 500.297,
+            "p99Ms": 524.104,
+            "maxMs": 560.304
+          },
+          "queueStateSyncDrift": {
+            "samples": 100,
+            "p50Ms": 44.723,
+            "p95Ms": 84.902,
+            "p99Ms": 107.187,
+            "maxMs": 110.321
+          },
+          "senderToLastClientDeliveryUpperBound": {
+            "samples": 100,
+            "p50Ms": 336.771,
+            "p95Ms": 538.071,
+            "p99Ms": 584.465,
+            "maxMs": 607.823
+          },
+          "crossProcessSenderToLastClientDelivery": {
+            "samples": 100,
+            "p50Ms": 322.82,
+            "p95Ms": 528.058,
+            "p99Ms": 584.451,
+            "maxMs": 584.465
+          },
+          "clientsMissingAnEventSnapshot": 0,
+          "lateClientEventObservationsAfter8s": 0,
+          "recipientsStillUnobservedAfter18s": 0,
+          "mutationEventsProjected": 100,
+          "duplicateLogicalEvents": 0,
+          "successfulMutationsMissingFromState": 0,
+          "outboxBacklogAtEnd": 0,
+          "mutationsPerSecond": 36,
+          "elapsedMs": 2777.493
+        }
+      ],
+      "queueLoadReconciliation": {
+        "successfulAdds": 400,
+        "persistedAddEvents": 400,
+        "duplicateLogicalEvents": 0,
+        "successfulAddsMissingFromEventLog": 0,
+        "successfulAddsMissingFromQueueState": 0,
+        "outboxBacklog": 0,
+        "connectedClientsResynchronized": 51,
+        "connectedClientsExpected": 51
+      },
+      "successfulTrackIdCount": 400
+    },
+    "outbox_stage_observations": {
+      "samples": 10,
+      "ackMs": {
+        "samples": 10,
+        "p50Ms": 46.453,
+        "p95Ms": 58.907,
+        "p99Ms": 58.907,
+        "maxMs": 58.907
+      },
+      "commitObservedMs": {
+        "samples": 8,
+        "p50Ms": 33.948,
+        "p95Ms": 55.106,
+        "p99Ms": 55.106,
+        "maxMs": 55.106
+      },
+      "projectionAfterCommitMs": {
+        "samples": 8,
+        "p50Ms": 2.92,
+        "p95Ms": 17.852,
+        "p99Ms": 17.852,
+        "maxMs": 17.852
+      },
+      "drainAfterProjectionMs": {
+        "samples": 10,
+        "p50Ms": 0.005,
+        "p95Ms": 21.298,
+        "p99Ms": 21.298,
+        "maxMs": 21.298
+      },
+      "observations": [
+        {
+          "ackMs": 55.562,
+          "commitObservedMs": 44.299,
+          "projectionAfterCommitMs": 3.641,
+          "drainAfterProjectionMs": 0.006
+        },
+        {
+          "ackMs": 58.907,
+          "commitObservedMs": 55.106,
+          "projectionAfterCommitMs": 4.251,
+          "drainAfterProjectionMs": 8.717
+        },
+        {
+          "ackMs": 42.203,
+          "commitObservedMs": 29.632,
+          "projectionAfterCommitMs": 17.852,
+          "drainAfterProjectionMs": 0.005
+        },
+        {
+          "ackMs": 48.527,
+          "commitObservedMs": null,
+          "projectionAfterCommitMs": null,
+          "drainAfterProjectionMs": 0.004
+        },
+        {
+          "ackMs": 49.995,
+          "commitObservedMs": null,
+          "projectionAfterCommitMs": null,
+          "drainAfterProjectionMs": 0.004
+        },
+        {
+          "ackMs": 39.225,
+          "commitObservedMs": 30.426,
+          "projectionAfterCommitMs": 2.92,
+          "drainAfterProjectionMs": 9.59
+        },
+        {
+          "ackMs": 43.614,
+          "commitObservedMs": 44.722,
+          "projectionAfterCommitMs": 2.534,
+          "drainAfterProjectionMs": 0.001
+        },
+        {
+          "ackMs": 46.453,
+          "commitObservedMs": 27.48,
+          "projectionAfterCommitMs": 2.595,
+          "drainAfterProjectionMs": 21.298
+        },
+        {
+          "ackMs": 50.591,
+          "commitObservedMs": 39.468,
+          "projectionAfterCommitMs": 3.238,
+          "drainAfterProjectionMs": 9.031
+        },
+        {
+          "ackMs": 31.994,
+          "commitObservedMs": 33.948,
+          "projectionAfterCommitMs": 2.23,
+          "drainAfterProjectionMs": 0.002
+        }
+      ],
+      "note": "Milestones use 1ms polling from the benchmark process and are upper bounds including poll/query time."
+    },
+    "soundclash_submit_first": {
+      "correlationId": "142181d41943947557181eac",
+      "contract": {
+        "event": "lounge.soundclash.submit",
+        "payloadKeys": [
+          "trackId"
+        ],
+        "expectedRole": "Listener",
+        "authenticated": true,
+        "joinedLounge": true
+      },
+      "acknowledgement": {
+        "received": true,
+        "ok": true,
+        "code": null,
+        "timedOut": false,
+        "latencyMs": 70.675
+      },
+      "durable": {
+        "loungeFound": true,
+        "snapshotCommitted": true,
+        "battleStatus": "collecting",
+        "candidateCount": 1,
+        "pendingOutboxEvents": 0,
+        "projectedEventCount": 1,
+        "projectedEventsForExpectedActor": 1,
+        "projectedSequenceNumbers": [
+          470
+        ]
+      },
+      "socketEvents": {
+        "hostReceipts": 2,
+        "remoteHostReceived": true,
+        "otherListenerReceivedSubmission": true
+      },
+      "serverTraceStages": [
+        {
+          "stage": "request_received"
+        },
+        {
+          "stage": "rate_limit_passed"
+        },
+        {
+          "stage": "authentication_and_membership_passed"
+        },
+        {
+          "stage": "payload_validated"
+        },
+        {
+          "stage": "host_presence_passed"
+        },
+        {
+          "stage": "service_started"
+        },
+        {
+          "stage": "service_returned"
+        },
+        {
+          "stage": "handler_completed"
+        },
+        {
+          "stage": "ack_ready",
+          "status": 200
+        },
+        {
+          "stage": "ack_callback_invoked",
+          "status": 200
+        }
+      ],
+      "processHealth": {
+        "processId": 33356,
+        "alive": true,
+        "healthStatus": 200,
+        "healthOk": true
+      }
+    },
+    "soundclash_submit_second": {
+      "correlationId": "b95667315ea715bcaad2da04",
+      "contract": {
+        "event": "lounge.soundclash.submit",
+        "payloadKeys": [
+          "trackId"
+        ],
+        "expectedRole": "Listener",
+        "authenticated": true,
+        "joinedLounge": true
+      },
+      "acknowledgement": {
+        "received": true,
+        "ok": true,
+        "code": null,
+        "timedOut": false,
+        "latencyMs": 103.596
+      },
+      "durable": {
+        "loungeFound": true,
+        "snapshotCommitted": true,
+        "battleStatus": "open",
+        "candidateCount": 2,
+        "pendingOutboxEvents": 0,
+        "projectedEventCount": 1,
+        "projectedEventsForExpectedActor": 1,
+        "projectedSequenceNumbers": [
+          471
+        ]
+      },
+      "socketEvents": {
+        "hostReceipts": 2,
+        "remoteHostReceived": true,
+        "otherListenerReceivedSubmission": true
+      },
+      "serverTraceStages": [
+        {
+          "stage": "request_received"
+        },
+        {
+          "stage": "rate_limit_passed"
+        },
+        {
+          "stage": "authentication_and_membership_passed"
+        },
+        {
+          "stage": "payload_validated"
+        },
+        {
+          "stage": "host_presence_passed"
+        },
+        {
+          "stage": "service_started"
+        },
+        {
+          "stage": "service_returned"
+        },
+        {
+          "stage": "handler_completed"
+        },
+        {
+          "stage": "ack_ready",
+          "status": 200
+        },
+        {
+          "stage": "ack_callback_invoked",
+          "status": 200
+        }
+      ],
+      "processHealth": {
+        "processId": 31088,
+        "alive": true,
+        "healthStatus": 200,
+        "healthOk": true
+      }
+    },
+    "soundclash_vote_wave": {
+      "battleId": "d7b0eac7-f3c0-42a0-8671-57024eea4c99",
+      "requestedVotes": 20,
+      "successfulVotes": 20,
+      "failedVotes": 0,
+      "timeouts": 0,
+      "persistedVoteEvents": 20,
+      "distinctPersistedVoters": 20,
+      "voteAckLatencyMs": {
+        "samples": 20,
+        "p50Ms": 364.584,
+        "p95Ms": 641.934,
+        "p99Ms": 679.853,
+        "maxMs": 679.853
+      },
+      "voteWaveMs": 29955.015,
+      "tieBroadcastReceived": true
+    },
+    "soundclash_resolution": {
+      "battleId": "d7b0eac7-f3c0-42a0-8671-57024eea4c99",
+      "winningTrackId": "t_cc0_thoughtness",
+      "ackMs": 68.468,
+      "peerBroadcastMs": 120.598,
+      "persistedResolutionEvents": 1,
+      "persistedStatus": "resolved"
+    },
+    "gateway_restart_recovery": {
+      "passed": true,
+      "connectedClientsRecovered": 25,
+      "restoredRevision": 494,
+      "queueItems": 412,
+      "restartAndResyncMs": 8787.393
+    }
+  },
+  "snapshotReason": "final_reconciliation-started",
+  "snapshotAt": "2026-11-01T03:58:36.735Z"
+}

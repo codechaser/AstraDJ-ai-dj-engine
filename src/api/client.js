@@ -91,6 +91,14 @@ export async function searchTracks(query, signal) {
   return apiRequest(`/tracks?${params}`, { token: null, signal });
 }
 
+export async function getPodcastCatalog(signal) {
+  return apiRequest('/podcasts', { token: null, signal });
+}
+
+export async function getPopularAlbums(signal) {
+  return apiRequest('/charts/albums', { token: null, signal });
+}
+
 export async function getTrack(trackId) {
   return apiRequest(`/tracks/${encodeURIComponent(trackId)}/acoustic-profile`, { token: null });
 }
@@ -127,6 +135,28 @@ export async function getLoungeAnalytics(loungeId) {
 
 export async function getLoungeHistory(limit = 50) {
   return apiRequest(`/dashboard/lounge-history?limit=${limit}`);
+}
+
+export async function getBillingPlans() { return apiRequest('/billing/plans'); }
+export async function getMySubscription() { return apiRequest('/billing/me'); }
+export async function getPaymentHistory(limit = 20) { return apiRequest(`/billing/me/payments?limit=${limit}`); }
+export async function createBillingSubscription(planId, idempotencyKey) {
+  return apiRequest('/billing/subscriptions', { method: 'POST', headers: { 'Idempotency-Key': idempotencyKey }, body: JSON.stringify({ planId }) });
+}
+export async function verifyBillingCheckout(payload) {
+  return apiRequest('/billing/verify', { method: 'POST', body: JSON.stringify(payload) });
+}
+export async function cancelBillingSubscription(subscriptionId) {
+  return apiRequest(`/billing/subscriptions/${encodeURIComponent(subscriptionId)}/cancel`, { method: 'POST' });
+}
+export async function getBillingAdminOverview() { return apiRequest('/admin/billing/overview'); }
+export async function getBillingAdminPlans() { return apiRequest('/admin/billing/plans'); }
+export async function getBillingAdminSubscriptions(query = '', limit = 50) {
+  return apiRequest(`/admin/billing/subscriptions?q=${encodeURIComponent(query)}&limit=${limit}`);
+}
+export async function getBillingAdminPayments(limit = 50) { return apiRequest(`/admin/billing/payments?limit=${limit}`); }
+export async function updateBillingPlan(planId, updates) {
+  return apiRequest(`/admin/billing/plans/${encodeURIComponent(planId)}`, { method: 'PATCH', body: JSON.stringify({ updates }) });
 }
 
 export async function createLounge(input) {

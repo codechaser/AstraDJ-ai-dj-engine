@@ -1,0 +1,26 @@
+{
+  "runId": "runtime-mvxau1gp-fbd72678",
+  "name": "soundclash_vote_wave",
+  "status": "completed",
+  "startedAt": "2026-11-01T03:57:57.630Z",
+  "endedAt": "2026-11-01T03:58:27.665Z",
+  "durationMs": 30034.183,
+  "result": {
+    "battleId": "d7b0eac7-f3c0-42a0-8671-57024eea4c99",
+    "requestedVotes": 20,
+    "successfulVotes": 20,
+    "failedVotes": 0,
+    "timeouts": 0,
+    "persistedVoteEvents": 20,
+    "distinctPersistedVoters": 20,
+    "voteAckLatencyMs": {
+      "samples": 20,
+      "p50Ms": 364.584,
+      "p95Ms": 641.934,
+      "p99Ms": 679.853,
+      "maxMs": 679.853
+    },
+    "voteWaveMs": 29955.015,
+    "tieBroadcastReceived": true
+  }
+}

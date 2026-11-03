@@ -1,24 +1,41 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Grip, Power, ThumbsDown, ThumbsUp, X } from 'lucide-react';
 import { createLounge, getAccessToken, getActiveLounge, getSocketOrigin, getTrack, saveActiveLounge, searchTracks } from '../api/client.js';
 import { connectToLounge } from '../api/loungeConnection.js';
 import { outroPlaybackState } from '../api/outroPlayback.js';
+import { canApplyQueueRevision } from '../api/queueRevision.js';
 import LoungeCollaborationPanel from './LoungeCollaborationPanel.jsx';
+import { TrackArtwork } from './CatalogArtwork.jsx';
 
 function formatTrack(track) {
-  return { ...track, img: 'photo-1514525253161-7a46d19cd819', time: `${Math.floor((track.durationSeconds ?? 0) / 60)}:${String(Math.floor((track.durationSeconds ?? 0) % 60)).padStart(2, '0')}` };
+  return { ...track, time: `${Math.floor((track.durationSeconds ?? 0) / 60)}:${String(Math.floor((track.durationSeconds ?? 0) % 60)).padStart(2, '0')}` };
+}
+
+async function hashRenderedQueue(revision, trackIds) {
+  const canonical = JSON.stringify({
+    revision,
+    queue: trackIds.map((trackId, position) => ({ trackId, position })),
+  });
+  const digest = await window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 export default function LiveQueuePage({ track, currentTime = 0, duration = 0, playing = false, onCurrentTrack, onTransitionTrack = onCurrentTrack, user, aiDjCommentary = false }) {
   const socketRef = useRef(null);
   const loungeIdRef = useRef(null);
+  const highestQueueRevisionRef = useRef(null);
   const segueAttemptRef = useRef(null);
   const segueRequestRef = useRef(null);
   const segueRequestIdRef = useRef(0);
   const pendingSegueRef = useRef(null);
   const playbackContextRef = useRef(null);
+  const queuePageRef = useRef(null);
+  const reportedQueueTraceRef = useRef(new Set());
+  const scheduledQueueTraceRef = useRef(new Set());
+  const expectedQueueHashesRef = useRef(new Map());
   const [inviteCode, setInviteCode] = useState('');
   const [queueState, setQueueState] = useState(null);
+  const [queueRenderTraces, setQueueRenderTraces] = useState([]);
   const [activeLoungeId, setActiveLoungeId] = useState(null);
   const [catalog, setCatalog] = useState([]);
   const [catalogStatus, setCatalogStatus] = useState('loading');
@@ -47,6 +64,7 @@ export default function LiveQueuePage({ track, currentTime = 0, duration = 0, pl
     if (!user) {
       socketRef.current?.disconnect(); socketRef.current = null;
       loungeIdRef.current = null; setActiveLoungeId(null); setQueueState(null); setStatus('disconnected');
+      highestQueueRevisionRef.current = null;
     }
     return () => { socketRef.current?.disconnect(); socketRef.current = null; };
   }, [user?.id]);
@@ -54,14 +72,64 @@ export default function LiveQueuePage({ track, currentTime = 0, duration = 0, pl
   async function hydrateUpdate(event) {
     if (!event || event.loungeId !== loungeIdRef.current) return;
     const rows = event.payload?.queue ?? [];
+    const eventRevision = event.payload?.revision;
+    const isStaleRevision = !canApplyQueueRevision(highestQueueRevisionRef.current, eventRevision);
+    if (!isStaleRevision && Number.isSafeInteger(eventRevision)) {
+      highestQueueRevisionRef.current = Math.max(highestQueueRevisionRef.current ?? -1, eventRevision);
+    }
+    const traceId = event.payload?.acceptanceTrace?.traceId;
+    const clientReceivedAtMonoMs = traceId ? performance.now() : null;
+    if (traceId) {
+      const acceptanceTrace = event.payload.acceptanceTrace;
+      expectedQueueHashesRef.current.set(event.payload.revision, {
+        stateHash: event.payload.stateHash,
+        trackIds: rows.map(({ trackId }) => trackId),
+      });
+      while (expectedQueueHashesRef.current.size > 512) {
+        expectedQueueHashesRef.current.delete(expectedQueueHashesRef.current.keys().next().value);
+      }
+      window.__ASTRA_QUEUE_EVENT_RECEIVED__?.({
+        traceId,
+        eventId: acceptanceTrace.eventId,
+        committedRevision: acceptanceTrace.committedRevision,
+        committedStateHash: acceptanceTrace.committedStateHash,
+        broadcastRevision: event.payload.revision,
+        broadcastStateHash: event.payload.stateHash,
+        clientReceivedAtMonoMs,
+        expectedTrackIds: rows.map(({ trackId }) => trackId),
+      });
+      socketRef.current?.socket?.emit('lounge.queue.acceptance.received', {
+        traceId,
+        eventId: acceptanceTrace.eventId,
+        committedRevision: acceptanceTrace.committedRevision,
+      }, (receiptAck) => {
+        window.__ASTRA_QUEUE_RECEIPT_ACK__?.({ traceId, receiptAck });
+      });
+    }
+    if (isStaleRevision) return;
     const byId = new Map([...catalog, ...(queueState?.nowPlaying ? [queueState.nowPlaying] : []), ...(queueState?.nextUp ?? [])].map((item) => [item.trackId, item]));
     const hydrated = await Promise.all(rows.map(async ({ trackId }) => {
       if (byId.has(trackId)) return byId.get(trackId);
       try { return await getTrack(trackId); } catch { return { trackId }; }
     }));
     if (event.loungeId !== loungeIdRef.current) return;
+    if (Number.isSafeInteger(eventRevision) && highestQueueRevisionRef.current > eventRevision) return;
+    if (traceId) {
+      setQueueRenderTraces((current) => [...current, {
+        traceId,
+        eventId: event.payload.acceptanceTrace.eventId,
+        committedRevision: event.payload.acceptanceTrace.committedRevision,
+        committedStateHash: event.payload.acceptanceTrace.committedStateHash,
+        mutationTrackId: event.payload.acceptanceTrace.mutationTrackId,
+        broadcastRevision: event.payload.revision,
+        broadcastStateHash: event.payload.stateHash,
+        expectedTrackIds: rows.map(({ trackId }) => trackId),
+        clientReceivedAtMonoMs,
+      }].slice(-256));
+    }
     setQueueState((current) => {
-      const next = { ...(current ?? {}), nowPlaying: hydrated[0] ?? null, nextUp: hydrated.slice(1) };
+      if (!canApplyQueueRevision(current?.revision, eventRevision)) return current;
+      const next = { ...(current ?? {}), revision: eventRevision ?? current?.revision ?? 0, nowPlaying: hydrated[0] ?? null, nextUp: hydrated.slice(1) };
       const saved = getActiveLounge();
       if (saved?.loungeId === event.loungeId) saveActiveLounge({ ...saved, snapshot: next });
       return next;
@@ -72,19 +140,97 @@ export default function LiveQueuePage({ track, currentTime = 0, duration = 0, pl
     }
   }
 
+  useLayoutEffect(() => {
+    const pendingTraces = queueRenderTraces.filter((trace) => (
+      !reportedQueueTraceRef.current.has(trace.traceId)
+      && !scheduledQueueTraceRef.current.has(trace.traceId)
+    ));
+    if (!pendingTraces.length) return undefined;
+    const frameIds = [];
+    for (const trace of pendingTraces) {
+      scheduledQueueTraceRef.current.add(trace.traceId);
+      const clientStateAppliedAtMonoMs = performance.now();
+      window.__ASTRA_QUEUE_STATE_APPLIED__?.({ traceId: trace.traceId, clientStateAppliedAtMonoMs });
+      frameIds.push(requestAnimationFrame(() => {
+        frameIds.push(requestAnimationFrame(async () => {
+          const page = queuePageRef.current;
+          if (!page) return;
+          const renderedTrackIds = [
+            page.querySelector('.queue-current')?.getAttribute('data-track-id') || null,
+            ...[...page.querySelectorAll('.queue-item')].map((item) => item.getAttribute('data-track-id')),
+          ].filter(Boolean);
+          const renderedRevision = Number(page.getAttribute('data-queue-revision')) || 0;
+          const browserRenderedAtMonoMs = performance.now();
+          const renderedStateHash = await hashRenderedQueue(renderedRevision, renderedTrackIds);
+          const domMatches = renderedRevision === trace.broadcastRevision
+            && renderedStateHash === trace.broadcastStateHash
+            && renderedTrackIds.includes(trace.mutationTrackId)
+            && trace.expectedTrackIds.length === renderedTrackIds.length
+            && trace.expectedTrackIds.every((trackId, index) => trackId === renderedTrackIds[index]);
+          page.setAttribute('data-queue-render-trace-id', trace.traceId);
+          const renderAck = await new Promise((resolve) => {
+            const socket = socketRef.current?.socket;
+            if (!socket?.connected) {
+              resolve({ ok: false, error: 'SOCKET_DISCONNECTED' });
+              return;
+            }
+            const timeout = setTimeout(() => resolve({ ok: false, error: 'RENDER_ACK_TIMEOUT' }), 10_000);
+            socket.emit('lounge.queue.acceptance.rendered', {
+              traceId: trace.traceId,
+              eventId: trace.eventId,
+              committedRevision: trace.committedRevision,
+              renderedRevision,
+              renderedStateHash,
+              renderedTrackIds,
+            }, (response) => {
+              clearTimeout(timeout);
+              resolve(response);
+            });
+          });
+          reportedQueueTraceRef.current.add(trace.traceId);
+          scheduledQueueTraceRef.current.delete(trace.traceId);
+          window.__ASTRA_QUEUE_RENDER__?.({
+            traceId: trace.traceId,
+            eventId: trace.eventId,
+            committedRevision: trace.committedRevision,
+            committedStateHash: trace.committedStateHash,
+            broadcastRevision: trace.broadcastRevision,
+            broadcastStateHash: trace.broadcastStateHash,
+            clientReceivedAtMonoMs: trace.clientReceivedAtMonoMs,
+            clientStateAppliedAtMonoMs,
+            browserRenderedAtMonoMs,
+            renderedRevision,
+            renderedStateHash,
+            renderedTrackIds,
+            domMatches,
+            renderAck,
+            visibilityState: document.visibilityState,
+            mainThreadMemory: performance.memory ? {
+              usedJSHeapSize: performance.memory.usedJSHeapSize,
+              totalJSHeapSize: performance.memory.totalJSHeapSize,
+            } : null,
+          });
+        }));
+      }));
+    }
+    return () => frameIds.forEach((frameId) => cancelAnimationFrame(frameId));
+  }, [queueState, queueRenderTraces]);
+
   function joinWithInviteCode(code, initialMessage = '') {
     setMessage(initialMessage);
     if (!user || !getAccessToken()) { setMessage('Sign in before joining a Lounge.'); return; }
     const normalizedCode = code.trim().toUpperCase();
     if (!normalizedCode) { setMessage('Enter a Lounge invite code.'); return; }
     socketRef.current?.disconnect();
-    loungeIdRef.current = null; setActiveLoungeId(null); saveActiveLounge(null); setQueueState(null); setStatus('connecting');
+    loungeIdRef.current = null; highestQueueRevisionRef.current = null; setActiveLoungeId(null); saveActiveLounge(null); setQueueState(null); setStatus('connecting');
     socketRef.current = connectToLounge({
       inviteCode: normalizedCode, token: getAccessToken(), origin: getSocketOrigin(),
       onState: (state) => {
+        if (!canApplyQueueRevision(highestQueueRevisionRef.current, state?.revision)) return;
         loungeIdRef.current = state?.loungeId ?? null;
+        if (Number.isSafeInteger(state?.revision)) highestQueueRevisionRef.current = Math.max(highestQueueRevisionRef.current ?? -1, state.revision);
         setActiveLoungeId(loungeIdRef.current);
-        setQueueState(state);
+        setQueueState((current) => canApplyQueueRevision(current?.revision, state?.revision) ? state : current);
         if (state?.loungeId) saveActiveLounge({ userId: user.id, loungeId: state.loungeId, inviteCode: normalizedCode, snapshot: state });
         if (state?.nowPlaying?.trackId) onCurrentTrack(formatTrack(state.nowPlaying));
       },
@@ -225,14 +371,25 @@ export default function LiveQueuePage({ track, currentTime = 0, duration = 0, pl
   function command(event, payload) {
     const socket = socketRef.current?.socket;
     if (!socket?.connected) { setMessage('Connect to a Lounge before changing its queue.'); return; }
-    socket.emit(event, payload, (ack) => {
+    const acceptanceTraceId = import.meta.env.DEV && event === 'lounge.queue.add'
+      ? window.__ASTRA_QUEUE_ACCEPTANCE_TRACE_ID__
+      : null;
+    const commandPayload = acceptanceTraceId
+      ? { ...payload, acceptanceTraceId }
+      : payload;
+    socket.emit(event, commandPayload, (ack) => {
+      if (acceptanceTraceId) window.__ASTRA_QUEUE_COMMAND_ACK__?.({ traceId: acceptanceTraceId, ack });
       if (!ack?.ok) { setMessage(ack?.error?.message ?? 'The Lounge rejected that action.'); return; }
-      if (ack.state) setQueueState((current) => {
-        const next = { ...(current ?? {}), ...ack.state, soundclash: ack.state.soundclash ?? current?.soundclash };
-        const saved = getActiveLounge();
-        if (saved?.loungeId === loungeIdRef.current) saveActiveLounge({ ...saved, snapshot: next });
-        return next;
-      });
+      if (ack.state && canApplyQueueRevision(highestQueueRevisionRef.current, ack.state.revision)) {
+        if (Number.isSafeInteger(ack.state.revision)) highestQueueRevisionRef.current = Math.max(highestQueueRevisionRef.current ?? -1, ack.state.revision);
+        setQueueState((current) => {
+          if (!canApplyQueueRevision(current?.revision, ack.state.revision)) return current;
+          const next = { ...(current ?? {}), ...ack.state, soundclash: ack.state.soundclash ?? current?.soundclash };
+          const saved = getActiveLounge();
+          if (saved?.loungeId === loungeIdRef.current) saveActiveLounge({ ...saved, snapshot: next });
+          return next;
+        });
+      }
       setMessage('');
     });
   }
@@ -252,7 +409,7 @@ export default function LiveQueuePage({ track, currentTime = 0, duration = 0, pl
   }
 
   const nowPlaying = queueState?.nowPlaying ?? track;
-  return <div className="page queue-page">
+  return <div className="page queue-page" ref={queuePageRef} data-queue-revision={queueState?.revision ?? 0}>
     <div className="page-heading"><div><span className="eyebrow">YOUR LISTENING FLOW</span><h1>Queue</h1></div><span className="muted">{status === 'connected' ? 'Live' : status === 'ended' ? 'Ended' : 'Not connected'}</span></div>
     {!user ? <div className="panel integration-status">Sign in from your Profile to join a shared Lounge queue.</div> : <>
       {user.role === 'Host' && <form className="lounge-create panel" onSubmit={createHostLounge}>
@@ -279,11 +436,11 @@ export default function LiveQueuePage({ track, currentTime = 0, duration = 0, pl
     </>}
     {message && <p className="integration-error" role="status">{message}</p>}
     <SectionTitle>Now Playing</SectionTitle>
-    <div className="queue-current"><div className="catalog-cover"/><div><b>{nowPlaying?.title ?? 'No current track'}</b><small>{nowPlaying?.artist ?? (status === 'connected' ? 'The Lounge queue is empty.' : 'Join a Lounge to load its current track.')}</small></div><span className="playing-bars"><i/><i/><i/></span></div>
+    <div className="queue-current" data-track-id={nowPlaying?.trackId ?? ''}><TrackArtwork track={nowPlaying}/><div><b>{nowPlaying?.title ?? 'No current track'}</b><small>{nowPlaying?.artist ?? (status === 'connected' ? 'The Lounge queue is empty.' : 'Join a Lounge to load its current track.')}</small></div><span className="playing-bars"><i/><i/><i/></span></div>
     {status === 'connected' && <div className="lounge-add"><select aria-label="Choose a catalog track to add" value={selectedTrackId} onChange={(event) => setSelectedTrackId(event.target.value)} disabled={catalogStatus !== 'ready'}><option value="">{catalogStatus === 'loading' ? 'Loading catalog…' : catalogStatus === 'error' ? 'Catalog unavailable' : 'Choose a catalog track…'}</option>{catalog.map((item) => <option key={item.trackId} value={item.trackId}>{item.title} · {item.artist}</option>)}</select><button className="btn-outline" disabled={!selectedTrackId} onClick={() => command('lounge.queue.add', { trackId: selectedTrackId })}>Add to queue</button></div>}
     {status === 'connected' && catalogStatus === 'error' && <p className="integration-error" role="alert">{catalogError}</p>}
     <SectionTitle>Up Next <span className="muted">{queueState?.nextUp?.length ?? 0} tracks</span></SectionTitle>
-    {status === 'connected' && queueState?.nextUp?.length ? <div className="queue-list">{queueState.nextUp.map((item, index) => <div className="queue-item" key={item.trackId}><span className="rank">{index + 1}</span><div className="catalog-cover"/><div><b>{item.title ?? item.trackId}</b><small>{item.artist ?? 'Catalog details unavailable'} · {item.votes ?? 0} votes</small></div><button aria-label={`Vote for ${item.title ?? item.trackId}`} onClick={() => command('lounge.queue.vote', { trackId: item.trackId, value: 1 })}><ThumbsUp size={14}/></button><button aria-label={`Downvote ${item.title ?? item.trackId}`} onClick={() => command('lounge.queue.vote', { trackId: item.trackId, value: -1 })}><ThumbsDown size={14}/></button><Grip size={17} className="grip"/></div>)}</div> : <div className="panel integration-status">{status === 'connected' ? 'Nothing is up next yet.' : 'Join a Lounge to see its shared queue.'}</div>}
+    {status === 'connected' && queueState?.nextUp?.length ? <div className="queue-list">{queueState.nextUp.map((item, index) => <div className="queue-item" key={item.trackId} data-track-id={item.trackId}><span className="rank">{index + 1}</span><TrackArtwork track={item}/><div><b>{item.title ?? item.trackId}</b><small>{item.artist ?? 'Catalog details unavailable'} · {item.votes ?? 0} votes</small></div><button aria-label={`Vote for ${item.title ?? item.trackId}`} onClick={() => command('lounge.queue.vote', { trackId: item.trackId, value: 1 })}><ThumbsUp size={14}/></button><button aria-label={`Downvote ${item.title ?? item.trackId}`} onClick={() => command('lounge.queue.vote', { trackId: item.trackId, value: -1 })}><ThumbsDown size={14}/></button><Grip size={17} className="grip"/></div>)}</div> : <div className="panel integration-status">{status === 'connected' ? 'Nothing is up next yet.' : 'Join a Lounge to see its shared queue.'}</div>}
     {status === 'connected' && queueState?.isHost && <button className="btn-outline lounge-end" onClick={endSession}><Power size={14}/> End Lounge</button>}
     {status === 'connected' && <button className="btn-outline sync-button" onClick={() => command('lounge.sync.request', {})}>Refresh shared state</button>}
     {activeLoungeId && status === 'connected' && <LoungeCollaborationPanel socket={socketRef.current?.socket} loungeId={activeLoungeId} status={status} user={user} catalog={catalog} initialBattle={queueState?.soundclash} aiDjCommentary={aiDjCommentary}/>}

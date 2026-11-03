@@ -1,22 +1,33 @@
+import { performance } from 'node:perf_hooks';
 import { ApiError } from '../utils/ApiError.js';
 import { matchSegueCandidate } from './acousticMatcher.js';
 import { applyCoordinationEvent, deserializeCoordinationState, serializeCoordinationState } from './coordinationState.js';
+import { acceptanceTracingEnabled, queueStateHash, queueTrackIds, recordAcceptanceDuration } from './queueAcceptanceTrace.js';
+
+async function getTracks(repository, trackIds) {
+  if (typeof repository.getTracks === 'function') return repository.getTracks(trackIds);
+  return Promise.all(trackIds.map((trackId) => repository.getTrack(trackId)));
+}
 
 function createCoordinatedQueueService(repository) {
   const MAX_RETRIES = 12;
 
-  async function getState(loungeId) {
+  async function getState(loungeId, acceptanceTrace = null) {
+    const started = acceptanceTrace ? performance.now() : 0;
     const loaded = await repository.getCoordination(loungeId);
+    if (acceptanceTrace) recordAcceptanceDuration(acceptanceTrace, 'coordinationReadMs', performance.now() - started);
     if (!loaded) throw new ApiError(404, 'LOUNGE_NOT_FOUND', 'The Lounge no longer exists');
     return { lounge: loaded.lounge, coordination: loaded.coordination, state: deserializeCoordinationState(loaded.coordination.state) };
   }
 
-  async function publicState(lounge, state, presence = []) {
+  async function publicState(lounge, state, presence = [], acceptanceTrace = null) {
     const ordered = state.items.map((item, index) => ({ trackId: item.trackId, votes: Object.values(item.votes).reduce((sum, value) => sum + value, 0), _index: index }))
       .filter((item) => item.trackId !== state.currentTrackId)
       .sort((a, b) => (a.trackId === state.battlePriorityTrackId ? -1 : b.trackId === state.battlePriorityTrackId ? 1 : b.votes - a.votes || a._index - b._index));
     const ids = [state.currentTrackId, ...ordered.map(({ trackId }) => trackId)].filter(Boolean);
-    const tracks = await Promise.all(ids.map((id) => repository.getTrack(id)));
+    const lookupStarted = acceptanceTrace ? performance.now() : 0;
+    const tracks = await getTracks(repository, ids);
+    if (acceptanceTrace) recordAcceptanceDuration(acceptanceTrace, 'trackHydrationMs', performance.now() - lookupStarted);
     const byId = new Map(tracks.filter(Boolean).map((track) => [track.trackId, track]));
     return {
       loungeId: lounge.loungeId,
@@ -29,11 +40,24 @@ function createCoordinatedQueueService(repository) {
     };
   }
 
-  async function mutate(loungeId, build) {
+  async function mutate(loungeId, build, { requireHostPresenceUserId = null, allowEnded = false, acceptanceTrace = null } = {}) {
     for (let attempt = 0; attempt < MAX_RETRIES; attempt += 1) {
-      const loaded = await getState(loungeId);
+      if (acceptanceTrace) acceptanceTrace.casAttempts = (acceptanceTrace.casAttempts ?? 0) + 1;
+      const loaded = await getState(loungeId, acceptanceTrace);
+      const buildStarted = acceptanceTrace ? performance.now() : 0;
       const result = await build(loaded);
-      if (result.noChange) return { ...result, state: await publicState(loaded.lounge, loaded.state) };
+      if (acceptanceTrace) recordAcceptanceDuration(acceptanceTrace, 'eventValidationBuildMs', performance.now() - buildStarted);
+      if (result.noChange) {
+        if (requireHostPresenceUserId && typeof repository.hasActiveGatewayPresence === 'function') {
+          try {
+            if (!await repository.hasActiveGatewayPresence(loungeId, requireHostPresenceUserId)) throw new ApiError(409, 'HOST_DISCONNECTED', 'The Lounge Host is not currently connected');
+          } catch (error) {
+            if (error.code === 'HOST_DISCONNECTED') throw error;
+            throw new ApiError(503, 'PRESENCE_UNAVAILABLE', 'Host presence could not be verified; retry the command');
+          }
+        }
+        return { ...result, state: await publicState(loaded.lounge, loaded.state, [], acceptanceTrace) };
+      }
       const nextState = structuredClone(loaded.state);
       const drafts = result.events;
       const committedEvents = drafts.map((draft, index) => ({
@@ -45,24 +69,71 @@ function createCoordinatedQueueService(repository) {
         createdAt: draft.createdAt ?? new Date(),
       }));
       for (const event of committedEvents) applyCoordinationEvent(nextState, event);
-      const commit = await repository.commitCoordination({ loungeId, expectedRevision: loaded.state.revision, state: nextState, events: committedEvents });
+      if (acceptanceTrace && acceptanceTracingEnabled()) {
+        const traceEvent = committedEvents.find((event) => event.payload?.acceptanceTrace?.traceId === acceptanceTrace.traceId);
+        if (traceEvent) {
+          const trackIds = queueTrackIds(nextState);
+          Object.assign(acceptanceTrace, {
+            eventId: traceEvent.eventId ?? `${loungeId}:${traceEvent.seq}`,
+            committedRevision: nextState.revision,
+            committedStateHash: queueStateHash(nextState.revision, trackIds),
+            mutationTrackId: traceEvent.payload.trackId,
+          });
+          traceEvent.payload.acceptanceTrace = acceptanceTrace;
+        }
+      }
+      let commit;
+      const commitStarted = acceptanceTrace ? performance.now() : 0;
+      try {
+        commit = await repository.commitCoordination({
+          loungeId,
+          expectedRevision: loaded.state.revision,
+          state: nextState,
+          events: committedEvents,
+          requiredHostPresenceUserId: requireHostPresenceUserId,
+          allowEnded,
+          acceptanceTrace,
+        });
+      } catch (error) {
+        if (acceptanceTrace) recordAcceptanceDuration(acceptanceTrace, 'coordinationCommitAndOutboxMs', performance.now() - commitStarted);
+        if (requireHostPresenceUserId) {
+          const unavailable = new ApiError(503, 'PRESENCE_UNAVAILABLE', 'Host presence could not be verified; retry the command');
+          unavailable.cause = error;
+          throw unavailable;
+        }
+        throw error;
+      }
+      if (acceptanceTrace) recordAcceptanceDuration(acceptanceTrace, 'coordinationCommitAndOutboxMs', performance.now() - commitStarted);
       if (!commit.committed) {
         if (commit.reason === 'missing') throw new ApiError(404, 'LOUNGE_NOT_FOUND', 'The Lounge no longer exists');
+        if (commit.reason === 'host_offline') throw new ApiError(409, 'HOST_DISCONNECTED', 'The Lounge Host is not currently connected');
         if (commit.reason === 'outbox_full') throw new ApiError(503, 'LOUNGE_EVENT_BACKPRESSURE', 'Lounge updates are temporarily delayed; retry shortly');
         if (commit.reason === 'state_too_large') throw new ApiError(413, 'LOUNGE_STATE_LIMIT_REACHED', 'The Lounge state reached its safe storage limit');
+        if (acceptanceTrace) acceptanceTrace.casConflicts = (acceptanceTrace.casConflicts ?? 0) + 1;
         continue;
       }
-      return { ...result, state: await publicState({ ...loaded.lounge, currentTrackId: nextState.currentTrackId }, nextState), events: commit.events };
+      const hydrationStarted = acceptanceTrace ? performance.now() : 0;
+      const state = await publicState({ ...loaded.lounge, currentTrackId: nextState.currentTrackId }, nextState);
+      if (acceptanceTrace) {
+        recordAcceptanceDuration(acceptanceTrace, 'responseTrackHydrationMs', performance.now() - hydrationStarted);
+        acceptanceTrace.returnedRevision = state.revision;
+      }
+      return { ...result, state, events: commit.events };
     }
     throw new ApiError(409, 'LOUNGE_STATE_CONFLICT', 'The Lounge changed concurrently; retry the command');
   }
 
   return {
-    async join({ inviteCode, userId }) {
+    async join({ inviteCode, userId, leaseId, now, expiresAt }) {
       const lounge = await repository.findLoungeByInvite(inviteCode);
       if (!lounge) throw new ApiError(404, 'LOUNGE_NOT_FOUND', 'The Lounge invite code is invalid or expired');
-      const joined = await repository.joinLounge(lounge, userId);
-      if (!joined) throw new ApiError(409, 'LOUNGE_FULL', 'The Lounge has reached its participant limit');
+      const joined = await repository.joinLounge(lounge, userId, { leaseId, now, expiresAt });
+      if (!joined) {
+        const current = await repository.findLoungeById(lounge.loungeId);
+        if (!current) throw new ApiError(404, 'LOUNGE_NOT_FOUND', 'The Lounge invite code is invalid or expired');
+        if (current.status === 'ended') throw new ApiError(409, 'LOUNGE_ENDED', 'This Lounge session has ended');
+        throw new ApiError(409, 'LOUNGE_FULL', 'The Lounge has reached its participant limit');
+      }
       const loaded = await getState(joined.loungeId);
       return { lounge: joined, state: await publicState(joined, loaded.state) };
     },
@@ -71,24 +142,37 @@ function createCoordinatedQueueService(repository) {
       return publicState(loaded.lounge, loaded.state);
     },
     async listEvents(loungeId) { return repository.listQueueEvents(loungeId); },
-    async addTrack({ lounge, actor, trackId }) {
+    async listEventsAfter(loungeId, afterSeq) {
+      if (typeof repository.listQueueEventsAfter === 'function') return repository.listQueueEventsAfter(loungeId, afterSeq);
+      return (await repository.listQueueEvents(loungeId)).filter((event) => event.seq > afterSeq);
+    },
+    async addTrack({ lounge, actor, trackId, requireHostPresenceUserId = null, acceptanceTrace = null }) {
       if (!['Host', 'Co-DJ'].includes(actor.role)) throw new ApiError(403, 'FORBIDDEN', 'Only a Host or Co-DJ can add tracks to the shared queue');
+      const lookupStarted = acceptanceTrace ? performance.now() : 0;
       if (!await repository.getTrack(trackId)) throw new ApiError(404, 'TRACK_NOT_FOUND', 'The track does not exist');
+      if (acceptanceTrace) recordAcceptanceDuration(acceptanceTrace, 'mutationTrackLookupMs', performance.now() - lookupStarted);
       return (await mutate(lounge.loungeId, ({ state }) => {
         if (state.items.some((item) => item.trackId === trackId)) throw new ApiError(409, 'TRACK_ALREADY_QUEUED', 'The track is already in this queue');
-        return { events: [{ type: 'track.added', actorUserId: actor.id, payload: { trackId } }] };
-      })).state;
+        const trace = acceptanceTracingEnabled()
+          && acceptanceTrace
+          && typeof acceptanceTrace.traceId === 'string'
+          && /^[0-9a-f-]{36}$/i.test(acceptanceTrace.traceId)
+          && Number.isFinite(acceptanceTrace.serverReceivedAtUnixMs)
+          ? { acceptanceTrace }
+          : {};
+        return { events: [{ type: 'track.added', actorUserId: actor.id, payload: { trackId, ...trace } }] };
+      }, { requireHostPresenceUserId, acceptanceTrace })).state;
     },
-    async vote({ lounge, actor, trackId, value }) {
+    async vote({ lounge, actor, trackId, value, requireHostPresenceUserId = null }) {
       if (![-1, 0, 1].includes(value)) throw new ApiError(400, 'INVALID_VOTE', 'Vote value must be -1, 0, or 1');
       return (await mutate(lounge.loungeId, ({ state }) => {
         const item = state.items.find((entry) => entry.trackId === trackId);
         if (!item || trackId === state.currentTrackId) throw new ApiError(404, 'TRACK_NOT_QUEUED', 'Only an upcoming track can be voted on');
         if ((item.votes[String(actor.id)] ?? 0) === value) return { noChange: true };
         return { events: [{ type: 'track.voted', actorUserId: actor.id, payload: { trackId, value } }] };
-      })).state;
+      }, { requireHostPresenceUserId })).state;
     },
-    async recordLoungeEvent({ lounge, actor, type, payload }) {
+    async recordLoungeEvent({ lounge, actor, type, payload, requireHostPresenceUserId = null }) {
       return mutate(lounge.loungeId, ({ state }) => {
         let eventPayload = payload;
         if (type === 'soundclash.submitted') {
@@ -109,9 +193,9 @@ function createCoordinatedQueueService(repository) {
         }
         if (type === 'soundclash.resolved' && state.soundclash.status === 'resolved' && state.soundclash.battleId === payload.battleId) return { noChange: true };
         return { events: [{ type, actorUserId: actor?.id ?? null, payload: eventPayload }] };
-      });
+      }, { requireHostPresenceUserId, allowEnded: type === 'lounge.session.ended' });
     },
-    async spliceNextUp({ lounge, actor, battleId, winningTrackId, autoResolved = false }) {
+    async spliceNextUp({ lounge, actor, battleId, winningTrackId, autoResolved = false, requireHostPresenceUserId = null }) {
       if (!await repository.getTrack(winningTrackId)) throw new ApiError(404, 'TRACK_NOT_FOUND', 'The Soundclash winner no longer exists');
       const result = await mutate(lounge.loungeId, ({ state }) => {
         if (state.soundclash.battleId !== battleId) throw new ApiError(404, 'SOUNDCLASH_NOT_FOUND', 'Soundclash battle not found');
@@ -121,7 +205,7 @@ function createCoordinatedQueueService(repository) {
         }
         if (!['tied', 'open'].includes(state.soundclash.status)) throw new ApiError(409, 'SOUNDCLASH_NOT_ACTIVE', 'Soundclash is not ready to resolve');
         return { events: [{ type: 'soundclash.resolved', actorUserId: actor?.id ?? null, payload: { battleId, winningTrackId, autoResolved } }] };
-      });
+      }, { requireHostPresenceUserId });
       return result.state;
     },
     async transitionTo({ lounge, actor, trackId, transition = null }) {
@@ -137,7 +221,7 @@ function createCoordinatedQueueService(repository) {
         const match = matchSegueCandidate(currentTrack, nextTrack, { bpmTolerancePct: currentLounge.settings?.bpmTolerancePct ?? 8 });
         if (!match.eligible) throw new ApiError(409, 'SEGUE_NO_LONGER_COMPATIBLE', 'The selected track no longer satisfies acoustic segue rules');
         return { events: [{ type: 'track.transitioned', actorUserId: actor.id, payload: { trackId, fromTrackId: state.currentTrackId, ...(transition ? { transition } : {}) } }] };
-      })).state;
+      }, { requireHostPresenceUserId: lounge.hostUserId })).state;
     },
     async flush() {},
     async flushAll() {},
@@ -207,7 +291,7 @@ export function createQueueService(repository, { voteBatchSize = 20, voteFlushMs
       .filter((item) => item.trackId !== state.currentTrackId)
       .sort((a, b) => (a.trackId === state.battlePriorityTrackId ? -1 : b.trackId === state.battlePriorityTrackId ? 1 : b.votes - a.votes || a._index - b._index));
     const ids = [state.currentTrackId, ...ordered.map((item) => item.trackId)].filter(Boolean);
-    const tracks = await Promise.all(ids.map((id) => repository.getTrack(id)));
+    const tracks = await getTracks(repository, ids);
     const byId = new Map(tracks.filter(Boolean).map((track) => [track.trackId, track]));
     return {
       loungeId: lounge.loungeId,
@@ -278,16 +362,25 @@ export function createQueueService(repository, { voteBatchSize = 20, voteFlushMs
   }
 
   return {
-    async join({ inviteCode, userId }) {
+    async join({ inviteCode, userId, leaseId, now, expiresAt }) {
       const lounge = await repository.findLoungeByInvite(inviteCode);
       if (!lounge) throw new ApiError(404, 'LOUNGE_NOT_FOUND', 'The Lounge invite code is invalid or expired');
-      const joined = await repository.joinLounge(lounge, userId);
-      if (!joined) throw new ApiError(409, 'LOUNGE_FULL', 'The Lounge has reached its participant limit');
+      const joined = await repository.joinLounge(lounge, userId, { leaseId, now, expiresAt });
+      if (!joined) {
+        const current = await repository.findLoungeById(lounge.loungeId);
+        if (!current) throw new ApiError(404, 'LOUNGE_NOT_FOUND', 'The Lounge invite code is invalid or expired');
+        if (current.status === 'ended') throw new ApiError(409, 'LOUNGE_ENDED', 'This Lounge session has ended');
+        throw new ApiError(409, 'LOUNGE_FULL', 'The Lounge has reached its participant limit');
+      }
       const state = await getState(joined);
       return { lounge: joined, state: await publicState(joined, state) };
     },
     async snapshot(lounge) { return publicState(lounge, await getState(lounge)); },
     async listEvents(loungeId) { return repository.listQueueEvents(loungeId); },
+    async listEventsAfter(loungeId, afterSeq) {
+      if (typeof repository.listQueueEventsAfter === 'function') return repository.listQueueEventsAfter(loungeId, afterSeq);
+      return (await repository.listQueueEvents(loungeId)).filter((event) => event.seq > afterSeq);
+    },
     async recordLoungeEvent({ lounge, actor, type, payload, buffered = false }) {
       return serialized(lounge.loungeId, async () => {
         const state = await getState(lounge);

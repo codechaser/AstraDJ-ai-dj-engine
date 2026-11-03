@@ -1,4 +1,6 @@
 import { createMetadataRetrievalService, retrieveTrackMetadata } from '../src/services/metadataRetrievalService.js';
+import { createMemoryRateLimiter } from './support/memoryRateLimiter.js';
+import { reconstructRecentTrackIds } from '../src/services/metadataRetrievalService.js';
 
 const currentTrack = {
   trackId: 't_4101', title: 'Blue Hour', artist: 'Mira Vale',
@@ -10,14 +12,77 @@ const currentTrack = {
 };
 const lounge = { loungeId: 'lg_410000000001', status: 'live', currentTrackId: currentTrack.trackId, participantIds: ['member-1'] };
 const query = (value) => ({ select() { return this; }, lean: async () => value });
-function service({ room = lounge, track = currentTrack, now = () => 1_000_000, questionLimit = 10 } = {}) {
+function service({ room = lounge, track = currentTrack, tracks = [currentTrack], events = [], now = () => 1_000_000, questionLimit = 10 } = {}) {
   return createMetadataRetrievalService({
     loungeModel: { findOne: () => query(room) },
-    trackModel: { findOne: () => ({ select() { return this; }, lean: async () => track }) },
+    trackModel: {
+      findOne: () => ({ select() { return this; }, lean: async () => track }),
+      find: (filter) => ({ select() { return this; }, lean: async () => tracks.filter((item) => filter.trackId.$in.includes(item.trackId)) }),
+    },
+    queueEventModel: { find: (filter) => ({ sort() { return this; }, limit() { return this; }, lean: async () => events.filter((event) => event.loungeId === filter.loungeId && event.type === filter.type) }) },
     now,
+    rateLimiter: createMemoryRateLimiter({ now }),
     questionLimit,
   });
 }
+
+test('reconstructs transition chronology, keeps repeated plays, excludes only current occurrence, and rejects malformed/discontinuous edges', () => {
+  const event = (seq, fromTrackId, trackId, loungeId = lounge.loungeId) => ({ seq, fromTrackId, trackId, loungeId, type: 'track.transitioned', payload: { fromTrackId, trackId } });
+  const events = [event(4, 'B', 'C'), event(1, 'A', 'B'), event(3, 'A', 'B'), event(2, 'B', 'A'), event(2, 'B', 'A'), event(5, '', 'D'), event(6, 'X', 'Y')];
+  expect(reconstructRecentTrackIds('C', events)).toEqual(['B', 'A', 'B', 'A']);
+});
+
+test('answers previous-track questions only from this Lounge persisted transitions and cites catalog metadata', async () => {
+  const previous = { trackId: 't_prev', title: 'Amber Lines', artist: 'Mira Vale', acoustic: { bpm: 124 }, timeline: [{ ts: 8, type: 'trivia', text: 'Produced by Nia Stone.' }] };
+  const current = { ...currentTrack, trackId: 't_current' };
+  const events = [
+    { loungeId: lounge.loungeId, type: 'track.transitioned', seq: 1, payload: { fromTrackId: 't_prev', trackId: 't_current' } },
+    { loungeId: 'lg_otherroom01', type: 'track.transitioned', seq: 2, payload: { fromTrackId: 't_spoof', trackId: 't_current' } },
+  ];
+  const result = await service({ room: { ...lounge, currentTrackId: 't_current' }, track: current, tracks: [previous], events })
+    .answerQuestion({ loungeId: lounge.loungeId, userId: 'member-1', question: 'What song played before this?' });
+  expect(result).toMatchObject({ answer: 'The track before Blue Hour was Amber Lines by Mira Vale.', grounded: true, contextTrackIds: ['t_prev'], sourceEvents: ['t_prev#title', 't_prev#artist'] });
+  expect(reconstructRecentTrackIds('t_current', events)).toEqual(['t_prev']);
+});
+
+test('answers producer questions about the previous track only from its authored timeline entry', async () => {
+  const previous = { trackId: 't_prev', title: 'Amber Lines', artist: 'Mira Vale', acoustic: {}, timeline: [{ ts: 8, type: 'trivia', text: 'Produced by Nia Stone.' }] };
+  const current = { ...currentTrack, trackId: 't_current' };
+  const events = [{ loungeId: lounge.loungeId, type: 'track.transitioned', seq: 1, payload: { fromTrackId: 't_prev', trackId: 't_current' } }];
+  const result = await service({ room: { ...lounge, currentTrackId: 't_current' }, track: current, tracks: [previous], events })
+    .answerQuestion({ loungeId: lounge.loungeId, userId: 'member-1', question: 'Who produced the previous track?' });
+  expect(result).toMatchObject({ grounded: true, answer: 'The available metadata for Amber Lines says: “Produced by Nia Stone.”', sourceEvents: ['t_prev#timeline[0]'] });
+});
+
+test('compares current and previous BPM with references for each factual value; empty history declines safely', async () => {
+  const previous = { trackId: 't_prev', title: 'Amber Lines', artist: 'Mira Vale', acoustic: { bpm: 124 }, timeline: [] };
+  const current = { ...currentTrack, trackId: 't_current' };
+  const events = [{ loungeId: lounge.loungeId, type: 'track.transitioned', seq: 1, payload: { fromTrackId: 't_prev', trackId: 't_current' } }];
+  const result = await service({ room: { ...lounge, currentTrackId: 't_current' }, track: current, tracks: [previous], events })
+    .answerQuestion({ loungeId: lounge.loungeId, userId: 'member-1', question: 'Compare the current track with the previous one.' });
+  expect(result.sourceEvents).toEqual(['t_current#title', 't_current#acoustic.bpm', 't_prev#title', 't_prev#acoustic.bpm']);
+  const empty = await service({ room: { ...lounge, currentTrackId: 't_current' }, track: current, events: [] })
+    .answerQuestion({ loungeId: lounge.loungeId, userId: 'member-1', question: 'What song played before this?' });
+  expect(empty).toMatchObject({ grounded: false, sourceEvents: [], answer: expect.stringContaining('cannot identify') });
+});
+
+test('ranks recent tracks by BPM without returning metadata irrelevant to the question', async () => {
+  const previous = { trackId: 't_prev', title: 'Amber Lines', artist: 'Mira Vale', acoustic: { bpm: 124 }, timeline: [{ ts: 8, type: 'trivia', text: 'Produced by Nia Stone.' }] };
+  const older = { trackId: 't_older', title: 'Slow River', artist: 'Noor', acoustic: { bpm: 90 }, timeline: [{ ts: 4, type: 'sample_credit', text: 'Sample credit: field recording by Jo.' }] };
+  const current = { ...currentTrack, trackId: 't_current' };
+  const events = [
+    { loungeId: lounge.loungeId, type: 'track.transitioned', seq: 1, payload: { fromTrackId: 't_older', trackId: 't_prev' } },
+    { loungeId: lounge.loungeId, type: 'track.transitioned', seq: 2, payload: { fromTrackId: 't_prev', trackId: 't_current' } },
+  ];
+  const retrieval = service({ room: { ...lounge, currentTrackId: 't_current' }, track: current, tracks: [previous, older], events });
+  const bpm = await retrieval.answerQuestion({ loungeId: lounge.loungeId, userId: 'member-1', question: 'Which recent track has the highest BPM?' });
+  expect(bpm).toMatchObject({ answer: expect.stringContaining('Amber Lines'), sourceEvents: ['t_prev#title', 't_prev#acoustic.bpm'], contextTrackIds: ['t_prev'] });
+  const credits = await retrieval.answerQuestion({ loungeId: lounge.loungeId, userId: 'member-1', question: 'Which recently played track has sample credits?' });
+  expect(credits).toMatchObject({ answer: expect.stringContaining('Slow River'), sourceEvents: ['t_older#timeline[0]'], contextTrackIds: ['t_older'] });
+  const empty = await service({ room: { ...lounge, currentTrackId: 't_current' }, track: current, events: [] })
+    .answerQuestion({ loungeId: lounge.loungeId, userId: 'member-1', question: 'Which recent track has the highest BPM?' });
+  expect(empty).toMatchObject({ grounded: false, sourceEvents: [] });
+});
 
 test('lexical retrieval ranks an applicable metadata timeline chunk with its stable catalog reference', () => {
   expect(retrieveTrackMetadata(currentTrack, 'Where does the sample come from?', 3)[0]).toMatchObject({

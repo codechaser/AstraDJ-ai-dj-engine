@@ -1,6 +1,9 @@
 import { DJLounge } from '../models/DJLounge.js';
+import { QueueEvent } from '../models/QueueEvent.js';
 import { Track } from '../models/Track.js';
 import { ApiError } from '../utils/ApiError.js';
+import { assertRateLimit, distributedRateLimiter } from './distributedRateLimiter.js';
+import { rateLimitPolicies } from '../config/rateLimitPolicy.js';
 
 const QUESTION_WINDOW_MS = 60_000;
 const QUESTION_LIMIT = 10;
@@ -55,6 +58,28 @@ export function retrieveTrackMetadata(track, question, limit = 3) {
     .map(({ _score, _matches, _order, ...document }) => document);
 }
 
+export function reconstructRecentTrackIds(currentTrackId, events, limit = 10) {
+  if (typeof currentTrackId !== 'string' || !Array.isArray(events)) return [];
+  const seenSeq = new Set();
+  const ordered = [...events].sort((a, b) => a.seq - b.seq);
+  const playback = [];
+  for (const event of ordered) {
+    const fromTrackId = event?.payload?.fromTrackId;
+    const trackId = event?.payload?.trackId;
+    if (event?.type !== 'track.transitioned' || !Number.isSafeInteger(event.seq) || event.seq < 1
+      || seenSeq.has(event.seq) || typeof fromTrackId !== 'string' || !fromTrackId
+      || typeof trackId !== 'string' || !trackId || fromTrackId === trackId) continue;
+    seenSeq.add(event.seq);
+    if (!playback.length) playback.push(fromTrackId, trackId);
+    else if (playback.at(-1) === fromTrackId) playback.push(trackId);
+    // A discontinuous edge cannot safely establish chronology. Ignore it;
+    // later edges may still extend the last verified point.
+  }
+  if (playback.at(-1) !== currentTrackId) return [];
+  playback.pop(); // exclude the authoritative current occurrence, not prior repeats
+  return playback.reverse().slice(0, limit);
+}
+
 function structuredAnswer(track, question) {
   const q = question.toLowerCase();
   // A field keyword alone does not mean the catalog can answer the attribute
@@ -81,24 +106,79 @@ function structuredAnswer(track, question) {
   return { answer: `The catalog lists the ${candidate.label} as ${candidate.format(value)}.`, sourceEvents: [document.reference] };
 }
 
-export function createMetadataRetrievalService({ loungeModel = DJLounge, trackModel = Track, now = () => Date.now(), questionLimit = QUESTION_LIMIT, windowMs = QUESTION_WINDOW_MS } = {}) {
-  const requestsByMember = new Map();
+export function createMetadataRetrievalService({ loungeModel = DJLounge, trackModel = Track, queueEventModel = QueueEvent, now = () => Date.now(), rateLimiter = distributedRateLimiter, questionLimit = QUESTION_LIMIT, windowMs = QUESTION_WINDOW_MS } = {}) {
   return {
-    async answerQuestion({ loungeId, userId, question }) {
+    async answerQuestion({ loungeId, userId, question, rateLimiter: activeRateLimiter = rateLimiter }) {
       const lounge = await loungeModel.findOne({ loungeId, status: { $ne: 'ended' } }).lean();
       if (!lounge) throw new ApiError(404, 'LOUNGE_NOT_FOUND', 'Lounge not found or ended');
       if (!lounge.participantIds?.some((participantId) => String(participantId) === String(userId))) throw new ApiError(403, 'LOUNGE_MEMBERSHIP_REQUIRED', 'Join this Lounge before asking the AI DJ');
       if (lounge.status !== 'live' || !lounge.currentTrackId) throw new ApiError(409, 'TRACK_NOT_PLAYING', 'The Lounge has no current track to ask about');
 
-      const key = `${loungeId}:${userId}`;
-      const time = now();
-      const recent = (requestsByMember.get(key) ?? []).filter((timestamp) => time - timestamp < windowMs);
-      if (recent.length >= questionLimit) throw new ApiError(429, 'AI_QUESTION_RATE_LIMITED', 'Too many AI DJ questions; wait before asking again');
-      recent.push(time);
-      requestsByMember.set(key, recent);
+      await assertRateLimit(activeRateLimiter, {
+        ...rateLimitPolicies.aiQuestion,
+        limit: questionLimit,
+        windowMs,
+      }, [String(userId), loungeId]);
 
-      const track = await trackModel.findOne({ trackId: lounge.currentTrackId }).select('trackId title artist acoustic timeline').lean();
+      const trackFields = 'trackId title artist acoustic timeline';
+      const track = await trackModel.findOne({ trackId: lounge.currentTrackId }).select(trackFields).lean();
       if (!track) throw new ApiError(404, 'CURRENT_TRACK_NOT_FOUND', 'The current Lounge track does not exist in the catalog');
+      const transitionEvents = await queueEventModel.find({ loungeId, type: 'track.transitioned' }).sort({ seq: -1 }).limit(500).lean();
+      const recentTrackIds = reconstructRecentTrackIds(lounge.currentTrackId, transitionEvents);
+      const recentTracks = recentTrackIds.length
+        ? await trackModel.find({ trackId: { $in: recentTrackIds } }).select(trackFields).lean()
+        : [];
+      const recentById = new Map(recentTracks.map((item) => [item.trackId, item]));
+      const recent = recentTrackIds.map((id) => recentById.get(id)).filter(Boolean);
+      const previous = recent[0] ?? null;
+      const q = question.toLowerCase();
+      const unsupported = (answer, trackIds = []) => ({
+        trackId: track.trackId, answer, sourceEvents: [], grounded: false,
+        provider: 'deterministic_metadata_retrieval', contextTrackIds: trackIds,
+      });
+      if (/\b(before this|previous track|track before|song before|played before)\b/.test(q)) {
+        if (!previous?.title) return unsupported('I cannot identify the previous track from this Lounge’s persisted transitions.');
+        if (/\b(produc|sample|credit|trivia)\w*\b/.test(q)) {
+          const fact = retrieveTrackMetadata(previous, question, 3).find((document) => document.kind === 'timeline');
+          if (!fact) return unsupported(`I do not have supporting ${/\bsample|credit\w*\b/.test(q) ? 'sample-credit' : 'producer'} metadata for the previous track.`, [previous.trackId]);
+          return { trackId: track.trackId, answer: `The available metadata for ${previous.title} says: “${fact.text}”`, sourceEvents: [fact.reference], grounded: true, provider: 'deterministic_metadata_retrieval', contextTrackIds: [previous.trackId] };
+        }
+        const titleRef = `${previous.trackId}#title`;
+        const titleDoc = buildTrackDocuments(previous).find((doc) => doc.reference === titleRef);
+        if (!titleDoc) return unsupported('I do not have supporting metadata for the previous track.');
+        const refs = [titleRef];
+        let answer = `The track before ${track.title} was ${titleDoc.text}`;
+        const artistDoc = buildTrackDocuments(previous).find((doc) => doc.reference === `${previous.trackId}#artist`);
+        if (artistDoc) { answer += ` by ${artistDoc.text}`; refs.push(artistDoc.reference); }
+        answer += '.';
+        return { trackId: track.trackId, answer, sourceEvents: refs, grounded: true, provider: 'deterministic_metadata_retrieval', contextTrackIds: [previous.trackId] };
+      }
+      if (/\b(compare|compared)\b/.test(q) && /\b(previous|last|before)\b/.test(q)) {
+        if (!previous?.acoustic?.bpm || !track.acoustic?.bpm) return unsupported('I do not have BPM metadata for both tracks, so I cannot compare them.', previous ? [previous.trackId] : []);
+        return {
+          trackId: track.trackId,
+          answer: `The current track is ${track.title} at ${track.acoustic.bpm} BPM; the previous track is ${previous.title} at ${previous.acoustic.bpm} BPM.`,
+          sourceEvents: [`${track.trackId}#title`, `${track.trackId}#acoustic.bpm`, `${previous.trackId}#title`, `${previous.trackId}#acoustic.bpm`],
+          grounded: true, provider: 'deterministic_metadata_retrieval', contextTrackIds: [previous.trackId],
+        };
+      }
+      if (/\b(highest bpm|highest tempo|most bpm|fastest recent)\b/.test(q)) {
+        const ranked = recent.filter((item) => Number.isFinite(item.acoustic?.bpm)).sort((a, b) => b.acoustic.bpm - a.acoustic.bpm || a.trackId.localeCompare(b.trackId));
+        const winner = ranked[0];
+        if (winner) return {
+          trackId: track.trackId,
+          answer: `Among the recent tracks with BPM metadata, ${winner.title} has the highest BPM at ${winner.acoustic.bpm}.`,
+          sourceEvents: [`${winner.trackId}#title`, `${winner.trackId}#acoustic.bpm`], grounded: true,
+          provider: 'deterministic_metadata_retrieval', contextTrackIds: [winner.trackId],
+        };
+        return unsupported('No recent track has BPM metadata that supports this comparison.', recent.map((item) => item.trackId));
+      }
+      if (/\b(recent|recently played)\b/.test(q)) {
+        const timelineFact = recent.flatMap((item) => retrieveTrackMetadata(item, question, 3)
+          .filter((document) => document.kind === 'timeline').map((document) => ({ track: item, document })))[0];
+        if (timelineFact) return { trackId: track.trackId, answer: `The available metadata for ${timelineFact.track.title} says: “${timelineFact.document.text}”`, sourceEvents: [timelineFact.document.reference], grounded: true, provider: 'deterministic_metadata_retrieval', contextTrackIds: [timelineFact.track.trackId] };
+        return unsupported('I do not have supporting metadata for that question about recently played tracks.', recent.map((item) => item.trackId));
+      }
       const structured = structuredAnswer(track, question);
       if (structured) return { trackId: track.trackId, ...structured, grounded: true, provider: 'deterministic_metadata_retrieval' };
 
@@ -119,7 +199,6 @@ export function createMetadataRetrievalService({ loungeModel = DJLounge, trackMo
         provider: 'deterministic_metadata_retrieval',
       };
     },
-    clearRateLimits() { requestsByMember.clear(); },
   };
 }
 

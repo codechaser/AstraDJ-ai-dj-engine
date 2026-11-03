@@ -1,6 +1,5 @@
 export function uniqueChatMessages(rows) {
-  return [...new Map((rows ?? []).filter((row) => row?.messageId).map((row) => [row.messageId, row])).values()]
-    .sort((a, b) => (a.tsSeconds ?? 0) - (b.tsSeconds ?? 0) || a.messageId.localeCompare(b.messageId));
+  return [...new Map((rows ?? []).filter((row) => row?.messageId).map((row) => [row.messageId, row])).values()];
 }
 
 export function applySoundclashEvent(current, eventName, payload = {}) {

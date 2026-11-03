@@ -5,6 +5,10 @@ import { QueueEvent } from '../src/models/QueueEvent.js';
 import { ChatMessage } from '../src/models/ChatMessage.js';
 import { LoungeMetricEvent } from '../src/models/LoungeMetricEvent.js';
 import { Interaction } from '../src/models/Interaction.js';
+import { Plan } from '../src/models/Plan.js';
+import { Subscription } from '../src/models/Subscription.js';
+import { Payment } from '../src/models/Payment.js';
+import { FeatureUsage } from '../src/models/FeatureUsage.js';
 
 test('User schema restricts accounts to the four defined roles', () => {
   const user = new User({ email: 'a@example.com', displayName: 'A', passwordHash: 'hash', role: 'Superuser' });
@@ -17,6 +21,22 @@ test('User schema restricts persisted audio preferences to supported values', ()
   expect(user.preferences.audio).toMatchObject({ streamingQuality: 'High (320 kbps)', crossfadeSeconds: 6, autoPlay: true });
   user.preferences.audio.crossfadeSeconds = 5;
   expect(user.validateSync().errors['preferences.audio.crossfadeSeconds']).toBeDefined();
+});
+
+test('billing schemas validate plan, owner-scoped subscription, payment, and metered usage data', () => {
+  const plan = new Plan({ planId: 'premium', name: 'Premium', price: 149, billingInterval: 'month', currency: 'INR', features: { aiDj: true }, usageLimits: { aiDjRequestsPerDay: 500 } });
+  expect(plan.validateSync()).toBeUndefined();
+  const invalidPlan = new Plan({ planId: 'unlimited', name: 'Unlimited', price: -1, billingInterval: 'year', currency: 'USD' });
+  expect(invalidPlan.validateSync()).toBeDefined();
+  const subscription = new Subscription({ userId: '507f1f77bcf86cd799439011', planId: 'pro', status: 'pending', provider: 'razorpay', requestKey: 'request-0001' });
+  expect(subscription.validateSync()).toBeUndefined();
+  const invalidSubscription = new Subscription({ userId: '507f1f77bcf86cd799439011', planId: 'pro', status: 'setup', provider: 'razorpay' });
+  expect(invalidSubscription.validateSync()).toBeDefined();
+  const payment = new Payment({ userId: '507f1f77bcf86cd799439011', subscriptionId: '507f1f77bcf86cd799439012', provider: 'razorpay', amount: 14900, currency: 'INR', status: 'captured' });
+  expect(payment.validateSync()).toBeUndefined();
+  const usage = new FeatureUsage({ userId: '507f1f77bcf86cd799439011', feature: 'aiDjRequests', periodKey: '2026-11-03', count: 1 });
+  expect(usage.validateSync()).toBeUndefined();
+  expect(FeatureUsage.schema.indexes().some(([keys, options]) => keys.userId === 1 && keys.feature === 1 && keys.periodKey === 1 && options.unique)).toBe(true);
 });
 
 test('Track schema validates acoustic range, Camelot key, and timeline metadata', () => {

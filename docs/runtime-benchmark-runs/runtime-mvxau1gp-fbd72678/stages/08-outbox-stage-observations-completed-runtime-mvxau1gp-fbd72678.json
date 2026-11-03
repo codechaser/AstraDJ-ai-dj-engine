@@ -1,0 +1,102 @@
+{
+  "runId": "runtime-mvxau1gp-fbd72678",
+  "name": "outbox_stage_observations",
+  "status": "completed",
+  "startedAt": "2026-11-01T03:57:56.815Z",
+  "endedAt": "2026-11-01T03:57:57.332Z",
+  "durationMs": 516.462,
+  "result": {
+    "samples": 10,
+    "ackMs": {
+      "samples": 10,
+      "p50Ms": 46.453,
+      "p95Ms": 58.907,
+      "p99Ms": 58.907,
+      "maxMs": 58.907
+    },
+    "commitObservedMs": {
+      "samples": 8,
+      "p50Ms": 33.948,
+      "p95Ms": 55.106,
+      "p99Ms": 55.106,
+      "maxMs": 55.106
+    },
+    "projectionAfterCommitMs": {
+      "samples": 8,
+      "p50Ms": 2.92,
+      "p95Ms": 17.852,
+      "p99Ms": 17.852,
+      "maxMs": 17.852
+    },
+    "drainAfterProjectionMs": {
+      "samples": 10,
+      "p50Ms": 0.005,
+      "p95Ms": 21.298,
+      "p99Ms": 21.298,
+      "maxMs": 21.298
+    },
+    "observations": [
+      {
+        "ackMs": 55.562,
+        "commitObservedMs": 44.299,
+        "projectionAfterCommitMs": 3.641,
+        "drainAfterProjectionMs": 0.006
+      },
+      {
+        "ackMs": 58.907,
+        "commitObservedMs": 55.106,
+        "projectionAfterCommitMs": 4.251,
+        "drainAfterProjectionMs": 8.717
+      },
+      {
+        "ackMs": 42.203,
+        "commitObservedMs": 29.632,
+        "projectionAfterCommitMs": 17.852,
+        "drainAfterProjectionMs": 0.005
+      },
+      {
+        "ackMs": 48.527,
+        "commitObservedMs": null,
+        "projectionAfterCommitMs": null,
+        "drainAfterProjectionMs": 0.004
+      },
+      {
+        "ackMs": 49.995,
+        "commitObservedMs": null,
+        "projectionAfterCommitMs": null,
+        "drainAfterProjectionMs": 0.004
+      },
+      {
+        "ackMs": 39.225,
+        "commitObservedMs": 30.426,
+        "projectionAfterCommitMs": 2.92,
+        "drainAfterProjectionMs": 9.59
+      },
+      {
+        "ackMs": 43.614,
+        "commitObservedMs": 44.722,
+        "projectionAfterCommitMs": 2.534,
+        "drainAfterProjectionMs": 0.001
+      },
+      {
+        "ackMs": 46.453,
+        "commitObservedMs": 27.48,
+        "projectionAfterCommitMs": 2.595,
+        "drainAfterProjectionMs": 21.298
+      },
+      {
+        "ackMs": 50.591,
+        "commitObservedMs": 39.468,
+        "projectionAfterCommitMs": 3.238,
+        "drainAfterProjectionMs": 9.031
+      },
+      {
+        "ackMs": 31.994,
+        "commitObservedMs": 33.948,
+        "projectionAfterCommitMs": 2.23,
+        "drainAfterProjectionMs": 0.002
+      }
+    ],
+    "note": "Milestones use 1ms polling from the benchmark process and are upper bounds including poll/query time."
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "runId": "runtime-mvxau1gp-fbd72678",
+  "name": "gateway_restart_recovery",
+  "status": "completed",
+  "startedAt": "2026-11-01T03:58:27.908Z",
+  "endedAt": "2026-11-01T03:58:36.710Z",
+  "durationMs": 8801.419,
+  "result": {
+    "passed": true,
+    "connectedClientsRecovered": 25,
+    "restoredRevision": 494,
+    "queueItems": 412,
+    "restartAndResyncMs": 8787.393
+  }
+}
