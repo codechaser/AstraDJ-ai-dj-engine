@@ -3,7 +3,7 @@ services:
     name: astradj-ai-dj-engine
     runtime: node
     plan: free
-    buildCommand: npm ci && npm run build && npm --prefix server ci
+    buildCommand: npm ci --include=dev && npm run build && npm --prefix server ci --omit=dev
     startCommand: npm --prefix server start
     healthCheckPath: /health
     envVars:
