@@ -2,6 +2,7 @@ services:
   - type: web
     name: astradj-ai-dj-engine
     runtime: node
+    plan: free
     buildCommand: npm ci && npm run build && npm --prefix server ci
     startCommand: npm --prefix server start
     healthCheckPath: /health
