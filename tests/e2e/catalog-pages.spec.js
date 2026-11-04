@@ -293,6 +293,20 @@ test('anonymous Home lists catalog artists and offers public playable catalog pi
   await expect(page.getByText('Sign in to request private recommendations.')).toHaveCount(0);
 });
 
+test('Home empty-catalog Open catalog link navigates to the catalog screen', async ({ page }) => {
+  await page.route('**/api/v1/tracks**', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ items: [], page: { limit: 50, skip: 0, total: 0 } }),
+  }));
+  await page.goto('/');
+  await expect(page.getByText(/connected catalog currently has no track records/)).toBeVisible();
+  await page.getByRole('link', { name: 'Open catalog' }).first().click();
+  await expect(page).toHaveURL(/\/playlist$/);
+  await expect(page.getByRole('heading', { name: 'All Tracks' })).toBeVisible();
+  await expect(page.getByText('No tracks are available in the catalog yet.')).toBeVisible();
+});
+
 test('empty listening and Lounge history guide the signed-in user to real activity flows', async ({ page }) => {
   await page.goto('/profile');
   await page.getByRole('button', { name: 'Create account' }).click();
