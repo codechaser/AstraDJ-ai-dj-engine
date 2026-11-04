@@ -282,6 +282,17 @@ test('Home shows playable catalog starters when a new account has no personalize
   await expect(page.locator('.player-song b')).toHaveText(firstTitle);
 });
 
+test('anonymous Home lists catalog artists and offers public playable catalog picks', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Artists in catalog' })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Kian Moretz/ })).toBeVisible();
+  await expect(page.locator('.artist-card')).toHaveCount(6);
+  await expect(page.getByRole('heading', { name: 'Explore the catalog' })).toBeVisible();
+  await expect(page.locator('.mix-card').first()).toBeVisible();
+  await expect(page.getByText('These are starter picks, not personalized recommendations')).toBeVisible();
+  await expect(page.getByText('Sign in to request private recommendations.')).toHaveCount(0);
+});
+
 test('empty listening and Lounge history guide the signed-in user to real activity flows', async ({ page }) => {
   await page.goto('/profile');
   await page.getByRole('button', { name: 'Create account' }).click();

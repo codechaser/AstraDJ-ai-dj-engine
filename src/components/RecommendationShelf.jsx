@@ -6,14 +6,30 @@ import { TrackArtwork } from './CatalogArtwork.jsx';
 
 export default function RecommendationShelf({ user, onSelect, compact = false }) {
   const [items, setItems] = useState([]);
-  const [state, setState] = useState(user ? 'loading' : 'signed-out');
+  const [state, setState] = useState('loading');
   const [message, setMessage] = useState('');
 
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
-    if (!user) { setItems([]); setState('signed-out'); return () => { active = false; }; }
     setState('loading'); setMessage('');
+    const loadCatalogFallback = async () => {
+      const catalog = await searchTracks('', controller.signal);
+      if (!active) return;
+      const playableTracks = (Array.isArray(catalog.items) ? catalog.items : [])
+        .filter((track) => typeof track.audioAssetUrl === 'string' && track.audioAssetUrl.trim())
+        .slice(0, compact ? 3 : 4);
+      setItems(playableTracks);
+      setState(playableTracks.length ? 'catalog-fallback' : 'empty');
+    };
+    if (!user) {
+      loadCatalogFallback().catch((error) => {
+        if (!active || error.name === 'AbortError') return;
+        setMessage(error.message || 'The catalog could not be loaded right now.');
+        setState('error');
+      });
+      return () => { active = false; controller.abort(); };
+    }
     getRecommendations().then(async (result) => {
       if (!active) return;
       const recommendations = normalizeRecommendations(result);
@@ -22,13 +38,7 @@ export default function RecommendationShelf({ user, onSelect, compact = false })
         setState('ready');
         return;
       }
-      const catalog = await searchTracks('', controller.signal);
-      if (!active) return;
-      const playableTracks = (Array.isArray(catalog.items) ? catalog.items : [])
-        .filter((track) => typeof track.audioAssetUrl === 'string' && track.audioAssetUrl.trim())
-        .slice(0, compact ? 3 : 4);
-      setItems(playableTracks);
-      setState(playableTracks.length ? 'catalog-fallback' : 'empty');
+      await loadCatalogFallback();
     }).catch((error) => {
       if (!active || error.name === 'AbortError') return;
       setMessage(error.status === 401 ? 'Sign in again to load recommendations.' : error.message || 'Recommendations are unavailable right now.');
@@ -38,7 +48,6 @@ export default function RecommendationShelf({ user, onSelect, compact = false })
   }, [user?.id, compact]);
 
   const title = state === 'catalog-fallback' ? (compact ? 'Tracks to try' : 'Explore the catalog') : compact ? 'Picked for your taste' : 'Recommended for you';
-  if (state === 'signed-out') return <><div className="section-title"><h2>{title}</h2></div><div className="panel integration-status">Sign in to request private recommendations.</div></>;
   if (state === 'loading') return <><div className="section-title"><h2>{title}</h2></div><div className="panel integration-status" role="status">Loading recommendations…</div></>;
   if (state === 'error') return <><div className="section-title"><h2>{title}</h2></div><div className="panel integration-error" role="alert">{message}</div></>;
   if (state === 'empty' || !items.length) return <><div className="section-title"><h2>{title}</h2></div><div className="panel integration-status">No playable catalog tracks are available right now.</div></>;
