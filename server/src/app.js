@@ -25,7 +25,13 @@ import { mountProductionFrontend } from './middleware/productionFrontend.js';
 export const app = express();
 app.disable('x-powered-by');
 app.use(cors({ origin: config.clientOrigin ?? false, credentials: true }));
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      imgSrc: ["'self'", 'data:', 'https://images.unsplash.com', 'https://is1-ssl.mzstatic.com'],
+    },
+  },
+}));
 app.use(pinoHttp({ enabled: config.nodeEnv !== 'test', redact: ['req.headers.authorization', 'req.headers.cookie', 'req.body.password'] }));
 app.use(express.json({ limit: '64kb', strict: true, verify(req, _res, buffer) { if (req.originalUrl === '/api/v1/billing/webhooks/razorpay') req.rawBody = Buffer.from(buffer); } }));
 app.use(cookieParser());
