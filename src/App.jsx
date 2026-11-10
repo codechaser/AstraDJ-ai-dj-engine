@@ -29,7 +29,7 @@ function App(){
  const [playing,setPlaying]=useState(false),[liked,setLiked]=useState(false),[track,setTrack]=useState(null),[search,setSearch]=useState(''),[query,setQuery]=useState('');
  const [user,setUser]=useState(null),[sessionStatus,setSessionStatus]=useState('loading'),[authError,setAuthError]=useState(''),[notificationsOpen,setNotificationsOpen]=useState(false);
  const [localPlaylists,setLocalPlaylists]=useState([]),[localPlaylistsLoaded,setLocalPlaylistsLoaded]=useState(false),[createPlaylistOpen,setCreatePlaylistOpen]=useState(false),[playlistError,setPlaylistError]=useState('');
- const [audioTime,setAudioTime]=useState(0),[audioDuration,setAudioDuration]=useState(0),[audioStatus,setAudioStatus]=useState('unavailable');
+ const [audioTime,setAudioTime]=useState(0),[audioDuration,setAudioDuration]=useState(0),[audioStatus,setAudioStatus]=useState('idle');
  const [audioPreferences,setAudioPreferences]=useState(null);
  const playbackToggleRef=useRef(null),playbackSeekRef=useRef(null);
  const navigate=useNavigate();
